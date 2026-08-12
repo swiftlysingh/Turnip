@@ -20,16 +20,19 @@ jobs:
         run: Scripts/verify-artifact.sh
       - name: Test Swift package
         run: swift test --parallel
-      - name: Build benchmark runner
-        run: swift build --package-path Benchmarks
+      - name: Build benchmark runner (release)
+        run: swift build -c release --package-path Benchmarks
       - name: Verify committed benchmark fixture
         run: Benchmarks/Scripts/verify-smoke-fixture.sh
-      - name: Run ground-truth smoke benchmark
+      - name: Run diagnostic smoke benchmark (optimized)
+        env:
+          DOCUMENTKIT_BENCHMARK_SOURCE_REVISION: ${{ github.sha }}
         run: >-
-          swift run --package-path Benchmarks documentkit-benchmark
+          swift run -c release --package-path Benchmarks documentkit-benchmark
           --manifest Benchmarks/Manifests/smoke-v1.json
           --root Benchmarks
           --output "$RUNNER_TEMP/DocumentKit-Smoke"
+          --warmups 1
           --repetitions 2
       - name: Link iOS Simulator executable
         run: |

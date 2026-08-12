@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "corpus": {
     "id": "documentkit-smoke-v1",
     "distribution": "committed",
@@ -11,11 +11,27 @@
       "pdf": "Fixtures/Smoke/documentkit-fixture.pdf",
       "sha256": "ac46f522f25e578347e8324dc6f08fe7732f64b5e522c4a648e8cdc67c288a2d",
       "features": ["born-digital", "single-column", "headings", "lists"],
+      "expected_page_count": 1,
+      "expected_ocr_pages": [],
       "ground_truth": {
         "markdown": "Fixtures/Smoke/documentkit-fixture.md",
         "sha256": "52071e6b79b8c353cb622a94724d18f5a7953b7db31967dae26b63915cd0eb66",
+        "state": "draft",
+        "authoring_method": "source-authored",
+        "authored_without_documentkit_output": true,
+        "critical_values": [
+          {
+            "id": "edition",
+            "kind": "year",
+            "value": "Edition: 2026",
+            "occurrences": 1
+          }
+        ],
         "minimum_token_f1": 0.95,
-        "minimum_structure_f1": 0.7
+        "minimum_structure_f1": 0.7,
+        "minimum_word_order_f1": 0.95,
+        "minimum_critical_value_accuracy": 1.0,
+        "minimum_ocr_routing_f1": 1.0
       },
       "rights": {
         "status": "cleared",

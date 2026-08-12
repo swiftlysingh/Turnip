@@ -15,13 +15,16 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(path: ".."),
+        .package(name: "DocumentKit", path: ".."),
     ],
     targets: [
         .executableTarget(
             name: "DocumentKitBenchmark",
             dependencies: [
                 .product(name: "DocumentKit", package: "DocumentKit"),
+            ],
+            swiftSettings: [
+                .define("DOCUMENTKIT_BENCHMARK_RELEASE", .when(configuration: .release)),
             ]
         ),
     ]

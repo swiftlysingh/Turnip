@@ -1,6 +1,7 @@
 import CryptoKit
 import DocumentKit
 import Foundation
+import PDFKit
 
 #if canImport(Darwin)
 import Darwin
@@ -25,6 +26,8 @@ private struct Arguments {
     let rootURL: URL?
     let outputURL: URL
     let repetitions: Int
+    let warmups: Int
+    let requireRelease: Bool
 
     static func parse() throws -> Arguments? {
         let values = Array(CommandLine.arguments.dropFirst())
@@ -37,6 +40,8 @@ private struct Arguments {
         var rootPath: String?
         var outputPath: String?
         var repetitions = 2
+        var warmups = 0
+        var requireRelease = false
         var index = 0
 
         while index < values.count {
@@ -56,6 +61,14 @@ private struct Arguments {
                     throw BenchmarkError.usage("--repetitions must be an integer of at least 2.")
                 }
                 repetitions = parsed
+            case "--warmups":
+                let raw = try value(for: "--warmups", values: values, index: &index)
+                guard let parsed = Int(raw), parsed >= 0 else {
+                    throw BenchmarkError.usage("--warmups must be a non-negative integer.")
+                }
+                warmups = parsed
+            case "--require-release":
+                requireRelease = true
             default:
                 throw BenchmarkError.usage("Unknown argument: \(values[index])")
             }
@@ -73,7 +86,9 @@ private struct Arguments {
             manifestURL: absoluteFileURL(manifestPath),
             rootURL: rootPath.map(absoluteFileURL),
             outputURL: absoluteFileURL(outputPath),
-            repetitions: repetitions
+            repetitions: repetitions,
+            warmups: warmups,
+            requireRelease: requireRelease
         )
     }
 
@@ -99,6 +114,8 @@ private struct Arguments {
           --root PATH           Root for relative PDF paths (default: manifest directory).
           --output PATH         Directory for Markdown, per-document JSON, and summary JSON.
           --repetitions N       Runs of inspect and extract per document (default: 2, minimum: 2).
+          --warmups N           Unmeasured warm-up runs per engine (default: 0).
+          --require-release     Require release build, pinned source SHA, and locked truth for every case.
           --help                Show this help.
         """
     }
@@ -108,10 +125,25 @@ private struct BenchmarkRunner {
     let arguments: Arguments
 
     func run() async throws {
+        if arguments.requireRelease && benchmarkBuildConfiguration != "release" {
+            throw BenchmarkError.usage(
+                "--require-release requires 'swift run -c release'."
+            )
+        }
         let loaded = try LoadedManifest(url: arguments.manifestURL)
         let rootURL = (arguments.rootURL ?? arguments.manifestURL.deletingLastPathComponent())
             .standardizedFileURL
         try loaded.manifest.validate(manifestURL: arguments.manifestURL, rootURL: rootURL)
+        if arguments.requireRelease {
+            try loaded.manifest.validateReleaseEvidence()
+            guard let revision = ProcessInfo.processInfo.environment[
+                "DOCUMENTKIT_BENCHMARK_SOURCE_REVISION"
+            ], isPinnedRevision(revision) else {
+                throw BenchmarkError.invalidManifest(
+                    "Release evidence requires DOCUMENTKIT_BENCHMARK_SOURCE_REVISION to be an exact commit SHA."
+                )
+            }
+        }
 
         // Preflight every input before calling the engine. This makes a rights or
         // checksum failure fail closed instead of producing a partial green run.
@@ -130,6 +162,7 @@ private struct BenchmarkRunner {
                 document,
                 outputURL: arguments.outputURL,
                 repetitions: arguments.repetitions,
+                warmups: arguments.warmups,
                 baseline: loaded.manifest.rawEngineBaseline
             )
             let resultURL = arguments.outputURL
@@ -150,6 +183,7 @@ private struct BenchmarkRunner {
             corpus: loaded.manifest.corpus,
             rawEngineBaseline: loaded.manifest.rawEngineBaseline,
             repetitions: arguments.repetitions,
+            warmups: arguments.warmups,
             elapsedMilliseconds: elapsedMilliseconds,
             records: records
         )
@@ -222,8 +256,11 @@ private struct BenchmarkRunner {
                             "\(document.id) ground truth must be UTF-8 Markdown."
                         )
                     }
+                    try validateCanonicalMarkdown(markdown, documentID: document.id)
                     return PreparedGroundTruth(metadata: groundTruth, markdown: markdown)
-                }
+                },
+                expectedPageCount: document.expectedPageCount,
+                expectedOCRPages: document.expectedOCRPages
             )
         }
     }
@@ -232,6 +269,7 @@ private struct BenchmarkRunner {
         _ document: PreparedDocument,
         outputURL: URL,
         repetitions: Int,
+        warmups: Int,
         baseline: RawEngineBaseline?
     ) async -> DocumentResultRecord {
         let documentURL = outputURL
@@ -280,6 +318,14 @@ private struct BenchmarkRunner {
         inspectRuns.reserveCapacity(repetitions)
         extractRuns.reserveCapacity(repetitions)
 
+        if warmups > 0 {
+            for _ in 0..<warmups {
+                _ = try? await DocumentKit.inspect(data)
+                _ = try? await DocumentKit.extract(data)
+                _ = try? pdfKitText(from: data)
+            }
+        }
+
         for runNumber in 1...repetitions {
             let inspectStart = ProcessInfo.processInfo.systemUptime
             do {
@@ -306,6 +352,7 @@ private struct BenchmarkRunner {
             let extractStart = ProcessInfo.processInfo.systemUptime
             do {
                 let extraction = try await DocumentKit.extract(data)
+                let extractWallMilliseconds = elapsedMilliseconds(since: extractStart)
                 let markdownData = Data(extraction.markdown.utf8)
                 let relativeMarkdownPath = "documents/\(document.id)/markdown/\(markdownFileName(runNumber))"
                 let outputMarkdownURL = outputURL.appendingPathComponent(relativeMarkdownPath)
@@ -314,7 +361,7 @@ private struct BenchmarkRunner {
                 extractRuns.append(
                     ExtractRunRecord(
                         run: runNumber,
-                        wallMilliseconds: elapsedMilliseconds(since: extractStart),
+                        wallMilliseconds: extractWallMilliseconds,
                         markdownSHA256: digestSHA256(markdownData),
                         markdownByteCount: markdownData.count,
                         markdownPath: relativeMarkdownPath,
@@ -341,8 +388,10 @@ private struct BenchmarkRunner {
 
         let determinism = DeterminismRecord(
             inspectStable: stable(inspectRuns.compactMap(\.inspection), count: repetitions),
-            extractStable: stable(extractRuns.compactMap(\.markdownSHA256), count: repetitions)
-                && stable(extractRuns.compactMap(\.inspection), count: repetitions)
+            extractStable: stable(
+                extractRuns.compactMap(ExtractionFingerprint.init),
+                count: repetitions
+            )
         )
         let baselineComparison = baseline.map {
             BaselineComparison(
@@ -352,8 +401,10 @@ private struct BenchmarkRunner {
                 observedMarkdownSHA256: extractRuns.compactMap(\.markdownSHA256)
             )
         }
+        let extractionInspection = extractRuns.first(where: { $0.inspection != nil })?.inspection
         let qualityComparison: QualityComparison?
-        if let groundTruth = document.groundTruth,
+        if determinism.extractStable,
+           let groundTruth = document.groundTruth,
            let path = extractRuns.first(where: { $0.error == nil })?.markdownPath,
            let markdown = try? String(
                contentsOf: outputURL.appendingPathComponent(path),
@@ -361,11 +412,20 @@ private struct BenchmarkRunner {
            ) {
             qualityComparison = QualityComparison(
                 observed: markdown,
-                groundTruth: groundTruth
+                groundTruth: groundTruth,
+                observedOCRPages: extractionInspection?.pagesNeedingOCR,
+                expectedOCRPages: document.expectedOCRPages
             )
         } else {
             qualityComparison = nil
         }
+
+        let pdfKitBaseline = runPDFKitBaseline(
+            data: data,
+            document: document,
+            documentURL: documentURL,
+            repetitions: repetitions
+        )
 
         return DocumentResultRecord(
             id: document.id,
@@ -380,7 +440,73 @@ private struct BenchmarkRunner {
             determinism: determinism,
             baseline: baselineComparison,
             groundTruthExpected: document.groundTruth != nil,
-            quality: qualityComparison
+            groundTruthState: document.groundTruth?.metadata.effectiveState,
+            quality: qualityComparison,
+            pdfKitBaseline: pdfKitBaseline,
+            expectedPageCount: document.expectedPageCount
+        )
+    }
+
+    private func runPDFKitBaseline(
+        data: Data,
+        document: PreparedDocument,
+        documentURL: URL,
+        repetitions: Int
+    ) -> PDFKitBaselineRecord {
+        var runs: [PDFKitRunRecord] = []
+        var firstText: String?
+        var pageCount: Int?
+
+        for runNumber in 1...repetitions {
+            let start = ProcessInfo.processInfo.systemUptime
+            do {
+                let result = try pdfKitText(from: data)
+                let pdfKitWallMilliseconds = elapsedMilliseconds(since: start)
+                let textData = Data(result.text.utf8)
+                if firstText == nil {
+                    try textData.write(
+                        to: documentURL.appendingPathComponent("pdfkit.txt"),
+                        options: [.atomic]
+                    )
+                    firstText = result.text
+                    pageCount = result.pageCount
+                }
+                runs.append(
+                    PDFKitRunRecord(
+                        run: runNumber,
+                        wallMilliseconds: pdfKitWallMilliseconds,
+                        textSHA256: digestSHA256(textData),
+                        textByteCount: textData.count,
+                        error: nil
+                    )
+                )
+            } catch {
+                runs.append(
+                    PDFKitRunRecord(
+                        run: runNumber,
+                        wallMilliseconds: elapsedMilliseconds(since: start),
+                        textSHA256: nil,
+                        textByteCount: nil,
+                        error: ErrorRecord(code: "pdfkit_error", message: error.localizedDescription)
+                    )
+                )
+            }
+        }
+
+        let hashes = runs.compactMap(\.textSHA256)
+        let deterministic = stable(hashes, count: repetitions)
+        return PDFKitBaselineRecord(
+            supported: true,
+            attempted: true,
+            pageCount: pageCount,
+            textPath: firstText == nil ? nil : "documents/\(document.id)/pdfkit.txt",
+            runs: runs,
+            deterministic: deterministic,
+            quality: deterministic ? firstText.flatMap { text in
+                document.groundTruth.map {
+                    PDFKitQualityComparison(observed: text, groundTruth: $0)
+                }
+            } : nil
         )
     }
 }
@@ -423,7 +549,7 @@ private struct BenchmarkManifest: Codable, Sendable {
     }
 
     func validate(manifestURL: URL, rootURL: URL) throws {
-        guard schemaVersion == 1 else {
+        guard schemaVersion == 1 || schemaVersion == 2 else {
             throw BenchmarkError.invalidManifest("Unsupported schema_version \(schemaVersion).")
         }
         guard !corpus.id.isEmpty else {
@@ -449,12 +575,12 @@ private struct BenchmarkManifest: Codable, Sendable {
                     "Document IDs must be unique and safe path components: \(document.id)"
                 )
             }
-            guard paths.insert(document.pdf).inserted else {
+            let resolvedPDF = try resolveRelativePath(document.pdf, rootURL: rootURL)
+            guard paths.insert(resolvedPDF.path).inserted else {
                 throw BenchmarkError.invalidManifest(
                     "A PDF path is listed more than once: \(document.pdf)"
                 )
             }
-            _ = try resolveRelativePath(document.pdf, rootURL: rootURL)
             guard document.pdf.lowercased().hasSuffix(".pdf") else {
                 throw BenchmarkError.invalidManifest(
                     "Document path must end in .pdf: \(document.pdf)"
@@ -502,6 +628,32 @@ private struct BenchmarkManifest: Codable, Sendable {
                         "\(document.id) ground-truth thresholds must be between 0 and 1."
                     )
                 }
+                try validateGroundTruth(
+                    groundTruth,
+                    documentID: document.id,
+                    schemaVersion: schemaVersion,
+                    features: document.features
+                )
+            }
+            if let expectedPageCount = document.expectedPageCount, expectedPageCount < 1 {
+                throw BenchmarkError.invalidManifest(
+                    "\(document.id) expected_page_count must be positive."
+                )
+            }
+            if let expectedOCRPages = document.expectedOCRPages {
+                guard expectedOCRPages == expectedOCRPages.sorted(),
+                      Set(expectedOCRPages).count == expectedOCRPages.count,
+                      expectedOCRPages.allSatisfy({ $0 >= 0 }) else {
+                    throw BenchmarkError.invalidManifest(
+                        "\(document.id) expected_ocr_pages must be unique, ascending, zero-based indexes."
+                    )
+                }
+                if let expectedPageCount = document.expectedPageCount,
+                   expectedOCRPages.contains(where: { $0 >= expectedPageCount }) {
+                    throw BenchmarkError.invalidManifest(
+                        "\(document.id) expected_ocr_pages contains an out-of-range index."
+                    )
+                }
             }
         }
 
@@ -529,6 +681,103 @@ private struct BenchmarkManifest: Codable, Sendable {
         }
 
         _ = manifestURL
+    }
+
+    func validateReleaseEvidence() throws {
+        guard schemaVersion == 2 else {
+            throw BenchmarkError.invalidManifest(
+                "Release evidence requires manifest schema v2."
+            )
+        }
+        guard documents.allSatisfy({ $0.groundTruth?.effectiveState == .locked }) else {
+            throw BenchmarkError.invalidManifest(
+                "Release evidence requires locked ground truth for every document."
+            )
+        }
+    }
+
+    private func validateGroundTruth(
+        _ groundTruth: GroundTruthMetadata,
+        documentID: String,
+        schemaVersion: Int,
+        features: [String]
+    ) throws {
+        if schemaVersion == 2 {
+            guard groundTruth.state != nil,
+                  groundTruth.authoredWithoutDocumentKitOutput != nil,
+                  groundTruth.authoringMethod != nil else {
+                throw BenchmarkError.invalidManifest(
+                    "\(documentID) schema v2 ground truth needs state, authoring_method, and authored_without_documentkit_output."
+                )
+            }
+        }
+        if schemaVersion == 2, groundTruth.effectiveState == .locked {
+            guard groundTruth.authoredWithoutDocumentKitOutput == true else {
+                throw BenchmarkError.invalidManifest(
+                    "\(documentID) locked ground truth must be authored without DocumentKit output."
+                )
+            }
+            guard let author = groundTruth.author?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !author.isEmpty,
+                  let reviewer = groundTruth.reviewer?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !reviewer.isEmpty,
+                  reviewer.localizedCaseInsensitiveCompare(author) != .orderedSame,
+                  let reviewedAt = groundTruth.reviewedAt,
+                  isISODate(reviewedAt) else {
+                throw BenchmarkError.invalidManifest(
+                    "\(documentID) locked ground truth needs distinct author/reviewer identities and reviewed_at (YYYY-MM-DD)."
+                )
+            }
+        }
+        for criticalValue in groundTruth.criticalValues ?? [] {
+            guard validIdentifier(criticalValue.id),
+                  !criticalValue.value.isEmpty,
+                  criticalValue.occurrences > 0 else {
+                throw BenchmarkError.invalidManifest(
+                    "\(documentID) critical values need a safe id, non-empty value, and positive occurrences."
+                )
+            }
+        }
+        let criticalIDs = (groundTruth.criticalValues ?? []).map(\.id)
+        guard Set(criticalIDs).count == criticalIDs.count else {
+            throw BenchmarkError.invalidManifest(
+                "\(documentID) critical-value ids must be unique."
+            )
+        }
+        if groundTruth.effectiveState == .locked {
+            let criticalValues = groundTruth.criticalValues ?? []
+            if features.contains("critical-values"), criticalValues.isEmpty {
+                throw BenchmarkError.invalidManifest(
+                    "\(documentID) is marked critical-values and needs at least one locked critical value."
+                )
+            }
+            if !criticalValues.isEmpty {
+                guard groundTruth.minimumCriticalValueAccuracy == 1 else {
+                    throw BenchmarkError.invalidManifest(
+                        "\(documentID) locked critical values require minimum_critical_value_accuracy 1.0."
+                    )
+                }
+                guard criticalValues.allSatisfy({ value in
+                    guard let context = value.context else { return false }
+                    return !context.isEmpty && context.contains(value.value)
+                }) else {
+                    throw BenchmarkError.invalidManifest(
+                        "\(documentID) locked critical values need exact context containing the value."
+                    )
+                }
+            }
+        }
+        let optionalThresholds = [
+            groundTruth.minimumWordOrderF1,
+            groundTruth.minimumTableCellF1,
+            groundTruth.minimumCriticalValueAccuracy,
+            groundTruth.minimumOCRRoutingF1,
+        ].compactMap { $0 }
+        guard optionalThresholds.allSatisfy({ (0...1).contains($0) }) else {
+            throw BenchmarkError.invalidManifest(
+                "\(documentID) optional quality thresholds must be between 0 and 1."
+            )
+        }
     }
 
     private func validateRights(_ rights: RightsMetadata, documentID: String) throws {
@@ -584,6 +833,8 @@ private struct ManifestDocument: Codable, Sendable {
     let rawMarkdownSHA256: String?
     let groundTruth: GroundTruthMetadata?
     let rights: RightsMetadata
+    let expectedPageCount: Int?
+    let expectedOCRPages: [Int]?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -593,6 +844,8 @@ private struct ManifestDocument: Codable, Sendable {
         case rawMarkdownSHA256 = "raw_markdown_sha256"
         case groundTruth = "ground_truth"
         case rights
+        case expectedPageCount = "expected_page_count"
+        case expectedOCRPages = "expected_ocr_pages"
     }
 }
 
@@ -601,13 +854,57 @@ private struct GroundTruthMetadata: Codable, Sendable {
     let sha256: String
     let minimumTokenF1: Double
     let minimumStructureF1: Double
+    let state: GroundTruthState?
+    let authoringMethod: GroundTruthAuthoringMethod?
+    let authoredWithoutDocumentKitOutput: Bool?
+    let author: String?
+    let reviewer: String?
+    let reviewedAt: String?
+    let criticalValues: [CriticalValue]?
+    let minimumWordOrderF1: Double?
+    let minimumTableCellF1: Double?
+    let minimumCriticalValueAccuracy: Double?
+    let minimumOCRRoutingF1: Double?
+
+    // Schema v1 predates review-state provenance, so it is diagnostic only.
+    var effectiveState: GroundTruthState { state ?? .draft }
 
     enum CodingKeys: String, CodingKey {
         case markdown
         case sha256
         case minimumTokenF1 = "minimum_token_f1"
         case minimumStructureF1 = "minimum_structure_f1"
+        case state
+        case authoringMethod = "authoring_method"
+        case authoredWithoutDocumentKitOutput = "authored_without_documentkit_output"
+        case author
+        case reviewer
+        case reviewedAt = "reviewed_at"
+        case criticalValues = "critical_values"
+        case minimumWordOrderF1 = "minimum_word_order_f1"
+        case minimumTableCellF1 = "minimum_table_cell_f1"
+        case minimumCriticalValueAccuracy = "minimum_critical_value_accuracy"
+        case minimumOCRRoutingF1 = "minimum_ocr_routing_f1"
     }
+}
+
+private enum GroundTruthState: String, Codable, Sendable {
+    case draft
+    case reviewed
+    case locked
+}
+
+private enum GroundTruthAuthoringMethod: String, Codable, Sendable {
+    case sourceAuthored = "source-authored"
+    case visualTranscription = "visual-transcription"
+}
+
+private struct CriticalValue: Codable, Sendable {
+    let id: String
+    let value: String
+    let occurrences: Int
+    let kind: String?
+    let context: String?
 }
 
 private struct RightsMetadata: Codable, Sendable {
@@ -638,6 +935,8 @@ private struct PreparedDocument: Sendable {
     let expectedSHA256: String
     let rawMarkdownSHA256: String?
     let groundTruth: PreparedGroundTruth?
+    let expectedPageCount: Int?
+    let expectedOCRPages: [Int]?
 }
 
 private struct PreparedGroundTruth: Sendable {
@@ -658,7 +957,29 @@ private struct DocumentResultRecord: Codable, Sendable {
     let determinism: DeterminismRecord
     let baseline: BaselineComparison?
     let groundTruthExpected: Bool
+    let groundTruthState: GroundTruthState?
     let quality: QualityComparison?
+    let pdfKitBaseline: PDFKitBaselineRecord
+    let expectedPageCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case pdfPath = "pdf_path"
+        case features
+        case rightsStatus = "rights_status"
+        case expectedPDFSHA256 = "expected_pdf_sha256"
+        case observedPDFSHA256 = "observed_pdf_sha256"
+        case preflightError = "preflight_error"
+        case inspectRuns = "inspect_runs"
+        case extractRuns = "extract_runs"
+        case determinism
+        case baseline
+        case groundTruthExpected = "ground_truth_expected"
+        case groundTruthState = "ground_truth_state"
+        case quality
+        case pdfKitBaseline = "pdfkit_baseline"
+        case expectedPageCount = "expected_page_count"
+    }
 
     var passed: Bool {
         preflightError == nil
@@ -669,7 +990,18 @@ private struct DocumentResultRecord: Codable, Sendable {
             && determinism.passed
             && (baseline?.matches ?? true)
             && (!groundTruthExpected || quality != nil)
-            && (quality?.passes ?? true)
+            && (quality?.requiredForPass != true || quality?.passes == true)
+            && pdfKitBaseline.runs.count > 1
+            && pdfKitBaseline.runs.allSatisfy { $0.error == nil }
+            && pdfKitBaseline.deterministic
+            && pageCountMatches
+    }
+
+    private var pageCountMatches: Bool {
+        guard let expectedPageCount else { return true }
+        return inspectRuns.compactMap(\.inspection).allSatisfy {
+            $0.pageCount == expectedPageCount
+        }
     }
 
     static func inputFailure(
@@ -690,7 +1022,10 @@ private struct DocumentResultRecord: Codable, Sendable {
             determinism: DeterminismRecord(inspectStable: false, extractStable: false),
             baseline: nil,
             groundTruthExpected: document.groundTruth != nil,
-            quality: nil
+            groundTruthState: document.groundTruth?.metadata.effectiveState,
+            quality: nil,
+            pdfKitBaseline: .notRun,
+            expectedPageCount: document.expectedPageCount
         )
     }
 }
@@ -800,7 +1135,7 @@ private struct PageOCRReasonsSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-private struct WarningSnapshot: Codable, Sendable {
+private struct WarningSnapshot: Codable, Equatable, Sendable {
     let kind: String
     let pageIndexes: [Int]
 
@@ -817,6 +1152,99 @@ private struct WarningSnapshot: Codable, Sendable {
             kind = "encoding_issues"
         }
         pageIndexes = warning.pageIndexes
+    }
+}
+
+private struct ExtractionFingerprint: Equatable, Sendable {
+    let markdownSHA256: String
+    let inspection: InspectionSnapshot
+    let warnings: [WarningSnapshot]
+
+    init?(_ run: ExtractRunRecord) {
+        guard run.error == nil,
+              let markdownSHA256 = run.markdownSHA256,
+              let inspection = run.inspection else { return nil }
+        self.markdownSHA256 = markdownSHA256
+        self.inspection = inspection
+        warnings = run.warnings
+    }
+}
+
+private struct PDFKitBaselineRecord: Codable, Sendable {
+    let supported: Bool
+    let attempted: Bool
+    let pageCount: Int?
+    let textPath: String?
+    let runs: [PDFKitRunRecord]
+    let deterministic: Bool
+    let quality: PDFKitQualityComparison?
+
+    enum CodingKeys: String, CodingKey {
+        case supported
+        case attempted
+        case pageCount = "page_count"
+        case textPath = "text_path"
+        case runs
+        case deterministic
+        case quality
+    }
+
+    static let notRun = PDFKitBaselineRecord(
+        supported: false,
+        attempted: false,
+        pageCount: nil,
+        textPath: nil,
+        runs: [],
+        deterministic: false,
+        quality: nil
+    )
+}
+
+private struct PDFKitRunRecord: Codable, Sendable {
+    let run: Int
+    let wallMilliseconds: Double
+    let textSHA256: String?
+    let textByteCount: Int?
+    let error: ErrorRecord?
+
+    enum CodingKeys: String, CodingKey {
+        case run
+        case wallMilliseconds = "wall_milliseconds"
+        case textSHA256 = "text_sha256"
+        case textByteCount = "text_byte_count"
+        case error
+    }
+}
+
+private struct PDFKitQualityComparison: Codable, Sendable {
+    let contentPrecision: Double
+    let contentRecall: Double
+    let contentF1: Double
+    let wordOrderBigramF1: Double
+    let criticalValueAccuracy: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case contentPrecision = "content_precision"
+        case contentRecall = "content_recall"
+        case contentF1 = "content_f1"
+        case wordOrderBigramF1 = "word_order_bigram_f1"
+        case criticalValueAccuracy = "critical_value_accuracy"
+    }
+
+    init(observed: String, groundTruth: PreparedGroundTruth) {
+        let observedTokens = tokens(observed)
+        let expectedTokens = tokens(groundTruth.markdown)
+        let score = multisetScore(observedTokens, expectedTokens)
+        contentPrecision = score.precision
+        contentRecall = score.recall
+        contentF1 = score.f1
+        wordOrderBigramF1 = multisetF1(bigrams(observedTokens), bigrams(expectedTokens))
+        let critical = (groundTruth.metadata.criticalValues ?? []).map {
+            CriticalValueResult(expected: $0, observedMarkdown: observed).accuracy
+        }
+        criticalValueAccuracy = critical.isEmpty
+            ? nil
+            : critical.reduce(0, +) / Double(critical.count)
     }
 }
 
@@ -868,37 +1296,179 @@ private struct QualityComparison: Codable, Sendable {
     let expectedMarkdownSHA256: String
     let observedMarkdownSHA256: String
     let exactMatch: Bool
+    let groundTruthState: GroundTruthState
+    let requiredForPass: Bool
+    let contentPrecision: Double
+    let contentRecall: Double
     let tokenF1: Double
+    let wordOrderBigramF1: Double
     let structureF1: Double
+    let tableCellF1: Double?
+    let criticalValueAccuracy: Double?
+    let criticalValues: [CriticalValueResult]
+    let ocrRouting: SetComparison?
     let minimumTokenF1: Double
     let minimumStructureF1: Double
+    let minimumWordOrderF1: Double?
+    let minimumTableCellF1: Double?
+    let minimumCriticalValueAccuracy: Double?
+    let minimumOCRRoutingF1: Double?
     let passes: Bool
 
     enum CodingKeys: String, CodingKey {
         case expectedMarkdownSHA256 = "expected_markdown_sha256"
         case observedMarkdownSHA256 = "observed_markdown_sha256"
         case exactMatch = "exact_match"
+        case groundTruthState = "ground_truth_state"
+        case requiredForPass = "required_for_pass"
+        case contentPrecision = "content_precision"
+        case contentRecall = "content_recall"
         case tokenF1 = "token_f1"
+        case wordOrderBigramF1 = "word_order_bigram_f1"
         case structureF1 = "structure_f1"
+        case tableCellF1 = "table_cell_f1"
+        case criticalValueAccuracy = "critical_value_accuracy"
+        case criticalValues = "critical_values"
+        case ocrRouting = "ocr_routing"
         case minimumTokenF1 = "minimum_token_f1"
         case minimumStructureF1 = "minimum_structure_f1"
+        case minimumWordOrderF1 = "minimum_word_order_f1"
+        case minimumTableCellF1 = "minimum_table_cell_f1"
+        case minimumCriticalValueAccuracy = "minimum_critical_value_accuracy"
+        case minimumOCRRoutingF1 = "minimum_ocr_routing_f1"
         case passes
     }
 
-    init(observed: String, groundTruth: PreparedGroundTruth) {
+    init(
+        observed: String,
+        groundTruth: PreparedGroundTruth,
+        observedOCRPages: [Int]?,
+        expectedOCRPages: [Int]?
+    ) {
         let expectedData = Data(groundTruth.markdown.utf8)
         let observedData = Data(observed.utf8)
+        let observedTokens = tokens(observed)
+        let expectedTokens = tokens(groundTruth.markdown)
+        let content = multisetScore(observedTokens, expectedTokens)
         expectedMarkdownSHA256 = digestSHA256(expectedData)
         observedMarkdownSHA256 = digestSHA256(observedData)
         exactMatch = expectedMarkdownSHA256 == observedMarkdownSHA256
-        tokenF1 = multisetF1(tokens(observed), tokens(groundTruth.markdown))
+        groundTruthState = groundTruth.metadata.effectiveState
+        requiredForPass = groundTruthState == .locked
+        contentPrecision = content.precision
+        contentRecall = content.recall
+        tokenF1 = content.f1
+        wordOrderBigramF1 = multisetF1(bigrams(observedTokens), bigrams(expectedTokens))
         structureF1 = multisetF1(
             markdownStructure(observed),
             markdownStructure(groundTruth.markdown)
         )
+        let expectedCells = markdownTableCells(groundTruth.markdown)
+        tableCellF1 = expectedCells.isEmpty
+            ? nil
+            : multisetF1(markdownTableCells(observed), expectedCells)
+        criticalValues = (groundTruth.metadata.criticalValues ?? []).map {
+            CriticalValueResult(expected: $0, observedMarkdown: observed)
+        }
+        if criticalValues.isEmpty {
+            criticalValueAccuracy = nil
+        } else {
+            criticalValueAccuracy = criticalValues.map(\.accuracy).reduce(0, +)
+                / Double(criticalValues.count)
+        }
+        if let expectedOCRPages, let observedOCRPages {
+            ocrRouting = SetComparison(
+                observed: observedOCRPages,
+                expected: expectedOCRPages
+            )
+        } else {
+            ocrRouting = nil
+        }
         minimumTokenF1 = groundTruth.metadata.minimumTokenF1
         minimumStructureF1 = groundTruth.metadata.minimumStructureF1
-        passes = tokenF1 >= minimumTokenF1 && structureF1 >= minimumStructureF1
+        minimumWordOrderF1 = groundTruth.metadata.minimumWordOrderF1
+        minimumTableCellF1 = groundTruth.metadata.minimumTableCellF1
+        minimumCriticalValueAccuracy = groundTruth.metadata.minimumCriticalValueAccuracy
+        minimumOCRRoutingF1 = groundTruth.metadata.minimumOCRRoutingF1
+        passes = tokenF1 >= minimumTokenF1
+            && structureF1 >= minimumStructureF1
+            && thresholdPasses(wordOrderBigramF1, minimum: minimumWordOrderF1)
+            && thresholdPasses(tableCellF1, minimum: minimumTableCellF1)
+            && thresholdPasses(criticalValueAccuracy, minimum: minimumCriticalValueAccuracy)
+            && thresholdPasses(ocrRouting?.f1, minimum: minimumOCRRoutingF1)
+    }
+}
+
+private struct CriticalValueResult: Codable, Sendable {
+    let id: String
+    let kind: String?
+    let value: String
+    let expectedOccurrences: Int
+    let observedOccurrences: Int
+    let expectedContext: String?
+    let observedContextOccurrences: Int?
+    let accuracy: Double
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case kind
+        case value
+        case expectedOccurrences = "expected_occurrences"
+        case observedOccurrences = "observed_occurrences"
+        case expectedContext = "expected_context"
+        case observedContextOccurrences = "observed_context_occurrences"
+        case accuracy
+    }
+
+    init(expected: CriticalValue, observedMarkdown: String) {
+        id = expected.id
+        kind = expected.kind
+        value = expected.value
+        expectedOccurrences = expected.occurrences
+        observedOccurrences = literalOccurrenceCount(of: expected.value, in: observedMarkdown)
+        expectedContext = expected.context
+        observedContextOccurrences = expected.context.map {
+            literalOccurrenceCount(of: $0, in: observedMarkdown)
+        }
+        accuracy = observedOccurrences == expectedOccurrences
+            && (observedContextOccurrences == nil
+                || observedContextOccurrences == expectedOccurrences)
+            ? 1
+            : 0
+    }
+}
+
+private struct SetComparison: Codable, Sendable {
+    let expected: [Int]
+    let observed: [Int]
+    let precision: Double
+    let recall: Double
+    let f1: Double
+    let exactMatch: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case expected
+        case observed
+        case precision
+        case recall
+        case f1
+        case exactMatch = "exact_match"
+    }
+
+    init(observed: [Int], expected: [Int]) {
+        self.expected = expected.sorted()
+        self.observed = observed.sorted()
+        let observedSet = Set(observed)
+        let expectedSet = Set(expected)
+        let matches = observedSet.intersection(expectedSet).count
+        precision = observedSet.isEmpty
+            ? (expectedSet.isEmpty ? 1 : 0)
+            : Double(matches) / Double(observedSet.count)
+        recall = expectedSet.isEmpty
+            ? (observedSet.isEmpty ? 1 : 0)
+            : Double(matches) / Double(expectedSet.count)
+        f1 = harmonicMean(precision, recall)
+        exactMatch = observedSet == expectedSet
     }
 }
 
@@ -920,6 +1490,10 @@ private struct ErrorRecord: Codable, Sendable {
                 self.init(code: "input_too_large", message: "Maximum bytes: \(maximumBytes).")
             case .encryptedPDF:
                 self.init(code: "encrypted_pdf", message: error.localizedDescription)
+            case .invalidPageSelection:
+                self.init(code: "invalid_page_selection", message: error.localizedDescription)
+            case .pageOutOfRange:
+                self.init(code: "page_out_of_range", message: error.localizedDescription)
             case .invalidPDF:
                 self.init(code: "invalid_pdf", message: error.localizedDescription)
             case .noExtractableText:
@@ -942,9 +1516,12 @@ private struct BenchmarkSummary: Codable, Sendable {
     let corpus: CorpusMetadata
     let rawEngineBaseline: RawEngineBaseline?
     let repetitions: Int
+    let warmups: Int
     let elapsedMilliseconds: Double
+    let environment: BenchmarkEnvironment
     let counts: Counts
     let timing: TimingSummary
+    let quality: QualitySummary
     let documents: [DocumentSummary]
 
     enum CodingKeys: String, CodingKey {
@@ -956,9 +1533,12 @@ private struct BenchmarkSummary: Codable, Sendable {
         case corpus
         case rawEngineBaseline = "raw_engine_baseline"
         case repetitions
+        case warmups
         case elapsedMilliseconds = "elapsed_milliseconds"
+        case environment
         case counts
         case timing
+        case quality
         case documents
     }
 
@@ -968,10 +1548,11 @@ private struct BenchmarkSummary: Codable, Sendable {
         corpus: CorpusMetadata,
         rawEngineBaseline: RawEngineBaseline?,
         repetitions: Int,
+        warmups: Int,
         elapsedMilliseconds: Double,
         records: [DocumentResultRecord]
     ) {
-        schemaVersion = 1
+        schemaVersion = 2
         passed = records.allSatisfy(\.passed)
         status = passed ? "passed" : "failed"
         self.manifestSHA256 = manifestSHA256
@@ -979,9 +1560,12 @@ private struct BenchmarkSummary: Codable, Sendable {
         self.corpus = corpus
         self.rawEngineBaseline = rawEngineBaseline
         self.repetitions = repetitions
+        self.warmups = warmups
         self.elapsedMilliseconds = elapsedMilliseconds
+        environment = BenchmarkEnvironment(records: records)
         counts = Counts(records)
         timing = TimingSummary(records)
+        quality = QualitySummary(records)
         documents = records.map(DocumentSummary.init)
     }
 
@@ -994,6 +1578,11 @@ private struct Counts: Codable, Sendable {
     let nondeterministicDocuments: Int
     let baselineMismatches: Int
     let qualityFailures: Int
+    let engineFailures: Int
+    let pdfKitFailures: Int
+    let lockedGroundTruthDocuments: Int
+    let scoredLockedGroundTruthDocuments: Int
+    let failedLockedGroundTruthDocuments: Int
 
     enum CodingKeys: String, CodingKey {
         case totalDocuments = "total_documents"
@@ -1002,6 +1591,11 @@ private struct Counts: Codable, Sendable {
         case nondeterministicDocuments = "nondeterministic_documents"
         case baselineMismatches = "baseline_mismatches"
         case qualityFailures = "quality_failures"
+        case engineFailures = "engine_failures"
+        case pdfKitFailures = "pdfkit_failures"
+        case lockedGroundTruthDocuments = "locked_ground_truth_documents"
+        case scoredLockedGroundTruthDocuments = "scored_locked_ground_truth_documents"
+        case failedLockedGroundTruthDocuments = "failed_locked_ground_truth_documents"
     }
 
     init(_ records: [DocumentResultRecord]) {
@@ -1015,39 +1609,201 @@ private struct Counts: Codable, Sendable {
             $0.baseline?.matches == false
         })
         qualityFailures = records.count(where: {
-            $0.quality?.passes == false
+            $0.quality?.requiredForPass == true && $0.quality?.passes == false
         })
+        engineFailures = records.count(where: {
+            $0.preflightError != nil
+                || $0.inspectRuns.contains(where: { $0.error != nil })
+                || $0.extractRuns.contains(where: { $0.error != nil })
+        })
+        pdfKitFailures = records.count(where: {
+            $0.pdfKitBaseline.runs.contains(where: { $0.error != nil })
+        })
+        lockedGroundTruthDocuments = records.count(where: { $0.groundTruthState == .locked })
+        scoredLockedGroundTruthDocuments = records.count(where: {
+            $0.groundTruthState == .locked && $0.quality != nil
+        })
+        failedLockedGroundTruthDocuments =
+            lockedGroundTruthDocuments - scoredLockedGroundTruthDocuments
     }
 }
 
 private struct TimingSummary: Codable, Sendable {
     let inspect: TimingAggregate
     let extract: TimingAggregate
+    let pdfKit: TimingAggregate
+    let eligibility: String
 
     init(_ records: [DocumentResultRecord]) {
-        inspect = TimingAggregate(records.flatMap { $0.inspectRuns.map(\.wallMilliseconds) })
-        extract = TimingAggregate(records.flatMap { $0.extractRuns.map(\.wallMilliseconds) })
+        let eligible = records.filter(\.passed)
+        inspect = TimingAggregate(
+            eligible.flatMap { record in
+                let pages = record.inspectRuns.first?.inspection?.pageCount
+                    ?? record.expectedPageCount
+                return record.inspectRuns.compactMap {
+                    $0.error == nil ? TimingSample(milliseconds: $0.wallMilliseconds, pages: pages) : nil
+                }
+            }
+        )
+        extract = TimingAggregate(
+            eligible.flatMap { record in
+                let pages = record.extractRuns.first?.inspection?.pageCount
+                    ?? record.expectedPageCount
+                return record.extractRuns.compactMap {
+                    $0.error == nil ? TimingSample(milliseconds: $0.wallMilliseconds, pages: pages) : nil
+                }
+            }
+        )
+        pdfKit = TimingAggregate(
+            eligible.flatMap { record in
+                record.pdfKitBaseline.runs.compactMap {
+                    $0.error == nil
+                        ? TimingSample(
+                            milliseconds: $0.wallMilliseconds,
+                            pages: record.pdfKitBaseline.pageCount
+                        )
+                        : nil
+                }
+            }
+        )
+        eligibility = "Only documents passing execution, determinism, parity, and any applicable locked quality gates contribute."
     }
 }
 
 private struct TimingAggregate: Codable, Sendable {
     let samples: Int
     let totalMilliseconds: Double
-    let medianMilliseconds: Double?
+    let p50Milliseconds: Double?
+    let p95Milliseconds: Double?
+    let p50MillisecondsPerPage: Double?
+    let p95MillisecondsPerPage: Double?
+    let aggregatePagesPerSecond: Double?
 
-    init(_ values: [Double]) {
-        samples = values.count
-        totalMilliseconds = values.reduce(0, +)
-        guard !values.isEmpty else {
-            medianMilliseconds = nil
-            return
+    enum CodingKeys: String, CodingKey {
+        case samples
+        case totalMilliseconds = "total_milliseconds"
+        case p50Milliseconds = "p50_milliseconds"
+        case p95Milliseconds = "p95_milliseconds"
+        case p50MillisecondsPerPage = "p50_milliseconds_per_page"
+        case p95MillisecondsPerPage = "p95_milliseconds_per_page"
+        case aggregatePagesPerSecond = "aggregate_pages_per_second"
+    }
+
+    init(_ samples: [TimingSample]) {
+        self.samples = samples.count
+        let milliseconds = samples.map(\.milliseconds)
+        totalMilliseconds = milliseconds.reduce(0, +)
+        p50Milliseconds = percentile(milliseconds, 0.50)
+        p95Milliseconds = percentile(milliseconds, 0.95)
+        let perPage = samples.compactMap { sample -> Double? in
+            guard let pages = sample.pages, pages > 0 else { return nil }
+            return sample.milliseconds / Double(pages)
         }
-        let sorted = values.sorted()
-        if sorted.count.isMultiple(of: 2) {
-            medianMilliseconds = (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2
-        } else {
-            medianMilliseconds = sorted[sorted.count / 2]
-        }
+        p50MillisecondsPerPage = percentile(perPage, 0.50)
+        p95MillisecondsPerPage = percentile(perPage, 0.95)
+        let totalPages = samples.compactMap(\.pages).reduce(0, +)
+        aggregatePagesPerSecond = totalMilliseconds > 0 && totalPages > 0
+            ? Double(totalPages) / (totalMilliseconds / 1_000)
+            : nil
+    }
+}
+
+private struct TimingSample: Sendable {
+    let milliseconds: Double
+    let pages: Int?
+}
+
+private struct QualitySummary: Codable, Sendable {
+    let expectedLockedDocuments: Int
+    let scoredLockedDocuments: Int
+    let failedLockedDocuments: Int
+    let contentF1Macro: Double?
+    let wordOrderBigramF1Macro: Double?
+    let structureF1Macro: Double?
+    let tableCellF1Macro: Double?
+    let tableDocuments: Int
+    let criticalValueAccuracyMacro: Double?
+    let criticalValueDocuments: Int
+    let ocrRoutingF1Macro: Double?
+    let ocrRoutingDocuments: Int
+
+    enum CodingKeys: String, CodingKey {
+        case expectedLockedDocuments = "expected_locked_documents"
+        case scoredLockedDocuments = "scored_locked_documents"
+        case failedLockedDocuments = "failed_locked_documents"
+        case contentF1Macro = "content_f1_macro"
+        case wordOrderBigramF1Macro = "word_order_bigram_f1_macro"
+        case structureF1Macro = "structure_f1_macro"
+        case tableCellF1Macro = "table_cell_f1_macro"
+        case tableDocuments = "table_documents"
+        case criticalValueAccuracyMacro = "critical_value_accuracy_macro"
+        case criticalValueDocuments = "critical_value_documents"
+        case ocrRoutingF1Macro = "ocr_routing_f1_macro"
+        case ocrRoutingDocuments = "ocr_routing_documents"
+    }
+
+    init(_ records: [DocumentResultRecord]) {
+        let locked = records.compactMap(\.quality).filter(\.requiredForPass)
+        expectedLockedDocuments = records.count(where: { $0.groundTruthState == .locked })
+        scoredLockedDocuments = locked.count
+        failedLockedDocuments = expectedLockedDocuments - scoredLockedDocuments
+        contentF1Macro = mean(locked.map(\.tokenF1))
+        wordOrderBigramF1Macro = mean(locked.map(\.wordOrderBigramF1))
+        structureF1Macro = mean(locked.map(\.structureF1))
+        let tableScores = locked.compactMap(\.tableCellF1)
+        tableDocuments = tableScores.count
+        tableCellF1Macro = mean(tableScores)
+        let criticalScores = locked.compactMap(\.criticalValueAccuracy)
+        criticalValueDocuments = criticalScores.count
+        criticalValueAccuracyMacro = mean(criticalScores)
+        let ocrScores = locked.compactMap { $0.ocrRouting?.f1 }
+        ocrRoutingDocuments = ocrScores.count
+        ocrRoutingF1Macro = mean(ocrScores)
+    }
+}
+
+private struct BenchmarkEnvironment: Codable, Sendable {
+    let buildConfiguration: String
+    let operatingSystem: String
+    let architecture: String
+    let processorCount: Int
+    let physicalMemoryBytes: UInt64
+    let sourceRevision: String?
+    let developerDirectory: String?
+    let xcodeVersion: String?
+    let swiftVersion: String?
+    let engineVersions: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case buildConfiguration = "build_configuration"
+        case operatingSystem = "operating_system"
+        case architecture
+        case processorCount = "processor_count"
+        case physicalMemoryBytes = "physical_memory_bytes"
+        case sourceRevision = "source_revision"
+        case developerDirectory = "developer_directory"
+        case xcodeVersion = "xcode_version"
+        case swiftVersion = "swift_version"
+        case engineVersions = "engine_versions"
+    }
+
+    init(records: [DocumentResultRecord]) {
+        buildConfiguration = benchmarkBuildConfiguration
+        operatingSystem = ProcessInfo.processInfo.operatingSystemVersionString
+        architecture = executableArchitecture
+        processorCount = ProcessInfo.processInfo.processorCount
+        physicalMemoryBytes = ProcessInfo.processInfo.physicalMemory
+        sourceRevision = ProcessInfo.processInfo.environment["DOCUMENTKIT_BENCHMARK_SOURCE_REVISION"]
+        developerDirectory = ProcessInfo.processInfo.environment["DEVELOPER_DIR"]
+        xcodeVersion = commandOutput("/usr/bin/xcodebuild", ["-version"])
+        swiftVersion = commandOutput("/usr/bin/xcrun", ["swift", "--version"])
+        engineVersions = Array(
+            Set(
+                records.flatMap { record in
+                    record.inspectRuns.compactMap { $0.inspection?.engineVersion }
+                }
+            )
+        ).sorted()
     }
 }
 
@@ -1060,6 +1816,10 @@ private struct DocumentSummary: Codable, Sendable {
     let qualityPasses: Bool?
     let tokenF1: Double?
     let structureF1: Double?
+    let wordOrderBigramF1: Double?
+    let tableCellF1: Double?
+    let criticalValueAccuracy: Double?
+    let ocrRoutingF1: Double?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -1070,6 +1830,10 @@ private struct DocumentSummary: Codable, Sendable {
         case qualityPasses = "quality_passes"
         case tokenF1 = "token_f1"
         case structureF1 = "structure_f1"
+        case wordOrderBigramF1 = "word_order_bigram_f1"
+        case tableCellF1 = "table_cell_f1"
+        case criticalValueAccuracy = "critical_value_accuracy"
+        case ocrRoutingF1 = "ocr_routing_f1"
     }
 
     init(_ record: DocumentResultRecord) {
@@ -1081,6 +1845,10 @@ private struct DocumentSummary: Codable, Sendable {
         qualityPasses = record.quality?.passes
         tokenF1 = record.quality?.tokenF1
         structureF1 = record.quality?.structureF1
+        wordOrderBigramF1 = record.quality?.wordOrderBigramF1
+        tableCellF1 = record.quality?.tableCellF1
+        criticalValueAccuracy = record.quality?.criticalValueAccuracy
+        ocrRoutingF1 = record.quality?.ocrRouting?.f1
     }
 }
 
@@ -1122,8 +1890,11 @@ private func resolveRelativePath(_ path: String, rootURL: URL) throws -> URL {
         throw BenchmarkError.invalidManifest("Path may not contain '..': \(path)")
     }
 
-    let root = rootURL.standardizedFileURL
-    let candidate = root.appendingPathComponent(path).standardizedFileURL
+    let root = rootURL.standardizedFileURL.resolvingSymlinksInPath()
+    let candidate = root
+        .appendingPathComponent(path)
+        .standardizedFileURL
+        .resolvingSymlinksInPath()
     guard candidate.path == root.path || candidate.path.hasPrefix(root.path + "/") else {
         throw BenchmarkError.invalidManifest("Path escapes root: \(path)")
     }
@@ -1174,6 +1945,70 @@ private func elapsedMilliseconds(since start: TimeInterval) -> Double {
     (ProcessInfo.processInfo.systemUptime - start) * 1_000
 }
 
+private var benchmarkBuildConfiguration: String {
+    #if DOCUMENTKIT_BENCHMARK_RELEASE
+    "release"
+    #else
+    "debug"
+    #endif
+}
+
+private var executableArchitecture: String {
+    #if arch(arm64)
+    "arm64"
+    #elseif arch(x86_64)
+    "x86_64"
+    #else
+    "unknown"
+    #endif
+}
+
+private func isISODate(_ value: String) -> Bool {
+    guard value.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil else {
+        return false
+    }
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.dateFormat = "yyyy-MM-dd"
+    formatter.isLenient = false
+    guard let date = formatter.date(from: value) else { return false }
+    return formatter.string(from: date) == value
+}
+
+private func validateCanonicalMarkdown(_ markdown: String, documentID: String) throws {
+    let hasTrailingWhitespace = markdown
+        .split(separator: "\n", omittingEmptySubsequences: false)
+        .contains { $0.last == " " || $0.last == "\t" }
+    guard !markdown.contains("\r"),
+          !markdown.contains("\0"),
+          !markdown.contains("\t"),
+          !hasTrailingWhitespace,
+          !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          markdown == markdown.precomposedStringWithCanonicalMapping,
+          markdown.hasSuffix("\n"),
+          !markdown.hasSuffix("\n\n") else {
+        throw BenchmarkError.invalidManifest(
+            "\(documentID) ground truth violates the canonical Markdown file-normalization rules."
+        )
+    }
+}
+
+private enum PDFKitBaselineError: Error, LocalizedError {
+    case invalidPDF
+
+    var errorDescription: String? { "PDFKit could not open the PDF." }
+}
+
+private func pdfKitText(from data: Data) throws -> (text: String, pageCount: Int) {
+    guard let document = PDFDocument(data: data) else {
+        throw PDFKitBaselineError.invalidPDF
+    }
+    let pages = (0..<document.pageCount).map { document.page(at: $0)?.string ?? "" }
+    return (pages.joined(separator: "\n\n"), document.pageCount)
+}
+
 private func markdownFileName(_ run: Int) -> String {
     String(format: "run-%02d.md", run)
 }
@@ -1209,10 +2044,84 @@ private func markdownStructure(_ markdown: String) -> [String] {
     }
 }
 
-private func multisetF1(_ observed: [String], _ expected: [String]) -> Double {
-    if observed.isEmpty && expected.isEmpty { return 1 }
-    guard !observed.isEmpty, !expected.isEmpty else { return 0 }
+private func bigrams(_ values: [String]) -> [String] {
+    guard values.count >= 2 else { return [] }
+    return zip(values, values.dropFirst()).map { "\($0)\u{001F}\($1)" }
+}
 
+private func markdownTableCells(_ markdown: String) -> [String] {
+    let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    var cells: [String] = []
+    var index = 0
+    while index + 1 < lines.count {
+        let header = splitMarkdownTableRow(lines[index])
+        let delimiter = splitMarkdownTableRow(lines[index + 1])
+        guard !header.isEmpty,
+              header.count == delimiter.count,
+              delimiter.allSatisfy(isTableDelimiter) else {
+            index += 1
+            continue
+        }
+        cells.append(contentsOf: header.map(normalizedCell))
+        index += 2
+        while index < lines.count {
+            let row = splitMarkdownTableRow(lines[index])
+            guard row.count == header.count else { break }
+            cells.append(contentsOf: row.map(normalizedCell))
+            index += 1
+        }
+    }
+    return cells
+}
+
+private func splitMarkdownTableRow(_ line: String) -> [String] {
+    guard line.contains("|") else { return [] }
+    var cells: [String] = []
+    var current = ""
+    var escaped = false
+    for character in line {
+        if escaped {
+            current.append(character)
+            escaped = false
+        } else if character == "\\" {
+            escaped = true
+            current.append(character)
+        } else if character == "|" {
+            cells.append(current)
+            current = ""
+        } else {
+            current.append(character)
+        }
+    }
+    cells.append(current)
+    if line.trimmingCharacters(in: .whitespaces).hasPrefix("|") { cells.removeFirst() }
+    if line.trimmingCharacters(in: .whitespaces).hasSuffix("|") { cells.removeLast() }
+    return cells.map { $0.trimmingCharacters(in: .whitespaces) }
+}
+
+private func isTableDelimiter(_ cell: String) -> Bool {
+    cell.range(of: #"^:?-{3,}:?$"#, options: .regularExpression) != nil
+}
+
+private func normalizedCell(_ cell: String) -> String {
+    cell.precomposedStringWithCanonicalMapping
+        .split(whereSeparator: { $0.isWhitespace })
+        .joined(separator: " ")
+}
+
+private struct MatchScore {
+    let precision: Double
+    let recall: Double
+    let f1: Double
+}
+
+private func multisetScore<T: Hashable>(_ observed: [T], _ expected: [T]) -> MatchScore {
+    if observed.isEmpty && expected.isEmpty {
+        return MatchScore(precision: 1, recall: 1, f1: 1)
+    }
+    guard !observed.isEmpty, !expected.isEmpty else {
+        return MatchScore(precision: 0, recall: 0, f1: 0)
+    }
     var remaining = Dictionary(grouping: expected, by: { $0 }).mapValues(\.count)
     var matches = 0
     for value in observed where remaining[value, default: 0] > 0 {
@@ -1221,8 +2130,72 @@ private func multisetF1(_ observed: [String], _ expected: [String]) -> Double {
     }
     let precision = Double(matches) / Double(observed.count)
     let recall = Double(matches) / Double(expected.count)
+    return MatchScore(precision: precision, recall: recall, f1: harmonicMean(precision, recall))
+}
+
+private func multisetF1(_ observed: [String], _ expected: [String]) -> Double {
+    multisetScore(observed, expected).f1
+}
+
+private func harmonicMean(_ precision: Double, _ recall: Double) -> Double {
     guard precision + recall > 0 else { return 0 }
     return 2 * precision * recall / (precision + recall)
+}
+
+private func literalOccurrenceCount(of needle: String, in haystack: String) -> Int {
+    guard !needle.isEmpty else { return 0 }
+    var count = 0
+    var range = haystack.startIndex..<haystack.endIndex
+    while let found = haystack.range(of: needle, range: range) {
+        count += 1
+        range = found.upperBound..<haystack.endIndex
+    }
+    return count
+}
+
+private func thresholdPasses(_ value: Double?, minimum: Double?) -> Bool {
+    guard let minimum else { return true }
+    guard let value else { return false }
+    return value >= minimum
+}
+
+private func percentile(_ values: [Double], _ fraction: Double) -> Double? {
+    guard !values.isEmpty else { return nil }
+    let sorted = values.sorted()
+    let position = fraction * Double(sorted.count - 1)
+    let lower = Int(floor(position))
+    let upper = Int(ceil(position))
+    if lower == upper { return sorted[lower] }
+    let weight = position - Double(lower)
+    return sorted[lower] + (sorted[upper] - sorted[lower]) * weight
+}
+
+private func mean(_ values: [Double]) -> Double? {
+    values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+}
+
+private func commandOutput(_ executable: String, _ arguments: [String]) -> String? {
+    #if os(macOS)
+    let process = Process()
+    let pipe = Pipe()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    process.standardOutput = pipe
+    process.standardError = pipe
+    do {
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let value = String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    } catch {
+        return nil
+    }
+    #else
+    return nil
+    #endif
 }
 
 private func writeJSON<T: Encodable>(_ value: T, to url: URL) throws {

@@ -4,16 +4,20 @@ This is a small, local-only SwiftPM executable for benchmarking the
 DocumentKit wrapper. It does not download a corpus and it never treats a
 missing, unreviewed, or checksum-mismatched PDF as a valid run.
 
-The runner deliberately has two acceptance layers:
+The runner deliberately has three measurement layers:
 
 1. **Upstream parity:** compare the Swift wrapper with a pinned raw
    `pdf-inspector` baseline. This is the first release gate. Markdown and
    inspection metadata should be identical; timing is reported separately.
-2. **Human ground truth:** compare extracted Markdown with reviewed UTF-8
-   Markdown. The built-in smoke evaluator reports case-insensitive token F1 and
-   Markdown-structure F1 against explicit thresholds. Full-corpus runs can add
-   a pinned external evaluator for richer layout metrics. Quality is not a
-   substitute for wrapper parity.
+2. **Human ground truth:** compare extracted Markdown with independently authored
+   UTF-8 Markdown under
+   [`Documentation/CanonicalMarkdown.md`](../Documentation/CanonicalMarkdown.md).
+   The runner reports content, adjacent-word order, Markdown structure, table
+   cells, exact critical values, and OCR routing. Draft and reviewed truth are
+   diagnostic; only locked truth gates a release.
+3. **Native baseline:** compare the same truth with PDFKit embedded-text output.
+   This is intentionally plain text, non-OCR, and non-gating. It is not a second
+   Markdown parser.
 
 ## Corpus policy
 
@@ -38,11 +42,11 @@ the need to review rights for every underlying PDF, image, and excerpt.
 
 ## Manifest
 
-The current schema is intentionally small:
+Schema v1 remains readable. New corpora should use schema v2:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "corpus": {
     "id": "opendataloader-dp-bench",
     "distribution": "external-only",
@@ -59,12 +63,33 @@ The current schema is intentionally small:
       "id": "document-001",
       "pdf": "Corpus/pdfs/document-001.pdf",
       "sha256": "<64-hex-pdf-digest>",
+      "expected_page_count": 1,
+      "expected_ocr_pages": [],
       "raw_markdown_sha256": "<64-hex-baseline-digest>",
       "ground_truth": {
         "markdown": "GroundTruth/document-001.md",
         "sha256": "<64-hex-ground-truth-digest>",
+        "state": "locked",
+        "authoring_method": "visual-transcription",
+        "authored_without_documentkit_output": true,
+        "author": "<golden author>",
+        "reviewer": "<independent reviewer>",
+        "reviewed_at": "2026-08-12",
+        "critical_values": [
+          {
+            "id": "closing-balance",
+            "kind": "amount",
+            "value": "$1,234.56",
+            "context": "| Closing balance | $1,234.56 |",
+            "occurrences": 1
+          }
+        ],
         "minimum_token_f1": 0.95,
-        "minimum_structure_f1": 0.9
+        "minimum_structure_f1": 0.9,
+        "minimum_word_order_f1": 0.95,
+        "minimum_table_cell_f1": 0.95,
+        "minimum_critical_value_accuracy": 1.0,
+        "minimum_ocr_routing_f1": 1.0
       },
       "rights": {
         "status": "external-only",
@@ -89,12 +114,18 @@ Paths may not escape that root. All documents are preflighted before the Rust
 engine is called, so a rights or checksum failure cannot produce a partial
 benchmark that looks successful.
 
-`ground_truth` is optional per document. When present, its checksum and UTF-8
-encoding are verified before any engine call. Token F1 measures content-word
-recovery using word multiplicity. Structure F1 compares heading levels, list
-items, table rows, blockquotes, code fences, and paragraph lines. These small,
-transparent metrics are useful for committed smoke fixtures; they do not claim
-to measure visual fidelity or replace a standard full-corpus evaluator.
+`ground_truth` is optional per document. Its checksum and UTF-8 encoding are
+verified before any engine call. Schema v2 requires a `draft`, `reviewed`, or
+`locked` state, authoring method, and declaration that the author did not consult
+DocumentKit output. Locked truth additionally requires distinct author and
+reviewer identities plus an ISO review date. Locked critical values require a
+1.0 threshold and exact canonical context containing the literal; missing,
+duplicated, or relocated occurrences fail. OCR indexes are zero-based,
+ascending, unique, and range-checked.
+
+The built-in table metric recognizes simple GFM pipe tables and reports
+normalized-cell F1. It does not claim visual table-tree fidelity or reliably
+score complex row/column spans.
 
 ## Running it
 
@@ -108,6 +139,29 @@ swift run --package-path Benchmarks documentkit-benchmark \
   --output Benchmarks/.cache/results/smoke-v1 \
   --repetitions 2
 ```
+
+For release performance evidence, require an optimized build, discard at least
+one warm-up, and keep enough samples for tail percentiles:
+
+```sh
+DOCUMENTKIT_BENCHMARK_SOURCE_REVISION="$(git rev-parse HEAD)" \
+  Benchmarks/Scripts/run-release.sh \
+  --manifest Benchmarks/Manifests/v0.2-development.json \
+  --root Benchmarks \
+  --output Benchmarks/.cache/results/release-v0.2 \
+  --warmups 1 \
+  --repetitions 20
+```
+
+The wrapper requires a clean committed checkout whose `HEAD` equals the exact
+`DOCUMENTKIT_BENCHMARK_SOURCE_REVISION`. It preserves `/usr/bin/time -l` output
+beside the benchmark result and writes `resource-usage.json` with the maximum
+resident set size plus hashes of the resource log and `summary.json`. This is
+the process-lifetime high-water mark for the corpus run, not a per-document or
+per-engine measurement. Release evidence also requires schema v2 and locked
+truth for every case; use a direct release-mode invocation for diagnostic draft
+corpora such as the smoke fixture. The v0.2 manifest path above becomes valid
+only after the external corpus and every locked truth file have been prepared.
 
 The verification script regenerates the 1-page PDF from the tracked Swift
 source and checks both fixture digests. This is benchmark tooling only;
@@ -140,11 +194,20 @@ The runner writes:
 <output>/documents/<id>/markdown/run-02.md
 ```
 
-`summary.json` is the machine-readable run report. Per-document records keep
+`summary.json` records the manifest hash, build configuration, injected source
+revision, OS, architecture, memory, toolchain, engine versions, warm-ups, and
+measured repetitions. Per-document records keep
 the input digest, inspect and extract attempts, Markdown digests, errors,
 repeatability, baseline comparison, ground-truth scores, and elapsed
-milliseconds. Processing time reported by the PDF engine is excluded from
-parity comparisons; wall timing is reported as benchmark data.
+milliseconds. It preserves expected, scored, and failed locked-truth counts so
+engine failures cannot disappear from quality denominators. Failed-run timings
+remain diagnostic.
+
+DocumentKit currently runs before PDFKit, so cross-engine timings contain
+cache/order bias. Treat them as separate baselines, not a definitive speed
+ranking, until isolated randomized subprocess runs are added. Apple Vision is
+not part of this non-OCR baseline; when added, its timing must include PDF page
+rendering.
 
 ## Test cadence
 
@@ -159,14 +222,20 @@ parity comparisons; wall timing is reported as benchmark data.
   review per-document regressions, and retain the exact manifest, engine commit,
   evaluator commit, and result JSON.
 
-The full quality run should report the evaluator's NID/NID-S, TEDS/TEDS-S, and
-MHS/MHS-S metrics with eligible-document counts. Do not turn a missing download
-or evaluator failure into a zero score or a green result.
+Do not turn a missing download, unreviewed golden, or evaluator failure into a
+zero score or a green result. The 21 researched entries in
+[`CorpusSources/v0.2-candidates.json`](CorpusSources/v0.2-candidates.json),
+including six fictional or blank sample statements, are candidates only. Each
+still requires retrieval, SHA-256/size/page pinning, privacy and rights review,
+independent canonical Markdown, and an explicit review state. With the four
+existing external documents this is a 25-document sourcing plan, not a claim
+that 25 documents have been benchmarked.
 
 ## Current verification status
 
-The committed smoke fixture passes its quality thresholds with token F1 `1.0`
-and structure F1 `0.923`. Repeated inspection and Markdown output are stable.
+The committed smoke fixture has source-authored draft truth. It produces useful
+diagnostic scores but is not a locked release-quality case. Repeated inspection
+and Markdown output are stable.
 The four-document external run also passes with exact raw-engine Markdown
 parity and no nondeterministic documents. Local timing, hashes, and the known
 smoke-fixture structure difference are recorded in
