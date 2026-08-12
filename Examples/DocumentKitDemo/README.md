@@ -2,7 +2,10 @@
 
 This small macOS SwiftUI app exercises DocumentKit through its public Swift
 API. It opens or accepts a dropped PDF, displays the original with PDFKit,
-and shows the exact extracted Markdown beside it.
+and shows the exact extracted Markdown beside it. The options bar can process
+the entire PDF or a strictly ascending, comma-separated page selection. It can
+also pass a password to both PDFKit preview and DocumentKit extraction; the
+password stays in memory and is never saved by the app.
 
 The app does not import `DocumentKitCore`, Rust modules, or any Markdown
 rendering dependency. Build the engine artifact first so the local

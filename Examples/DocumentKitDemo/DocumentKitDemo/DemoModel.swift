@@ -12,8 +12,9 @@ final class DemoModel: ObservableObject {
     @Published private(set) var errorMessage: String?
 
     private var extractionTask: Task<Void, Never>?
+    private var pdfData: Data?
 
-    func load(url: URL) {
+    func load(url: URL, options: DocumentOptions, previewPassword: String?) {
         cancel()
 
         let hasSecurityScope = url.startAccessingSecurityScopedResource()
@@ -38,7 +39,12 @@ final class DemoModel: ObservableObject {
                 }
                 let data = try await readTask.value
                 try Task.checkCancellation()
-                self?.beginExtraction(data: data, fileName: name)
+                self?.beginExtraction(
+                    data: data,
+                    fileName: name,
+                    options: options,
+                    previewPassword: previewPassword
+                )
             } catch is CancellationError {
                 // Replacing a document intentionally cancels the old task.
             } catch {
@@ -48,9 +54,30 @@ final class DemoModel: ObservableObject {
         }
     }
 
-    func load(data: Data, fileName: String) {
+    func load(
+        data: Data,
+        fileName: String,
+        options: DocumentOptions,
+        previewPassword: String?
+    ) {
         cancel()
-        beginExtraction(data: data, fileName: fileName)
+        beginExtraction(
+            data: data,
+            fileName: fileName,
+            options: options,
+            previewPassword: previewPassword
+        )
+    }
+
+    func extract(options: DocumentOptions, previewPassword: String?) {
+        guard let pdfData else { return }
+        cancel()
+        beginExtraction(
+            data: pdfData,
+            fileName: fileName,
+            options: options,
+            previewPassword: previewPassword
+        )
     }
 
     func cancel() {
@@ -70,6 +97,7 @@ final class DemoModel: ObservableObject {
     func presentErrorMessage(_ message: String) {
         errorMessage = message
         isExtracting = false
+        extractionTask = nil
     }
 
     var markdownFileName: String {
@@ -77,18 +105,28 @@ final class DemoModel: ObservableObject {
         return (baseName.isEmpty ? "document" : baseName) + ".md"
     }
 
-    private func beginExtraction(data: Data, fileName: String) {
+    private func beginExtraction(
+        data: Data,
+        fileName: String,
+        options: DocumentOptions,
+        previewPassword: String?
+    ) {
         extractionTask?.cancel()
         let resolvedFileName = fileName.isEmpty ? "Untitled.pdf" : fileName
         self.fileName = resolvedFileName
-        pdfDocument = PDFDocument(data: data)
+        pdfData = data
+        let document = PDFDocument(data: data)
+        if let previewPassword {
+            document?.unlock(withPassword: previewPassword)
+        }
+        pdfDocument = document
         extraction = nil
         errorMessage = nil
         isExtracting = true
 
         extractionTask = Task { [weak self] in
             do {
-                let result = try await DocumentKit.extract(data)
+                let result = try await DocumentKit.extract(data, options: options)
                 try Task.checkCancellation()
                 self?.finishExtraction(result)
             } catch is CancellationError {

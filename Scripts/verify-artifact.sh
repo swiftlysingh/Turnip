@@ -24,6 +24,36 @@ expect_architectures "$ARTIFACT/macos-arm64_x86_64/libdocumentkit_core.a" arm64 
 expect_architectures "$ARTIFACT/ios-arm64/libdocumentkit_core-ios.a" arm64
 expect_architectures "$ARTIFACT/ios-arm64_x86_64-simulator/libdocumentkit_core.a" arm64 x86_64
 
+expect_symbols() {
+    file=$1
+    info=$(xcrun lipo -info "$file")
+    if echo "$info" | grep -q "Non-fat file"; then
+        for symbol in \
+            _documentkit_inspect_with_options \
+            _documentkit_extract_with_options; do
+            xcrun nm -gU "$file" 2>/dev/null | awk '{print $NF}' | grep -qx "$symbol"
+        done
+        return
+    fi
+
+    for architecture in arm64 x86_64; do
+        if echo "$info" | grep -q "$architecture"; then
+            thin=$(mktemp "${TMPDIR:-/tmp}/documentkit-symbols.XXXXXX")
+            xcrun lipo "$file" -thin "$architecture" -output "$thin"
+            for symbol in \
+                _documentkit_inspect_with_options \
+                _documentkit_extract_with_options; do
+                xcrun nm -gU "$thin" 2>/dev/null | awk '{print $NF}' | grep -qx "$symbol"
+            done
+            rm -f "$thin"
+        fi
+    done
+}
+
+expect_symbols "$ARTIFACT/macos-arm64_x86_64/libdocumentkit_core.a"
+expect_symbols "$ARTIFACT/ios-arm64/libdocumentkit_core-ios.a"
+expect_symbols "$ARTIFACT/ios-arm64_x86_64-simulator/libdocumentkit_core.a"
+
 for headers in "$ARTIFACT"/*/Headers; do
     test -f "$headers/DocumentKitCore.h"
     test -f "$headers/module.modulemap"

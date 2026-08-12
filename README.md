@@ -13,8 +13,8 @@ print(extraction.inspection.kind)
 print(extraction.warnings)
 ```
 
-DocumentKit is private while v0.1 is being validated. The current scope is
-deliberately narrow: **PDF input to Markdown output**. It does not generate
+DocumentKit is private while the pre-release API is being validated. The
+current scope is deliberately narrow: **PDF input to Markdown output**. It does not generate
 PDFs, convert Office documents, perform OCR, use an LLM, upload files, or expose
 plain-text and structured-JSON output yet.
 
@@ -87,13 +87,28 @@ let result = try await DocumentKit.extract(contentsOf: pdfURL)
 The URL overload checks the file size before reading. Both overloads reject
 inputs larger than `DocumentKit.maximumInputSize`, currently 100 MiB.
 
+Select pages or unlock a password-protected PDF with `DocumentOptions`:
+
+```swift
+let options = DocumentOptions(
+    pageIndexes: [0, 2, 3],
+    password: suppliedPassword
+)
+let result = try await DocumentKit.extract(pdfData, options: options)
+```
+
+Page indexes are zero-based, unique, and strictly ascending. `nil` means the
+entire document. `inspection.pageCount` always reports the source PDF's total
+page count, even when only some pages were selected. Selected Markdown remains
+in document order.
+
 ### Inspect without extracting
 
 ```swift
 let inspection = try await DocumentKit.inspect(pdfData)
 ```
 
-`inspect` is the fast routing call. It classifies the PDF, counts pages, and
+`inspect` is the lighter routing call. It classifies the PDF, counts pages, and
 identifies pages that likely need OCR, but does not build Markdown. Because it
 uses the engine's detect-only mode, `inspection.layout` and
 `inspection.hasEncodingIssues` are `nil`.
@@ -103,13 +118,18 @@ one full engine call and returns both Markdown and the richer inspection data,
 including layout and encoding analysis. Apps that need Markdown should call
 `extract` directly.
 
+Page selection limits the requested output and OCR-routing results. It does not
+promise proportional speedups because some engine checks may still examine
+document-wide metadata. Benchmark the documents that matter to your app.
+
 All public page indexes are zero-based. OCR confidence and extraction
 confidence are engine signals, not guarantees that text is correct.
 
 ### Errors
 
-`DocumentKitError` distinguishes empty and oversized inputs, encrypted PDFs,
-invalid PDFs, documents with no extractable text, and internal engine failures.
+`DocumentKitError` distinguishes empty and oversized inputs, missing or wrong
+passwords, invalid and out-of-range page selections, invalid PDFs, documents
+with no extractable text, and internal engine failures.
 A scanned or image-only PDF commonly produces `noExtractableText` with its
 inspection attached. DocumentKit reports the OCR need but does not perform OCR.
 
@@ -117,8 +137,9 @@ inspection attached. DocumentKit reports the OCR need but does not perform OCR.
 
 [`Examples/DocumentKitDemo`](Examples/DocumentKitDemo) is a native macOS
 SwiftUI app. It opens or accepts a dropped PDF, renders the source with PDFKit,
-and shows selectable raw Markdown beside it. Raw Markdown is intentional. It
-makes reading-order, table, and encoding problems easy to see.
+and shows selectable raw Markdown beside it. It also exercises page selection
+and password-protected PDFs. Raw Markdown is intentional. It makes reading-order,
+table, and encoding problems easy to see.
 
 ```sh
 xcodebuild \
@@ -140,17 +161,14 @@ The [`Benchmarks`](Benchmarks) package separates three questions:
 3. **Extraction quality:** how closely does output match reviewed Markdown
    ground truth?
 
-The tracked curated manifest covers long nested documents, technical reports,
-tagged financial tables, and graphic-heavy multi-column layouts. PDFs remain
-external and checksum-pinned. The latest local run processed all four documents
-twice with zero parity mismatches and zero nondeterministic outputs. Timing is
-recorded separately and is not part of correctness.
+The existing four-document external baseline is checksum-pinned and remains a
+useful historical parity check. The committed project-owned smoke fixture runs
+in CI with source-authored draft truth. Neither is the v0.2 accuracy corpus.
 
-The committed project-owned smoke fixture also runs twice in CI against
-hand-written Markdown ground truth. The current baseline has token F1 `1.0`,
-structure F1 `0.923`, and deterministic inspection and Markdown output. The
-recorded report preserves the one known structure difference instead of
-treating the result as an exact match.
+The v0.2 release gate is being built as a 20-plus-document, rights- and
+provenance-tracked corpus with independently authored and reviewed canonical
+Markdown. Until those PDFs are retrieved, hashed, and their truth is locked,
+DocumentKit does not claim a release-quality extraction score.
 
 See [`Benchmarks/README.md`](Benchmarks/README.md) for the manifest, fetch, run,
 and ground-truth workflow. See
@@ -164,12 +182,14 @@ build does not follow `main` or a semver range. `Scripts/prepare-engine.sh`
 clones that exact revision into the ignored `Build` directory and applies the
 tracked Apple patch.
 
-The patch does two Apple-specific things:
+The patch makes three narrow changes to the pinned engine:
 
 - embeds Adobe CMaps so CID text extraction never depends on a build-machine
   filesystem path;
 - uses lopdf's single-threaded parser on Apple targets to keep the binary and
-  build footprint bounded.
+  build footprint bounded;
+- evaluates sparse-text and undecodable-font quality heuristics against the
+  selected pages when a page filter is supplied.
 
 To rebuild all five Rust slices and replace the local artifact:
 
@@ -201,7 +221,7 @@ The detailed data flow and ownership rules live in
 The likely next output is plain text, followed by a typed structured document
 model that can be encoded as JSON. Those should be additional renderers over a
 stable internal result, not a generic `convert` method. OCR is a separate
-provider boundary and remains out of v0.1.
+provider boundary and remains out of the current SDK scope.
 
 ## Security and limitations
 

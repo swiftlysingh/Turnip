@@ -8,11 +8,11 @@ PDF Data or URL
       |
       v
 DocumentKit Swift API
-  validation, async handoff, typed errors
+  input/options validation, async handoff, typed errors
       |
       v
 DocumentKitCore C ABI
-  borrowed PDF bytes in, owned UTF-8 JSON buffer out
+  borrowed PDF/password/page buffers in, owned UTF-8 JSON buffer out
       |
       v
 pinned pdf-inspector Rust engine
@@ -39,10 +39,18 @@ The public API does not expose Rust, C pointers, the private JSON schema, or a
 generic converter protocol. Plain text and structured output can be added as
 typed results without changing the native transport.
 
+`DocumentOptions` is shared by inspection and extraction. A `nil` page list
+means the entire source PDF. A non-`nil` list must be nonempty, zero-based,
+unique, and strictly ascending. A password is optional. Missing and incorrect
+passwords deliberately map to the same `encryptedPDF` error because the pinned
+engine does not distinguish them.
+
 ## Native ownership
 
-Swift owns the input `Data` for the duration of each C call. Rust borrows that
-memory and never stores the input pointer.
+Swift owns the input `Data`, page-index buffer, and password bytes for the
+duration of each C call. Rust borrows that memory and never stores the input
+pointers. Passwords are not serialized into the response or persisted by the
+SDK.
 
 Rust serializes a schema-versioned private response into `Box<[u8]>` and returns
 the pointer plus length as `DocumentKitBuffer`. Swift copies those bytes into
@@ -61,7 +69,18 @@ public page collections to zero-based indexes. The Swift transport rejects a
 successful response with a non-positive page count or an out-of-range page
 index as an engine failure.
 
-DocumentKit v0.1 does not expose positioned text or coordinates. A future
+`DocumentInspection.pageCount` is always the source document's total page
+count. For a selected operation, Markdown, OCR page lists, OCR reasons, layout
+page lists, encoding warnings, and warnings are filtered to the selection.
+Selected Markdown stays in source-document order.
+
+The bridge converts selected pages back to the engine's one-based convention.
+The tracked engine patch also makes sparse-text and undecodable-font quality
+heuristics use only the processed selection. Some detect-only font analysis is
+still document-wide, so page selection is an output contract rather than a
+guaranteed proportional performance optimization.
+
+DocumentKit does not expose positioned text or coordinates. A future
 structured model must define one normalized coordinate space before those
 fields become public.
 
@@ -92,7 +111,7 @@ does not occupy the caller's actor. Cancellation is checked immediately before
 and after the native call. Upstream exposes no cancellation hook, so work that
 has already entered Rust runs to completion before the cancelled task returns.
 
-The SDK does not impose a global concurrency queue in v0.1. Apps doing batch
+The SDK does not impose a global concurrency queue. Apps doing batch
 processing should limit concurrent calls based on their memory budget.
 
 ## Benchmark contracts
@@ -103,8 +122,9 @@ comparisons.
 
 - Input provenance is accepted only with an approved rights status, HTTPS
   source, safe relative path, and matching SHA-256.
-- Raw-engine parity compares exact Markdown SHA-256 against the same pinned
-  upstream revision.
+- Raw-engine parity currently compares exact Markdown SHA-256 against the same
+  pinned upstream revision. Inspection metadata is covered by repeated wrapper
+  snapshots, not by the raw-engine parity digest.
 - Determinism compares Markdown hashes and inspection snapshots across runs.
 - Optional ground truth compares transparent token and Markdown-structure F1
   against per-document thresholds.

@@ -2,8 +2,8 @@
 
 ## Supported version
 
-DocumentKit is in private v0.1 development. Security fixes are applied to the
-latest commit on `main`; no released version is supported yet.
+DocumentKit is in private pre-release development. Security fixes are applied
+to the latest commit on `main`; no released version is supported yet.
 
 ## Reporting a vulnerability
 
@@ -38,13 +38,19 @@ For apps that accept arbitrary internet documents:
 - Rust panics are caught before crossing the C ABI when unwinding is possible.
 - Native buffers have one matching Rust deallocator and are copied before free.
 - The Swift API exposes typed errors instead of raw engine internals.
+- Page selections are validated before they cross the native boundary.
+- Password bytes are borrowed only for the native call and are not included in
+  JSON responses, errors, descriptions, logs, benchmark output, or sample-app
+  persistence.
 - Corpus downloads and ground truth fail closed on checksum or rights errors.
 
 ## Known limitations
 
 - Cancellation does not interrupt a Rust call already in progress.
 - There is no timeout, page-count cap, object-depth cap, or memory sandbox yet.
-- Password-protected PDFs are rejected by the public API.
+- Missing and incorrect passwords intentionally share the same public error.
+- Passwords and PDF bytes still exist in the app process while a call runs, so
+  callers remain responsible for their own in-memory threat model.
 - OCR is not bundled.
 - The sample app is a development tool and not a hardened document sandbox.
 

@@ -7,9 +7,20 @@ struct ContentView: View {
     @StateObject private var model = DemoModel()
     @State private var isImporterPresented = false
     @State private var isDropTargeted = false
+    @State private var selectedPages = ""
+    @State private var password = ""
 
     var body: some View {
         VStack(spacing: 0) {
+            ExtractionOptionsBar(
+                selectedPages: $selectedPages,
+                password: $password,
+                canExtract: model.pdfDocument != nil && !model.isExtracting,
+                extract: extractAgain
+            )
+
+            Divider()
+
             if model.pdfDocument != nil || model.extraction != nil || model.isExtracting {
                 HSplitView {
                     PDFPreview(document: model.pdfDocument)
@@ -100,7 +111,15 @@ struct ContentView: View {
         switch result {
         case let .success(urls):
             guard let url = urls.first else { return }
-            model.load(url: url)
+            do {
+                model.load(
+                    url: url,
+                    options: try extractionOptions(),
+                    previewPassword: previewPassword
+                )
+            } catch {
+                model.presentError(error)
+            }
         case let .failure(error):
             let nsError = error as NSError
             guard !(nsError.domain == NSCocoaErrorDomain && nsError.code == NSUserCancelledError) else {
@@ -116,7 +135,16 @@ struct ContentView: View {
         provider.loadDataRepresentation(forTypeIdentifier: UTType.pdf.identifier) { data, error in
             if let data {
                 Task { @MainActor in
-                    model.load(data: data, fileName: "Dropped PDF.pdf")
+                    do {
+                        model.load(
+                            data: data,
+                            fileName: "Dropped PDF.pdf",
+                            options: try extractionOptions(),
+                            previewPassword: previewPassword
+                        )
+                    } catch {
+                        model.presentError(error)
+                    }
                 }
             } else if let error {
                 let message = error.localizedDescription
@@ -127,6 +155,27 @@ struct ContentView: View {
         }
 
         return true
+    }
+
+    private func extractAgain() {
+        do {
+            model.extract(options: try extractionOptions(), previewPassword: previewPassword)
+        } catch {
+            model.presentError(error)
+        }
+    }
+
+    private func extractionOptions() throws -> DocumentOptions {
+        let pageIndexes = try PageSelectionParser.parse(selectedPages)
+        try PageSelectionParser.validate(pageIndexes)
+        return DocumentOptions(
+            pageIndexes: pageIndexes,
+            password: password.isEmpty ? nil : password
+        )
+    }
+
+    private var previewPassword: String? {
+        password.isEmpty ? nil : password
     }
 
     private func copyMarkdown() {
@@ -155,6 +204,66 @@ struct ContentView: View {
                 }
             }
         }
+    }
+}
+
+private struct ExtractionOptionsBar: View {
+    @Binding var selectedPages: String
+    @Binding var password: String
+    let canExtract: Bool
+    let extract: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            TextField("Pages (1, 3, 5)", text: $selectedPages)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 170)
+                .accessibilityLabel("Selected pages, one-based and comma-separated")
+
+            SecureField("PDF password", text: $password)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 190)
+
+            Text("Leave pages empty for the entire PDF.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button("Extract", systemImage: "text.page", action: extract)
+                .disabled(!canExtract)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+}
+
+private enum PageSelectionParser {
+    static func parse(_ text: String) throws -> [Int]? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        return try trimmed.split(separator: ",", omittingEmptySubsequences: false).map { value in
+            let value = value.trimmingCharacters(in: .whitespaces)
+            guard let page = Int(value), page > 0 else {
+                throw PageSelectionInputError()
+            }
+            return page - 1
+        }
+    }
+
+    static func validate(_ pageIndexes: [Int]?) throws {
+        guard let pageIndexes else { return }
+        guard Set(pageIndexes).count == pageIndexes.count,
+              zip(pageIndexes, pageIndexes.dropFirst()).allSatisfy({ $0.0 < $0.1 }) else {
+            throw PageSelectionInputError()
+        }
+    }
+}
+
+private struct PageSelectionInputError: LocalizedError {
+    var errorDescription: String? {
+        "Enter unique, ascending, one-based page numbers separated by commas, such as 1, 3, 5."
     }
 }
 

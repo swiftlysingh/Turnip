@@ -6,6 +6,9 @@
 - Xcode: `26.4.1 (17E202)`
 - Checksums: [`SHA256SUMS`](SHA256SUMS)
 
-The artifact was built with CMaps embedded and the Apple single-threaded lopdf
-configuration from the tracked patch. Rebuilds must update this file and pass
-`Scripts/verify-artifact.sh` plus Swift runtime and parity tests.
+The artifact was built with CMaps embedded, the Apple single-threaded lopdf
+configuration, and selection-aware sparse-text/font quality heuristics from the
+tracked patch. Rebuilds must update this file and pass
+`Scripts/verify-artifact.sh` plus Swift runtime and parity tests. Artifact
+verification checks the legacy and options-aware C symbols in every packaged
+library variant.

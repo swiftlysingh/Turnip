@@ -69,3 +69,90 @@ index a92638c..91c9ebe 100644
  fn read_builtin_cmap_file(name: &str) -> Option<Cow<'static, [u8]>> {
      let file = BUILTIN_CMAPS.get_file(name)?;
      Some(Cow::Borrowed(file.contents()))
+diff --git a/src/lib.rs b/src/lib.rs
+index 5a87c73..3a30f26 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -3877,6 +3877,16 @@ fn process_document(
+     options: PdfOptions,
+     start: ProcessingTimer,
+ ) -> Result<PdfProcessResult, PdfError> {
++    if let Some(page) = options.page_filter.as_ref().and_then(|pages| {
++        pages
++            .iter()
++            .copied()
++            .filter(|page| *page == 0 || *page > page_count)
++            .min()
++    }) {
++        return Err(PdfError::PageOutOfRange { page, page_count });
++    }
++
+     // Step 1 — Detection (cheap: scans content streams for text operators)
+     let detection = detector::detect_from_document(&doc, page_count, &options.detection)?;
+     let pdf_type = detection.pdf_type;
+@@ -4167,12 +4167,21 @@ fn process_document(
+         (markdown, has_encoding_issues, false)
+     };
+ 
++    // Page-filtered requests make quality decisions over the selected pages.
++    // Keep page_count as the source document total for API compatibility.
++    let processed_pages: Vec<u32> = options
++        .page_filter
++        .as_ref()
++        .map(|pages| pages.iter().copied().collect())
++        .unwrap_or_else(|| (1..=page_count).collect());
++    let processed_page_count = processed_pages.len() as u32;
++
+     // Add pages with gid-encoded fonts (unresolvable encoding) to OCR list.
+-    // When ALL pages have gid-encoded fonts, suppress unreliable markdown.
+-    let all_gid = !gid_pages.is_empty() && gid_pages.len() as u32 >= page_count;
++    // When ALL processed pages have gid-encoded fonts, suppress unreliable markdown.
++    let all_gid = !gid_pages.is_empty() && gid_pages.len() as u32 >= processed_page_count;
+     let mut pages_needing_ocr = pages_needing_ocr;
+     if force_ocr_all {
+-        pages_needing_ocr = (1..=page_count).collect();
++        pages_needing_ocr = processed_pages.clone();
+     }
+     if !gid_pages.is_empty() {
+         log::debug!("pages with gid-encoded fonts (need OCR): {:?}", gid_pages);
+@@ -4202,26 +4211,26 @@ fn process_document(
+     // that need OCR.  Flag all pages for OCR in this case.
+     // Only check when markdown was actually generated (not in Analyze mode).
+     if pdf_type == PdfType::TextBased
+-        && page_count > 0
++        && processed_page_count > 0
+         && pages_needing_ocr.is_empty()
+         && markdown.is_some()
+     {
+         let md_len = markdown.as_ref().map_or(0, |m| m.len());
+-        let chars_per_page = md_len as f32 / page_count as f32;
++        let chars_per_page = md_len as f32 / processed_page_count as f32;
+         if chars_per_page < 50.0 && md_len < 500 {
+             log::debug!(
+                 "sparse extraction: {:.0} chars/page — recommending OCR for all {} pages",
+                 chars_per_page,
+-                page_count
++                processed_page_count
+             );
+-            pages_needing_ocr = (1..=page_count).collect();
++            pages_needing_ocr = processed_pages;
+         }
+     }
+ 
+     let markdown = if all_gid {
+         log::debug!(
+             "all {} pages have gid-encoded fonts — suppressing markdown output",
+-            page_count
++            processed_page_count
+         );
+         None
+     } else {
+@@ -6083,6 +6092,8 @@ pub enum PdfError {
+     InvalidStructure,
+     #[error("Not a PDF: {0}")]
+     NotAPdf(String),
++    #[error("Page {page} is outside the PDF's {page_count} pages")]
++    PageOutOfRange { page: u32, page_count: u32 },
+ }
+
+ impl From<lopdf::Error> for PdfError {
