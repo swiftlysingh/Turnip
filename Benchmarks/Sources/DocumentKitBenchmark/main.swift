@@ -315,39 +315,56 @@ private struct BenchmarkRunner {
 
         var inspectRuns: [InspectRunRecord] = []
         var extractRuns: [ExtractRunRecord] = []
-        inspectRuns.reserveCapacity(repetitions)
+        inspectRuns.reserveCapacity(repetitions * 2)
         extractRuns.reserveCapacity(repetitions)
+
+        let discoveryInspection: DocumentInspection
+        do {
+            // The SDK's page count defines the valid explicit selection. Keep
+            // this discovery call out of the measured repetitions.
+            discoveryInspection = try await DocumentKit.inspect(data)
+        } catch {
+            return DocumentResultRecord.inputFailure(
+                document: document,
+                observedSHA256: observedSHA256,
+                error: ErrorRecord(error)
+            )
+        }
+        let knownPageCount = discoveryInspection.pageCount
+        let sampledCoverage = InspectionCoverage.defaultSampled(
+            knownPageCount: knownPageCount
+        )
+        let fullCoverage = InspectionCoverage.explicitFull(
+            knownPageCount: knownPageCount
+        )
 
         if warmups > 0 {
             for _ in 0..<warmups {
                 _ = try? await DocumentKit.inspect(data)
+                _ = try? await DocumentKit.inspect(
+                    data,
+                    options: DocumentOptions(pageIndexes: fullCoverage.requestedPageIndexes)
+                )
                 _ = try? await DocumentKit.extract(data)
                 _ = try? pdfKitText(from: data)
             }
         }
 
         for runNumber in 1...repetitions {
-            let inspectStart = ProcessInfo.processInfo.systemUptime
-            do {
-                let inspection = try await DocumentKit.inspect(data)
-                inspectRuns.append(
-                    InspectRunRecord(
-                        run: runNumber,
-                        wallMilliseconds: elapsedMilliseconds(since: inspectStart),
-                        inspection: InspectionSnapshot(inspection),
-                        error: nil
-                    )
+            inspectRuns.append(
+                await runInspection(
+                    data: data,
+                    runNumber: runNumber,
+                    coverage: sampledCoverage
                 )
-            } catch {
-                inspectRuns.append(
-                    InspectRunRecord(
-                        run: runNumber,
-                        wallMilliseconds: elapsedMilliseconds(since: inspectStart),
-                        inspection: nil,
-                        error: ErrorRecord(error)
-                    )
+            )
+            inspectRuns.append(
+                await runInspection(
+                    data: data,
+                    runNumber: runNumber,
+                    coverage: fullCoverage
                 )
-            }
+            )
 
             let extractStart = ProcessInfo.processInfo.systemUptime
             do {
@@ -386,12 +403,27 @@ private struct BenchmarkRunner {
             }
         }
 
+        let sampledInspectionStable = inspectionStable(
+            inspectRuns,
+            strategy: .defaultSampled,
+            repetitions: repetitions
+        )
+        let fullInspectionStable = inspectionStable(
+            inspectRuns,
+            strategy: .explicitFull,
+            repetitions: repetitions
+        )
         let determinism = DeterminismRecord(
-            inspectStable: stable(inspectRuns.compactMap(\.inspection), count: repetitions),
+            inspectSampledStable: sampledInspectionStable,
+            inspectFullStable: fullInspectionStable,
             extractStable: stable(
                 extractRuns.compactMap(ExtractionFingerprint.init),
                 count: repetitions
             )
+        )
+        let inspectionCoverageComparison = InspectionCoverageComparison(
+            runs: inspectRuns,
+            repetitions: repetitions
         )
         let baselineComparison = baseline.map {
             BaselineComparison(
@@ -424,7 +456,8 @@ private struct BenchmarkRunner {
             data: data,
             document: document,
             documentURL: documentURL,
-            repetitions: repetitions
+            repetitions: repetitions,
+            documentKitPageCount: knownPageCount
         )
 
         return DocumentResultRecord(
@@ -436,6 +469,7 @@ private struct BenchmarkRunner {
             observedPDFSHA256: observedSHA256,
             preflightError: nil,
             inspectRuns: inspectRuns,
+            inspectionCoverageComparison: inspectionCoverageComparison,
             extractRuns: extractRuns,
             determinism: determinism,
             baseline: baselineComparison,
@@ -447,11 +481,47 @@ private struct BenchmarkRunner {
         )
     }
 
+    private func runInspection(
+        data: Data,
+        runNumber: Int,
+        coverage: InspectionCoverage
+    ) async -> InspectRunRecord {
+        let start = ProcessInfo.processInfo.systemUptime
+        do {
+            let inspection: DocumentInspection
+            switch coverage.strategy {
+            case .defaultSampled:
+                inspection = try await DocumentKit.inspect(data)
+            case .explicitFull:
+                inspection = try await DocumentKit.inspect(
+                    data,
+                    options: DocumentOptions(pageIndexes: coverage.requestedPageIndexes)
+                )
+            }
+            return InspectRunRecord(
+                run: runNumber,
+                coverage: coverage,
+                wallMilliseconds: elapsedMilliseconds(since: start),
+                inspection: InspectionSnapshot(inspection),
+                error: nil
+            )
+        } catch {
+            return InspectRunRecord(
+                run: runNumber,
+                coverage: coverage,
+                wallMilliseconds: elapsedMilliseconds(since: start),
+                inspection: nil,
+                error: ErrorRecord(error)
+            )
+        }
+    }
+
     private func runPDFKitBaseline(
         data: Data,
         document: PreparedDocument,
         documentURL: URL,
-        repetitions: Int
+        repetitions: Int,
+        documentKitPageCount: Int
     ) -> PDFKitBaselineRecord {
         var runs: [PDFKitRunRecord] = []
         var firstText: String?
@@ -499,6 +569,8 @@ private struct BenchmarkRunner {
             supported: true,
             attempted: true,
             pageCount: pageCount,
+            documentKitPageCount: documentKitPageCount,
+            pageCountMatchesDocumentKit: pageCount.map { $0 == documentKitPageCount },
             textPath: firstText == nil ? nil : "documents/\(document.id)/pdfkit.txt",
             runs: runs,
             deterministic: deterministic,
@@ -953,6 +1025,7 @@ private struct DocumentResultRecord: Codable, Sendable {
     let observedPDFSHA256: String?
     let preflightError: ErrorRecord?
     let inspectRuns: [InspectRunRecord]
+    let inspectionCoverageComparison: InspectionCoverageComparison
     let extractRuns: [ExtractRunRecord]
     let determinism: DeterminismRecord
     let baseline: BaselineComparison?
@@ -971,6 +1044,7 @@ private struct DocumentResultRecord: Codable, Sendable {
         case observedPDFSHA256 = "observed_pdf_sha256"
         case preflightError = "preflight_error"
         case inspectRuns = "inspect_runs"
+        case inspectionCoverageComparison = "inspection_coverage_comparison"
         case extractRuns = "extract_runs"
         case determinism
         case baseline
@@ -1018,8 +1092,13 @@ private struct DocumentResultRecord: Codable, Sendable {
             observedPDFSHA256: observedSHA256,
             preflightError: error,
             inspectRuns: [],
+            inspectionCoverageComparison: .notRun,
             extractRuns: [],
-            determinism: DeterminismRecord(inspectStable: false, extractStable: false),
+            determinism: DeterminismRecord(
+                inspectSampledStable: false,
+                inspectFullStable: false,
+                extractStable: false
+            ),
             baseline: nil,
             groundTruthExpected: document.groundTruth != nil,
             groundTruthState: document.groundTruth?.metadata.effectiveState,
@@ -1030,18 +1109,110 @@ private struct DocumentResultRecord: Codable, Sendable {
     }
 }
 
+private enum InspectionStrategy: String, Codable, Sendable {
+    case defaultSampled = "default_sampled"
+    case explicitFull = "explicit_full"
+}
+
+private struct InspectionCoverage: Codable, Sendable {
+    let strategy: InspectionStrategy
+    let requestedPageIndexes: [Int]?
+    let defaultSampleLimit: Int?
+    let knownPageCount: Int
+    let knownPageCountSource: String
+    let semanticPageCount: Int
+    let semanticallyFullDocument: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case strategy
+        case requestedPageIndexes = "requested_page_indexes"
+        case defaultSampleLimit = "default_sample_limit"
+        case knownPageCount = "known_page_count"
+        case knownPageCountSource = "known_page_count_source"
+        case semanticPageCount = "semantic_page_count"
+        case semanticallyFullDocument = "semantically_full_document"
+    }
+
+    static func defaultSampled(knownPageCount: Int) -> InspectionCoverage {
+        InspectionCoverage(
+            strategy: .defaultSampled,
+            requestedPageIndexes: nil,
+            defaultSampleLimit: 8,
+            knownPageCount: knownPageCount,
+            knownPageCountSource: "sampled_inspection",
+            semanticPageCount: min(8, knownPageCount),
+            semanticallyFullDocument: knownPageCount <= 8
+        )
+    }
+
+    static func explicitFull(knownPageCount: Int) -> InspectionCoverage {
+        InspectionCoverage(
+            strategy: .explicitFull,
+            requestedPageIndexes: Array(0..<knownPageCount),
+            defaultSampleLimit: nil,
+            knownPageCount: knownPageCount,
+            knownPageCountSource: "sampled_inspection",
+            semanticPageCount: knownPageCount,
+            semanticallyFullDocument: true
+        )
+    }
+}
+
 private struct InspectRunRecord: Codable, Sendable {
     let run: Int
+    let coverage: InspectionCoverage
     let wallMilliseconds: Double
     let inspection: InspectionSnapshot?
     let error: ErrorRecord?
 
     enum CodingKeys: String, CodingKey {
         case run
+        case coverage
         case wallMilliseconds = "wall_milliseconds"
         case inspection
         case error
     }
+}
+
+private struct InspectionCoverageComparison: Codable, Sendable {
+    let sampledSnapshotStable: Bool
+    let fullSnapshotStable: Bool
+    let stableSnapshotsEqual: Bool?
+    let differingFields: [String]
+    let isGating: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case sampledSnapshotStable = "sampled_snapshot_stable"
+        case fullSnapshotStable = "full_snapshot_stable"
+        case stableSnapshotsEqual = "stable_snapshots_equal"
+        case differingFields = "differing_fields"
+        case isGating = "is_gating"
+    }
+
+    init(runs: [InspectRunRecord], repetitions: Int) {
+        let sampled = inspectionSnapshots(runs, strategy: .defaultSampled)
+        let full = inspectionSnapshots(runs, strategy: .explicitFull)
+        sampledSnapshotStable = stable(sampled, count: repetitions)
+        fullSnapshotStable = stable(full, count: repetitions)
+        if sampledSnapshotStable, fullSnapshotStable {
+            stableSnapshotsEqual = sampled[0] == full[0]
+            differingFields = sampled[0].differingFields(comparedTo: full[0])
+        } else {
+            stableSnapshotsEqual = nil
+            differingFields = []
+        }
+        isGating = false
+    }
+
+    private init() {
+        sampledSnapshotStable = false
+        fullSnapshotStable = false
+        stableSnapshotsEqual = nil
+        differingFields = []
+        isGating = false
+    }
+
+    static let notRun = InspectionCoverageComparison()
 }
 
 private struct ExtractRunRecord: Codable, Sendable {
@@ -1099,6 +1270,24 @@ private struct InspectionSnapshot: Codable, Equatable, Sendable {
         layout = inspection.layout.map(LayoutSnapshot.init)
         hasEncodingIssues = inspection.hasEncodingIssues
         engineVersion = inspection.engineVersion
+    }
+
+    func differingFields(comparedTo other: InspectionSnapshot) -> [String] {
+        var fields: [String] = []
+        if kind != other.kind { fields.append("kind") }
+        if pageCount != other.pageCount { fields.append("page_count") }
+        if title != other.title { fields.append("title") }
+        if confidence != other.confidence { fields.append("confidence") }
+        if pagesNeedingOCR != other.pagesNeedingOCR { fields.append("pages_needing_ocr") }
+        if ocrReasonsByPage != other.ocrReasonsByPage {
+            fields.append("ocr_reasons_by_page")
+        }
+        if layout != other.layout { fields.append("layout") }
+        if hasEncodingIssues != other.hasEncodingIssues {
+            fields.append("has_encoding_issues")
+        }
+        if engineVersion != other.engineVersion { fields.append("engine_version") }
+        return fields
     }
 }
 
@@ -1174,6 +1363,8 @@ private struct PDFKitBaselineRecord: Codable, Sendable {
     let supported: Bool
     let attempted: Bool
     let pageCount: Int?
+    let documentKitPageCount: Int?
+    let pageCountMatchesDocumentKit: Bool?
     let textPath: String?
     let runs: [PDFKitRunRecord]
     let deterministic: Bool
@@ -1183,6 +1374,8 @@ private struct PDFKitBaselineRecord: Codable, Sendable {
         case supported
         case attempted
         case pageCount = "page_count"
+        case documentKitPageCount = "documentkit_page_count"
+        case pageCountMatchesDocumentKit = "page_count_matches_documentkit"
         case textPath = "text_path"
         case runs
         case deterministic
@@ -1193,6 +1386,8 @@ private struct PDFKitBaselineRecord: Codable, Sendable {
         supported: false,
         attempted: false,
         pageCount: nil,
+        documentKitPageCount: nil,
+        pageCountMatchesDocumentKit: nil,
         textPath: nil,
         runs: [],
         deterministic: false,
@@ -1250,13 +1445,28 @@ private struct PDFKitQualityComparison: Codable, Sendable {
 
 private struct DeterminismRecord: Codable, Sendable {
     let inspectStable: Bool
+    let inspectSampledStable: Bool
+    let inspectFullStable: Bool
     let extractStable: Bool
 
     var passed: Bool { inspectStable && extractStable }
 
     enum CodingKeys: String, CodingKey {
         case inspectStable = "inspect_stable"
+        case inspectSampledStable = "inspect_sampled_stable"
+        case inspectFullStable = "inspect_full_stable"
         case extractStable = "extract_stable"
+    }
+
+    init(
+        inspectSampledStable: Bool,
+        inspectFullStable: Bool,
+        extractStable: Bool
+    ) {
+        self.inspectSampledStable = inspectSampledStable
+        self.inspectFullStable = inspectFullStable
+        inspectStable = inspectSampledStable && inspectFullStable
+        self.extractStable = extractStable
     }
 }
 
@@ -1580,6 +1790,9 @@ private struct Counts: Codable, Sendable {
     let qualityFailures: Int
     let engineFailures: Int
     let pdfKitFailures: Int
+    let pdfKitPageCountMismatches: Int
+    let comparableInspectionCoverageDocuments: Int
+    let differingInspectionCoverageDocuments: Int
     let lockedGroundTruthDocuments: Int
     let scoredLockedGroundTruthDocuments: Int
     let failedLockedGroundTruthDocuments: Int
@@ -1593,6 +1806,9 @@ private struct Counts: Codable, Sendable {
         case qualityFailures = "quality_failures"
         case engineFailures = "engine_failures"
         case pdfKitFailures = "pdfkit_failures"
+        case pdfKitPageCountMismatches = "pdfkit_page_count_mismatches"
+        case comparableInspectionCoverageDocuments = "comparable_inspection_coverage_documents"
+        case differingInspectionCoverageDocuments = "differing_inspection_coverage_documents"
         case lockedGroundTruthDocuments = "locked_ground_truth_documents"
         case scoredLockedGroundTruthDocuments = "scored_locked_ground_truth_documents"
         case failedLockedGroundTruthDocuments = "failed_locked_ground_truth_documents"
@@ -1619,6 +1835,15 @@ private struct Counts: Codable, Sendable {
         pdfKitFailures = records.count(where: {
             $0.pdfKitBaseline.runs.contains(where: { $0.error != nil })
         })
+        pdfKitPageCountMismatches = records.count(where: {
+            $0.pdfKitBaseline.pageCountMatchesDocumentKit == false
+        })
+        comparableInspectionCoverageDocuments = records.count(where: {
+            $0.inspectionCoverageComparison.stableSnapshotsEqual != nil
+        })
+        differingInspectionCoverageDocuments = records.count(where: {
+            $0.inspectionCoverageComparison.stableSnapshotsEqual == false
+        })
         lockedGroundTruthDocuments = records.count(where: { $0.groundTruthState == .locked })
         scoredLockedGroundTruthDocuments = records.count(where: {
             $0.groundTruthState == .locked && $0.quality != nil
@@ -1629,19 +1854,43 @@ private struct Counts: Codable, Sendable {
 }
 
 private struct TimingSummary: Codable, Sendable {
-    let inspect: TimingAggregate
+    let inspectSampled: TimingAggregate
+    let inspectFull: TimingAggregate
     let extract: TimingAggregate
     let pdfKit: TimingAggregate
     let eligibility: String
 
+    enum CodingKeys: String, CodingKey {
+        case inspectSampled = "inspect_sampled"
+        case inspectFull = "inspect_full"
+        case extract
+        case pdfKit
+        case eligibility
+    }
+
     init(_ records: [DocumentResultRecord]) {
         let eligible = records.filter(\.passed)
-        inspect = TimingAggregate(
+        inspectSampled = TimingAggregate(
             eligible.flatMap { record in
-                let pages = record.inspectRuns.first?.inspection?.pageCount
-                    ?? record.expectedPageCount
                 return record.inspectRuns.compactMap {
-                    $0.error == nil ? TimingSample(milliseconds: $0.wallMilliseconds, pages: pages) : nil
+                    $0.error == nil && $0.coverage.strategy == .defaultSampled
+                        ? TimingSample(
+                            milliseconds: $0.wallMilliseconds,
+                            pages: $0.coverage.semanticPageCount
+                        )
+                        : nil
+                }
+            }
+        )
+        inspectFull = TimingAggregate(
+            eligible.flatMap { record in
+                return record.inspectRuns.compactMap {
+                    $0.error == nil && $0.coverage.strategy == .explicitFull
+                        ? TimingSample(
+                            milliseconds: $0.wallMilliseconds,
+                            pages: $0.coverage.semanticPageCount
+                        )
+                        : nil
                 }
             }
         )
@@ -1820,6 +2069,11 @@ private struct DocumentSummary: Codable, Sendable {
     let tableCellF1: Double?
     let criticalValueAccuracy: Double?
     let ocrRoutingF1: Double?
+    let sampledInspectionStable: Bool
+    let fullInspectionStable: Bool
+    let sampledVsFullInspectionEqual: Bool?
+    let inspectionDifferingFields: [String]
+    let pdfKitPageCountMatchesDocumentKit: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -1834,6 +2088,11 @@ private struct DocumentSummary: Codable, Sendable {
         case tableCellF1 = "table_cell_f1"
         case criticalValueAccuracy = "critical_value_accuracy"
         case ocrRoutingF1 = "ocr_routing_f1"
+        case sampledInspectionStable = "sampled_inspection_stable"
+        case fullInspectionStable = "full_inspection_stable"
+        case sampledVsFullInspectionEqual = "sampled_vs_full_inspection_equal"
+        case inspectionDifferingFields = "inspection_differing_fields"
+        case pdfKitPageCountMatchesDocumentKit = "pdfkit_page_count_matches_documentkit"
     }
 
     init(_ record: DocumentResultRecord) {
@@ -1849,6 +2108,13 @@ private struct DocumentSummary: Codable, Sendable {
         tableCellF1 = record.quality?.tableCellF1
         criticalValueAccuracy = record.quality?.criticalValueAccuracy
         ocrRoutingF1 = record.quality?.ocrRouting?.f1
+        sampledInspectionStable = record.determinism.inspectSampledStable
+        fullInspectionStable = record.determinism.inspectFullStable
+        sampledVsFullInspectionEqual =
+            record.inspectionCoverageComparison.stableSnapshotsEqual
+        inspectionDifferingFields = record.inspectionCoverageComparison.differingFields
+        pdfKitPageCountMatchesDocumentKit =
+            record.pdfKitBaseline.pageCountMatchesDocumentKit
     }
 }
 
@@ -2015,6 +2281,23 @@ private func markdownFileName(_ run: Int) -> String {
 
 private func stable<T: Equatable>(_ values: [T], count: Int) -> Bool {
     values.count == count && values.dropFirst().allSatisfy { $0 == values[0] }
+}
+
+private func inspectionSnapshots(
+    _ runs: [InspectRunRecord],
+    strategy: InspectionStrategy
+) -> [InspectionSnapshot] {
+    runs.compactMap { run in
+        run.coverage.strategy == strategy ? run.inspection : nil
+    }
+}
+
+private func inspectionStable(
+    _ runs: [InspectRunRecord],
+    strategy: InspectionStrategy,
+    repetitions: Int
+) -> Bool {
+    stable(inspectionSnapshots(runs, strategy: strategy), count: repetitions)
 }
 
 private func tokens(_ markdown: String) -> [String] {

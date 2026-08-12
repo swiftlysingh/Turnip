@@ -19,6 +19,21 @@ The runner deliberately has three measurement layers:
    This is intentionally plain text, non-OCR, and non-gating. It is not a second
    Markdown parser.
 
+Each measured repetition also runs inspection two ways: the unchanged SDK
+default, which uses the pinned engine's up-to-eight-page sample, and an explicit
+zero-based selection of every page. The explicit selection is derived from the
+first successful default inspection's `pageCount`; the discovery call is not a
+timing sample. Per-run JSON records the strategy, requested indexes, known page
+count and its source, semantic coverage, elapsed time, inspection snapshot, and
+error. PDFKit's page count remains part of the independent native baseline, and
+the result reports whether it matches DocumentKit's count.
+
+Sampled and explicit-full repeatability both gate a passing document. Their
+stable snapshots are also compared field by field, but sampled-versus-full
+equality is diagnostic rather than a gate. OCR-routing quality continues to use
+the inspection returned by Markdown extraction, not either standalone inspect
+strategy.
+
 ## Corpus policy
 
 Do not copy the full OpenDataLoader corpus into the SDK repository. Put a
@@ -196,12 +211,21 @@ The runner writes:
 
 `summary.json` records the manifest hash, build configuration, injected source
 revision, OS, architecture, memory, toolchain, engine versions, warm-ups, and
-measured repetitions. Per-document records keep
+measured repetitions. Sampled and explicit-full inspect timings have separate
+aggregates. Per-document records keep
 the input digest, inspect and extract attempts, Markdown digests, errors,
 repeatability, baseline comparison, ground-truth scores, and elapsed
 milliseconds. It preserves expected, scored, and failed locked-truth counts so
 engine failures cannot disappear from quality denominators. Failed-run timings
 remain diagnostic.
+
+Inspection coverage is semantic, not a proportional-speed promise. The pinned
+detector's undecodable-font checks can still examine all pages, so even the
+default sampled strategy may retain O(total pages) work. Interpret the separate
+timings as observed end-to-end costs for each strategy, not as evidence that
+sampling bounds total work. Sampled inspection currently runs before explicit
+full inspection in each repetition, so their timing comparison also contains
+fixed-order and cache bias.
 
 DocumentKit currently runs before PDFKit, so cross-engine timings contain
 cache/order bias. Treat them as separate baselines, not a definitive speed
