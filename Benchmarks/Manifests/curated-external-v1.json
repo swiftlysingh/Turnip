@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "corpus": {
+    "id": "documentkit-curated-external-v1",
+    "distribution": "external-only",
+    "source_url": "https://github.com/swiftlysingh/DocumentKit"
+  },
+  "raw_engine_baseline": {
+    "engine": "pdf-inspector/1.14.1",
+    "revision": "f4aab3b36f7fa1752c65ea45fa64be1274f671cf",
+    "markdown_directory": "RawBaseline/curated-v1"
+  },
+  "documents": [
+    {
+      "id": "nist-information-security",
+      "pdf": "nist/NIST.SP.800-12r1.pdf",
+      "sha256": "1baa0b89fc554c15b465b6a974be0a63b08124bf5d5987d34e0965fbafea4a2e",
+      "raw_markdown_sha256": "954cf51588204e8c13f29e2b20900df56c7219fd574844c1a6b59c9639c67e96",
+      "features": ["long-document", "nested-headings", "lists", "tables", "glossary"],
+      "rights": {
+        "status": "external-only",
+        "license": "Not subject to copyright in the United States; attribution appreciated by NIST; review embedded third-party material",
+        "source_url": "https://www.nist.gov/publications/introduction-information-security",
+        "attribution": "Nieles, Dempsey, and Pillitteri, NIST SP 800-12 Rev. 1, 2017"
+      }
+    },
+    {
+      "id": "nasa-fan-noise",
+      "pdf": "nasa/20150000884-enhanced-fan-noise-modeling.pdf",
+      "sha256": "42ff00118bf0f1c0d10853aaa4a16f24a2dd105634c7ab62180fc9b4d6e7587e",
+      "raw_markdown_sha256": "b23c0adf235566cd5b11daec364400758669cd36f9d2ba9795f6e3f90a9f424b",
+      "features": ["technical-report", "tables", "figures", "equations", "numeric-data"],
+      "rights": {
+        "status": "external-only",
+        "license": "NASA NTRS Public Use Permitted; record reports no third-party material",
+        "source_url": "https://ntrs.nasa.gov/citations/20150000884",
+        "attribution": "Krejsa and Stone, Enhanced Fan Noise Modeling for Turbofan Engines, NASA/CR-2014-218421"
+      }
+    },
+    {
+      "id": "omb-budget-summary-tables",
+      "pdf": "gov/budget-fy2025-summary-tables.pdf",
+      "sha256": "f28aff7412c9f6c7906e017a48f99e382470260e16b0371709f79c854b6ad5dd",
+      "raw_markdown_sha256": "6ceddf227466b1f69f7394dea22fa39447a3108291fdeeb7d5e96e8378991d78",
+      "features": ["tagged-pdf", "financial-tables", "multi-column", "numeric-data"],
+      "rights": {
+        "status": "external-only",
+        "license": "United States Government work; GovInfo warns publications may contain third-party material",
+        "source_url": "https://www.govinfo.gov/app/details/BUDGET-2025-BUD/BUDGET-2025-BUD-26",
+        "attribution": "Office of Management and Budget, Budget FY 2025 - Summary Tables"
+      }
+    },
+    {
+      "id": "eu-dsa-explained",
+      "pdf": "eu/the-digital-en.pdf",
+      "sha256": "67ba49de6815e43b008fc061bc758c056fea1178c6dca16ca4302391ef8667c6",
+      "raw_markdown_sha256": "88e4e5421375340930f7751f0989ba8de8c198d11f9a8a85c82dcf0840730871",
+      "features": ["graphic-heavy", "multi-column", "cards", "headings", "lists"],
+      "rights": {
+        "status": "external-only",
+        "license": "CC BY 4.0; separate permission may be required for identified third-party elements",
+        "source_url": "https://op.europa.eu/en/publication-detail/-/publication/f3556a65-88ea-11ee-99ba-01aa75ed71a1",
+        "attribution": "European Union, 2023, The Digital Services Act explained, CC BY 4.0; changes indicated"
+      }
+    }
+  ]
+}

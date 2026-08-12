@@ -1,0 +1,54 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 327 >>
+stream
+BT
+/F1 26 Tf
+72 720 Td
+(DocumentKit Fixture) Tj
+/F1 12 Tf
+0 -40 Td
+(A small document checks native Swift extraction.) Tj
+/F1 16 Tf
+0 -36 Td
+(Benchmark objectives) Tj
+/F1 12 Tf
+0 -26 Td
+(- Preserve page order) Tj
+0 -22 Td
+(- Recover readable text) Tj
+0 -22 Td
+(- Produce deterministic Markdown) Tj
+0 -34 Td
+(Edition: 2026) Tj
+ETendstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Title (DocumentKit Fixture) /Author (DocumentKit contributors) /Creator (generate-fixture.swift) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000618 00000 n 
+0000000688 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R /Info 6 0 R >>
+startxref
+807
+%%EOF

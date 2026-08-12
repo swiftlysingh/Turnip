@@ -1,0 +1,4 @@
+module DocumentKitCore {
+    header "DocumentKitCore.h"
+    export *
+}

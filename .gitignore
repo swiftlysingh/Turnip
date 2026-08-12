@@ -1,0 +1,8 @@
+.build/
+.swiftpm/
+.DS_Store
+Native/DocumentKitCore/target/
+Build/
+DerivedData/
+*.xcuserstate
+xcuserdata/

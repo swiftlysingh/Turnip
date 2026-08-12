@@ -1,0 +1,250 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		111111111111111111111111 /* DocumentKitDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211111111111111111111111 /* DocumentKitDemoApp.swift */; };
+		111111111111111111111112 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211111111111111111111112 /* ContentView.swift */; };
+		111111111111111111111113 /* DemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211111111111111111111113 /* DemoModel.swift */; };
+		111111111111111111111114 /* PDFPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211111111111111111111114 /* PDFPreview.swift */; };
+		111111111111111111111115 /* DocumentKit in Frameworks */ = {isa = PBXBuildFile; productRef = 911111111111111111111111 /* DocumentKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		211111111111111111111111 /* DocumentKitDemoApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DocumentKitDemoApp.swift; sourceTree = "<group>"; };
+		211111111111111111111112 /* ContentView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		211111111111111111111113 /* DemoModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DemoModel.swift; sourceTree = "<group>"; };
+		211111111111111111111114 /* PDFPreview.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PDFPreview.swift; sourceTree = "<group>"; };
+		211111111111111111111115 /* DocumentKitDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DocumentKitDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		411111111111111111111111 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				111111111111111111111115 /* DocumentKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		311111111111111111111111 = {
+			isa = PBXGroup;
+			children = (
+				311111111111111111111112 /* DocumentKitDemo */,
+				311111111111111111111113 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		311111111111111111111112 /* DocumentKitDemo */ = {
+			isa = PBXGroup;
+			children = (
+				211111111111111111111111 /* DocumentKitDemoApp.swift */,
+				211111111111111111111112 /* ContentView.swift */,
+				211111111111111111111113 /* DemoModel.swift */,
+				211111111111111111111114 /* PDFPreview.swift */,
+			);
+			path = DocumentKitDemo;
+			sourceTree = "<group>";
+		};
+		311111111111111111111113 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				211111111111111111111115 /* DocumentKitDemo.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		511111111111111111111111 /* DocumentKitDemo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 711111111111111111111112 /* Build configuration list for PBXNativeTarget "DocumentKitDemo" */;
+			buildPhases = (
+				411111111111111111111112 /* Sources */,
+				411111111111111111111111 /* Frameworks */,
+				411111111111111111111113 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DocumentKitDemo;
+			packageProductDependencies = (
+				911111111111111111111111 /* DocumentKit */,
+			);
+			productName = DocumentKitDemo;
+			productReference = 211111111111111111111115 /* DocumentKitDemo.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		611111111111111111111111 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					511111111111111111111111 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = 711111111111111111111111 /* Build configuration list for PBXProject "DocumentKitDemo" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 311111111111111111111111;
+			packageReferences = (
+				811111111111111111111111 /* XCLocalSwiftPackageReference "DocumentKit" */,
+			);
+			productRefGroup = 311111111111111111111113 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				511111111111111111111111 /* DocumentKitDemo */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		411111111111111111111113 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		411111111111111111111112 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				111111111111111111111111 /* DocumentKitDemoApp.swift in Sources */,
+				111111111111111111111112 /* ContentView.swift in Sources */,
+				111111111111111111111113 /* DemoModel.swift in Sources */,
+				111111111111111111111114 /* PDFPreview.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		811111111111111111111112 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		811111111111111111111113 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		811111111111111111111114 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "DocumentKit Demo";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.swiftlysingh.DocumentKitDemo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Debug;
+		};
+		811111111111111111111115 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "DocumentKit Demo";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.swiftlysingh.DocumentKitDemo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		711111111111111111111111 /* Build configuration list for PBXProject "DocumentKitDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				811111111111111111111112 /* Debug */,
+				811111111111111111111113 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		711111111111111111111112 /* Build configuration list for PBXNativeTarget "DocumentKitDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				811111111111111111111114 /* Debug */,
+				811111111111111111111115 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		811111111111111111111111 /* XCLocalSwiftPackageReference "DocumentKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		911111111111111111111111 /* DocumentKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 811111111111111111111111 /* XCLocalSwiftPackageReference "DocumentKit" */;
+			productName = DocumentKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 611111111111111111111111 /* Project object */;
+}

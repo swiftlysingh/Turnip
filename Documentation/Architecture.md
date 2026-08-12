@@ -1,0 +1,113 @@
+# Architecture
+
+DocumentKit keeps the public Swift API independent from the Rust engine and its
+wire format.
+
+```text
+PDF Data or URL
+      |
+      v
+DocumentKit Swift API
+  validation, async handoff, typed errors
+      |
+      v
+DocumentKitCore C ABI
+  borrowed PDF bytes in, owned UTF-8 JSON buffer out
+      |
+      v
+pinned pdf-inspector Rust engine
+  detect-only or full extraction
+      |
+      v
+private versioned JSON envelope
+      |
+      v
+typed DocumentInspection or DocumentExtraction
+```
+
+## Public boundary
+
+`DocumentKit.inspect` uses the engine's detect-only mode. It is intended for
+cheap routing and returns no layout or encoding analysis.
+
+`DocumentKit.extract` uses the full mode once. The loaded PDF is shared across
+classification and extraction inside `pdf-inspector`; DocumentKit does not call
+`inspect` first. The returned `DocumentExtraction` contains Markdown, the full
+inspection, and warnings.
+
+The public API does not expose Rust, C pointers, the private JSON schema, or a
+generic converter protocol. Plain text and structured output can be added as
+typed results without changing the native transport.
+
+## Native ownership
+
+Swift owns the input `Data` for the duration of each C call. Rust borrows that
+memory and never stores the input pointer.
+
+Rust serializes a schema-versioned private response into `Box<[u8]>` and returns
+the pointer plus length as `DocumentKitBuffer`. Swift copies those bytes into
+`Data` and always returns the original buffer through
+`documentkit_buffer_free`. Rust allocations are never freed by Swift's
+allocator.
+
+Every exported Rust function catches unwinding panics. Release builds retain
+`panic = "unwind"` for that reason. Abort, stack exhaustion in non-unwinding
+paths, OOM, and operating-system termination cannot be caught.
+
+## Index and coordinate conventions
+
+Upstream OCR and layout page numbers are one-based. The bridge converts all
+public page collections to zero-based indexes. The Swift transport rejects a
+successful response with a non-positive page count or an out-of-range page
+index as an engine failure.
+
+DocumentKit v0.1 does not expose positioned text or coordinates. A future
+structured model must define one normalized coordinate space before those
+fields become public.
+
+## Apple packaging
+
+`DocumentKitCore.xcframework` contains three platform variants built from five
+Rust targets:
+
+| Variant | Rust targets |
+| --- | --- |
+| iOS device | `aarch64-apple-ios` |
+| iOS Simulator | `aarch64-apple-ios-sim`, `x86_64-apple-ios` |
+| macOS | `aarch64-apple-darwin`, `x86_64-apple-darwin` |
+
+The C header and module map are copied into every variant. SwiftPM exposes the
+binary only to the source `DocumentKit` target, so client apps import the Swift
+module rather than the bridge.
+
+The pinned upstream native code normally discovers Adobe CMaps through
+`CARGO_MANIFEST_DIR`, which cannot exist inside an installed app. The tracked
+Apple patch embeds those bytes using the same mechanism upstream uses for
+WebAssembly.
+
+## Concurrency and cancellation
+
+Parsing is synchronous and CPU-bound. Swift runs it in a detached task so it
+does not occupy the caller's actor. Cancellation is checked immediately before
+and after the native call. Upstream exposes no cancellation hook, so work that
+has already entered Rust runs to completion before the cancelled task returns.
+
+The SDK does not impose a global concurrency queue in v0.1. Apps doing batch
+processing should limit concurrent calls based on their memory budget.
+
+## Benchmark contracts
+
+The benchmark runner calls inspect and extract independently and repeats each
+operation at least twice. It keeps engine processing time out of parity
+comparisons.
+
+- Input provenance is accepted only with an approved rights status, HTTPS
+  source, safe relative path, and matching SHA-256.
+- Raw-engine parity compares exact Markdown SHA-256 against the same pinned
+  upstream revision.
+- Determinism compares Markdown hashes and inspection snapshots across runs.
+- Optional ground truth compares transparent token and Markdown-structure F1
+  against per-document thresholds.
+
+The external corpus is ignored. Only its manifest, checksum-verifying fetch
+script, and non-sensitive result summaries belong in source control.

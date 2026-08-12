@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-08-12",
+  "engine": {
+    "name": "pdf-inspector",
+    "version": "1.14.1",
+    "revision": "f4aab3b36f7fa1752c65ea45fa64be1274f671cf"
+  },
+  "environment": {
+    "architecture": "arm64",
+    "macos": "26.4.1 (25E253)",
+    "xcode": "26.4.1 (17E202)",
+    "swift": "6.3.1"
+  },
+  "runs": {
+    "committed_smoke": {
+      "manifest": "Benchmarks/Manifests/smoke-v1.json",
+      "manifest_sha256": "b7674fd50d631c6cc8631056f2d6fc027df09e985258358c944a53bc263b1768",
+      "repetitions": 2,
+      "documents": 1,
+      "passed_documents": 1,
+      "nondeterministic_documents": 0,
+      "quality_failures": 0,
+      "token_f1": 1.0,
+      "structure_f1": 0.923076923076923,
+      "median_inspect_milliseconds": 0.26302083279006183,
+      "median_extract_milliseconds": 0.9770208271220326,
+      "observed_markdown_sha256": "6c3b44eacc1fc80e94c485b24124cc16fb5accf1542cc17eb9638ec3ad7aeb80",
+      "known_difference": "The final Edition line is merged into the preceding list item."
+    },
+    "curated_external": {
+      "manifest": "Benchmarks/Manifests/curated-external-v1.json",
+      "manifest_sha256": "f321e3094b8aa01a7476134742a54a7b4bb2238c5ca45d7dc2c417a63e216bd9",
+      "repetitions": 2,
+      "documents": 4,
+      "passed_documents": 4,
+      "baseline_mismatches": 0,
+      "nondeterministic_documents": 0,
+      "median_inspect_milliseconds": 19.576583319576457,
+      "median_extract_milliseconds": 156.6728124889778,
+      "markdown_sha256": {
+        "nist-information-security": "954cf51588204e8c13f29e2b20900df56c7219fd574844c1a6b59c9639c67e96",
+        "nasa-fan-noise": "b23c0adf235566cd5b11daec364400758669cd36f9d2ba9795f6e3f90a9f424b",
+        "omb-budget-summary-tables": "6ceddf227466b1f69f7394dea22fa39447a3108291fdeeb7d5e96e8378991d78",
+        "eu-dsa-explained": "88e4e5421375340930f7751f0989ba8de8c198d11f9a8a85c82dcf0840730871"
+      }
+    }
+  },
+  "timing_note": "Wall-clock timings are a local baseline, not a cross-machine performance claim. Correctness gates use checksums, determinism, parity, and quality thresholds."
+}

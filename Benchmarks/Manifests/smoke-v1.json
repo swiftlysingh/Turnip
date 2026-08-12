@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "corpus": {
+    "id": "documentkit-smoke-v1",
+    "distribution": "committed",
+    "source_url": "https://github.com/swiftlysingh/DocumentKit"
+  },
+  "documents": [
+    {
+      "id": "documentkit-fixture",
+      "pdf": "Fixtures/Smoke/documentkit-fixture.pdf",
+      "sha256": "ac46f522f25e578347e8324dc6f08fe7732f64b5e522c4a648e8cdc67c288a2d",
+      "features": ["born-digital", "single-column", "headings", "lists"],
+      "ground_truth": {
+        "markdown": "Fixtures/Smoke/documentkit-fixture.md",
+        "sha256": "52071e6b79b8c353cb622a94724d18f5a7953b7db31967dae26b63915cd0eb66",
+        "minimum_token_f1": 0.95,
+        "minimum_structure_f1": 0.7
+      },
+      "rights": {
+        "status": "cleared",
+        "license": "MIT, generated and maintained in this repository",
+        "source_url": "https://github.com/swiftlysingh/DocumentKit/tree/main/Benchmarks/Fixtures/Smoke",
+        "attribution": "DocumentKit contributors"
+      }
+    }
+  ]
+}
