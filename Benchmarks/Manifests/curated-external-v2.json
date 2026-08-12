@@ -1,0 +1,616 @@
+{
+  "schema_version": 2,
+  "corpus": {
+    "id": "documentkit-curated-external-v2",
+    "distribution": "external-only",
+    "retrieved_at": "2026-08-12T12:57:58Z",
+    "minimum_documents": 20,
+    "minimum_bank_statements": 5,
+    "ground_truth": {
+      "status": "not-authored",
+      "note": "Acquisition manifest only. No DocumentKit output or golden Markdown is present."
+    }
+  },
+  "documents": [
+    {
+      "id": "amex-canada-sample-statement",
+      "pdf": "statements/amex-canada-sample-statement.pdf",
+      "title": "How to Read Your Statement with Plan It",
+      "publisher": "Amex Bank of Canada",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.americanexpress.com/content/dam/amex/en-ca/credit-cards/installments-statement.pdf",
+        "final_url": "https://www.americanexpress.com/content/dam/amex/en-ca/credit-cards/installments-statement.pdf",
+        "publisher_page_url": "https://www.americanexpress.com/en-ca/benefits/plan-it/faqs/"
+      },
+      "sha256": "81f2f8cd19d9682bbe631e13d26c2d7941036cb5e1d33a13171a090cffa5b834",
+      "bytes": 238455,
+      "pages": 4,
+      "document_type": "bank_statement",
+      "origin": "official_sample",
+      "categories": ["financial", "credit-card", "statement"],
+      "features": ["sample-values", "tables", "multi-column", "callouts", "financial-values"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.americanexpress.com/en-ca/benefits/plan-it/terms-and-conditions/",
+        "hypothesis": "Publisher-copyrighted official sample. Download for private benchmark development only; no redistribution clearance asserted."
+      }
+    },
+    {
+      "id": "bank-of-america-statement-guide",
+      "pdf": "statements/bank-of-america-statement-guide.pdf",
+      "title": "Your New Bank of America Combined Statement",
+      "publisher": "Bank of America",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.bankofamerica.com/content/documents/CG2/How%20To%20Read/en_US/HTR-043235.pdf",
+        "final_url": "https://www.bankofamerica.com/content/documents/CG2/How%20To%20Read/en_US/HTR-043235.pdf",
+        "publisher_page_url": "https://www.bankofamerica.com/deposits/manage/estatements.go"
+      },
+      "sha256": "c4255bc5d9b30ac9d2edff29bb58cb4c538bd56d8ab2d91878ea2589472431d0",
+      "bytes": 1484418,
+      "pages": 4,
+      "document_type": "bank_statement",
+      "origin": "official_sample",
+      "categories": ["financial", "banking", "statement"],
+      "features": ["sample-values", "tables", "multi-column", "annotations", "mixed-account-summary"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.bankofamerica.com/information/",
+        "hypothesis": "Publisher-copyrighted official sample. Private evaluation only; trademarks and layout are not cleared for redistribution."
+      }
+    },
+    {
+      "id": "bnu-download-statement-guide",
+      "pdf": "statements/bnu-download-statement-guide.pdf",
+      "title": "View and Download Statements",
+      "publisher": "Banco Nacional Ultramarino",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.bnu.com.mo/online/pdf/download_statement.pdf",
+        "final_url": "https://www.bnu.com.mo/online/pdf/download_statement.pdf",
+        "publisher_page_url": "https://www.bnu.com.mo/en/personal/accounts/bnu-online-banking"
+      },
+      "sha256": "8b859831146f770758cbd9aa5f666f6c497f2382b30cc394d03613348b996b6f",
+      "bytes": 952454,
+      "pages": 4,
+      "document_type": "bank_statement",
+      "origin": "official_sample",
+      "categories": ["financial", "banking", "statement", "software-guide"],
+      "features": ["sample-statement", "screenshots", "tables", "multi-column", "numbered-steps"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.bnu.com.mo/en/personal/accounts/bnu-online-banking",
+        "hypothesis": "Publisher-copyrighted official online-statement guide. Private benchmark use only; no redistribution clearance asserted."
+      }
+    },
+    {
+      "id": "flatwater-statement-overview",
+      "pdf": "statements/flatwater-statement-overview.pdf",
+      "title": "Your Account Statement Has a New Format",
+      "publisher": "Flatwater Bank",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://flatwater.bank/assets/files/MnSImvEk",
+        "final_url": "https://flatwater.bank/assets/files/MnSImvEk",
+        "publisher_page_url": "https://flatwater.bank/statements"
+      },
+      "sha256": "ed83d190ac5ef91f2b25db7e32d1272201cc1e3f8211d8b0ad4689a82256f968",
+      "bytes": 2106926,
+      "pages": 1,
+      "document_type": "bank_statement",
+      "origin": "official_sample",
+      "categories": ["financial", "banking", "statement"],
+      "features": ["sample-layout", "annotated-regions", "graphic-heavy", "callouts", "qr-code"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://flatwater.bank/statements",
+        "hypothesis": "Publisher-copyrighted official statement-format sample. Private benchmark use only; no redistribution clearance asserted."
+      }
+    },
+    {
+      "id": "td-balancing-checkbook",
+      "pdf": "statements/td-balancing-checkbook.pdf",
+      "title": "Balancing a Checkbook",
+      "publisher": "TD Bank",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.td.com/content/dam/tdb/document/pdf/personal-banking/gr9-12lesson2-en.pdf",
+        "final_url": "https://www.td.com/content/dam/tdb/document/pdf/personal-banking/gr9-12lesson2-en.pdf",
+        "publisher_page_url": "https://www.td.com/us/en/personal-banking/"
+      },
+      "sha256": "e3d51ea62ede4542e8b297c113cadf49a559b88a7208ad8e50298766a36c2311",
+      "bytes": 1397914,
+      "pages": 10,
+      "document_type": "bank_statement",
+      "origin": "fictional_sample",
+      "categories": ["financial", "banking", "statement", "education"],
+      "features": ["sample-values", "transaction-tables", "worksheets", "multi-column", "financial-values"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.td.com/us/en/personal-banking/terms-of-use",
+        "hypothesis": "Publisher-copyrighted fictional education sample. Private benchmark use only; no redistribution clearance asserted."
+      }
+    },
+    {
+      "id": "census-median-household-income-2025",
+      "pdf": "infographics/census-median-household-income-2025.pdf",
+      "title": "Median Household Income",
+      "publisher": "U.S. Census Bureau",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.census.gov/content/dam/Census/library/visualizations/2025/comm/median-household-income.pdf",
+        "final_url": "https://www.census.gov/content/dam/Census/library/visualizations/2025/comm/median-household-income.pdf",
+        "publisher_page_url": "https://www.census.gov/library/visualizations/2025/comm/median-household-income.html"
+      },
+      "sha256": "f6ccbc94761ec11020567461920abec7e5eb0b79c52e62bb741c205fd2ff414e",
+      "bytes": 2259017,
+      "pages": 1,
+      "document_type": "infographic",
+      "origin": "official_publication",
+      "categories": ["statistics", "income", "infographic"],
+      "features": ["graphic-heavy", "large-type", "critical-numeric-value", "source-note"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.usa.gov/government-copyright",
+        "hypothesis": "Likely U.S. government work, but logos and third-party elements may be protected. External-only pending rights review."
+      }
+    },
+    {
+      "id": "eu-dsa-explained",
+      "pdf": "brochures/eu-dsa-explained.pdf",
+      "title": "The Digital Services Act Explained",
+      "publisher": "Publications Office of the European Union",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://op.europa.eu/o/opportal-service/download-handler?format=pdf&identifier=f3556a65-88ea-11ee-99ba-01aa75ed71a1&language=en&productionSystem=cellar",
+        "final_url": "https://op.europa.eu/o/opportal-service/download-handler?format=pdf&identifier=f3556a65-88ea-11ee-99ba-01aa75ed71a1&language=en&productionSystem=cellar",
+        "publisher_page_url": "https://op.europa.eu/en/publication-detail/-/publication/f3556a65-88ea-11ee-99ba-01aa75ed71a1"
+      },
+      "sha256": "67ba49de6815e43b008fc061bc758c056fea1178c6dca16ca4302391ef8667c6",
+      "bytes": 1271195,
+      "pages": 8,
+      "document_type": "brochure",
+      "origin": "official_publication",
+      "categories": ["policy", "technology", "consumer-protection"],
+      "features": ["graphic-heavy", "multi-column", "cards", "headings", "lists"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://commission.europa.eu/legal-notice_en",
+        "hypothesis": "Publication states CC BY 4.0, but identified third-party elements may require separate permission. Kept external-only."
+      }
+    },
+    {
+      "id": "fed-economic-projections-2026-06",
+      "pdf": "reports/fed-economic-projections-2026-06.pdf",
+      "title": "Summary of Economic Projections, June 17, 2026",
+      "publisher": "Board of Governors of the Federal Reserve System",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.federalreserve.gov/monetarypolicy/files/fomcprojtabl20260617.pdf",
+        "final_url": "https://www.federalreserve.gov/monetarypolicy/files/fomcprojtabl20260617.pdf",
+        "publisher_page_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260617b.htm"
+      },
+      "sha256": "a517887623520922a782e0cd01fb38d4469bed951f63d2588efb99f72deddde3",
+      "bytes": 1216132,
+      "pages": 17,
+      "document_type": "economic_report",
+      "origin": "official_publication",
+      "categories": ["economics", "forecast", "financial"],
+      "features": ["dense-tables", "charts", "footnotes", "multi-column", "critical-numeric-values"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.federalreserve.gov/website-linking-policies.htm",
+        "hypothesis": "Likely U.S. government work with possible protected third-party elements and marks. External-only pending rights review."
+      }
+    },
+    {
+      "id": "irs-form-1040-2025",
+      "pdf": "forms/irs-form-1040-2025.pdf",
+      "title": "Form 1040: U.S. Individual Income Tax Return (2025)",
+      "publisher": "Internal Revenue Service",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.irs.gov/pub/irs-prior/f1040--2025.pdf",
+        "final_url": "https://www.irs.gov/pub/irs-prior/f1040--2025.pdf",
+        "publisher_page_url": "https://www.irs.gov/forms-pubs/about-form-1040"
+      },
+      "sha256": "3d31c226df0d189ced80e039d01cf0f8820c1019681a0f0ca6264de277b7e982",
+      "bytes": 220237,
+      "pages": 2,
+      "document_type": "government_form",
+      "origin": "official_blank_form",
+      "categories": ["tax", "financial", "form"],
+      "features": ["dense-form", "tables", "checkboxes", "financial-values", "cross-references"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.irs.gov/privacy-disclosure/copyright-notice",
+        "hypothesis": "Likely U.S. government work. Blank official form only; keep external-only because seals, marks, and third-party elements were not reviewed."
+      }
+    },
+    {
+      "id": "irs-form-1065-2025",
+      "pdf": "forms/irs-form-1065-2025.pdf",
+      "title": "Form 1065: U.S. Return of Partnership Income (2025)",
+      "publisher": "Internal Revenue Service",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.irs.gov/pub/irs-prior/f1065--2025.pdf",
+        "final_url": "https://www.irs.gov/pub/irs-prior/f1065--2025.pdf",
+        "publisher_page_url": "https://www.irs.gov/forms-pubs/about-form-1065"
+      },
+      "sha256": "0f19f556e12ef53c41ba27e5930b4373103f3abcf64693c4ea686451b2a8f56f",
+      "bytes": 334608,
+      "pages": 6,
+      "document_type": "government_form",
+      "origin": "official_blank_form",
+      "categories": ["tax", "financial", "form"],
+      "features": ["dense-form", "tables", "checkboxes", "schedules", "financial-values"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.irs.gov/privacy-disclosure/copyright-notice",
+        "hypothesis": "Likely U.S. government work. Blank official form only; keep external-only pending review of marks and embedded elements."
+      }
+    },
+    {
+      "id": "irs-form-1099-nec-2025",
+      "pdf": "forms/irs-form-1099-nec-2025.pdf",
+      "title": "Form 1099-NEC: Nonemployee Compensation (2025)",
+      "publisher": "Internal Revenue Service",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.irs.gov/pub/irs-prior/f1099nec--2025.pdf",
+        "final_url": "https://www.irs.gov/pub/irs-prior/f1099nec--2025.pdf",
+        "publisher_page_url": "https://www.irs.gov/forms-pubs/about-form-1099-nec"
+      },
+      "sha256": "7cf3272e27de046a92346375601f3211b711a9c800f9185034dd70badcab0abe",
+      "bytes": 513361,
+      "pages": 6,
+      "document_type": "government_form",
+      "origin": "official_blank_form",
+      "categories": ["tax", "financial", "form"],
+      "features": ["repeated-copies", "dense-form", "boxes", "instructions", "financial-values"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.irs.gov/privacy-disclosure/copyright-notice",
+        "hypothesis": "Likely U.S. government work. Blank official form only; external-only pending rights review."
+      }
+    },
+    {
+      "id": "irs-form-941-2025",
+      "pdf": "forms/irs-form-941-2025.pdf",
+      "title": "Form 941: Employer's Quarterly Federal Tax Return (2025)",
+      "publisher": "Internal Revenue Service",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.irs.gov/pub/irs-prior/f941--2025.pdf",
+        "final_url": "https://www.irs.gov/pub/irs-prior/f941--2025.pdf",
+        "publisher_page_url": "https://www.irs.gov/forms-pubs/about-form-941"
+      },
+      "sha256": "efe78a2db0487f66ab233aae0d63b1179c36d15505bc1ed053682320a2a76b62",
+      "bytes": 831930,
+      "pages": 3,
+      "document_type": "government_form",
+      "origin": "official_blank_form",
+      "categories": ["tax", "payroll", "financial", "form"],
+      "features": ["dense-form", "tables", "arithmetic-lines", "checkboxes", "financial-values"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.irs.gov/privacy-disclosure/copyright-notice",
+        "hypothesis": "Likely U.S. government work. Blank official form only; external-only pending rights review."
+      }
+    },
+    {
+      "id": "irs-form-990-2025",
+      "pdf": "forms/irs-form-990-2025.pdf",
+      "title": "Form 990: Return of Organization Exempt From Income Tax (2025)",
+      "publisher": "Internal Revenue Service",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.irs.gov/pub/irs-prior/f990--2025.pdf",
+        "final_url": "https://www.irs.gov/pub/irs-prior/f990--2025.pdf",
+        "publisher_page_url": "https://www.irs.gov/forms-pubs/about-form-990"
+      },
+      "sha256": "0b715d2790691ca6d4fb16ba0923e3cdf1d0e04cd26ea48788d41a708e945533",
+      "bytes": 796676,
+      "pages": 12,
+      "document_type": "government_form",
+      "origin": "official_blank_form",
+      "categories": ["tax", "nonprofit", "financial", "form"],
+      "features": ["dense-form", "financial-statements", "multi-page-tables", "checkboxes", "schedules"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.irs.gov/privacy-disclosure/copyright-notice",
+        "hypothesis": "Likely U.S. government work. Blank official form only; external-only pending rights review."
+      }
+    },
+    {
+      "id": "irs-form-w9-2024",
+      "pdf": "forms/irs-form-w9-2024.pdf",
+      "title": "Form W-9: Request for Taxpayer Identification Number and Certification (2024)",
+      "publisher": "Internal Revenue Service",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.irs.gov/pub/irs-prior/fw9--2024.pdf",
+        "final_url": "https://www.irs.gov/pub/irs-prior/fw9--2024.pdf",
+        "publisher_page_url": "https://www.irs.gov/forms-pubs/about-form-w-9"
+      },
+      "sha256": "2d420cbb4123dcf1fb82595b2359cfbb5d81f00b9df9d359fcc7af361d093f53",
+      "bytes": 140815,
+      "pages": 6,
+      "document_type": "government_form",
+      "origin": "official_blank_form",
+      "categories": ["tax", "identity", "form"],
+      "features": ["form", "checkboxes", "instructions", "tables", "mixed-layout"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.irs.gov/privacy-disclosure/copyright-notice",
+        "hypothesis": "Likely U.S. government work. Blank official form only; external-only pending rights review."
+      }
+    },
+    {
+      "id": "irs-schedule-c-2025",
+      "pdf": "forms/irs-schedule-c-2025.pdf",
+      "title": "Schedule C: Profit or Loss From Business (2025)",
+      "publisher": "Internal Revenue Service",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.irs.gov/pub/irs-prior/f1040sc--2025.pdf",
+        "final_url": "https://www.irs.gov/pub/irs-prior/f1040sc--2025.pdf",
+        "publisher_page_url": "https://www.irs.gov/forms-pubs/about-schedule-c-form-1040"
+      },
+      "sha256": "ddf401dbe060467d39f90ad2abf645df1de31512821a150dc68a3882bbf19716",
+      "bytes": 122589,
+      "pages": 2,
+      "document_type": "government_form",
+      "origin": "official_blank_form",
+      "categories": ["tax", "business", "financial", "form"],
+      "features": ["dense-form", "expense-table", "inventory-table", "financial-values", "cross-references"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.irs.gov/privacy-disclosure/copyright-notice",
+        "hypothesis": "Likely U.S. government work. Blank official form only; external-only pending rights review."
+      }
+    },
+    {
+      "id": "nasa-going-back-to-moon",
+      "pdf": "fact-sheets/nasa-going-back-to-moon.pdf",
+      "title": "Going Back to the Moon",
+      "publisher": "National Aeronautics and Space Administration",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.nasa.gov/wp-content/uploads/2026/03/going-back-to-the-moon.pdf",
+        "final_url": "https://www.nasa.gov/wp-content/uploads/2026/03/going-back-to-the-moon.pdf",
+        "publisher_page_url": "https://www.nasa.gov/ignition/"
+      },
+      "sha256": "d8fe60dbd59d651b4354716d74d60a05b4551b82fd0faf06403416156b651ad3",
+      "bytes": 142820,
+      "pages": 2,
+      "document_type": "fact_sheet",
+      "origin": "official_publication",
+      "categories": ["space", "program", "fact-sheet"],
+      "features": ["graphic-heavy", "two-column", "headings", "lists", "callouts"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+        "hypothesis": "Likely U.S. government work, but NASA insignia and credited imagery have separate restrictions. External-only."
+      }
+    },
+    {
+      "id": "nasa-golden-age-science",
+      "pdf": "fact-sheets/nasa-golden-age-science.pdf",
+      "title": "Golden Age of Science and Discovery",
+      "publisher": "National Aeronautics and Space Administration",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.nasa.gov/wp-content/uploads/2026/03/golden-age-of-science-and-discovery.pdf",
+        "final_url": "https://www.nasa.gov/wp-content/uploads/2026/03/golden-age-of-science-and-discovery.pdf",
+        "publisher_page_url": "https://www.nasa.gov/ignition/"
+      },
+      "sha256": "fce27d013b0dff2ccaa9e9768d47470dac2a182976380e48645c65df9f11b14c",
+      "bytes": 223220,
+      "pages": 3,
+      "document_type": "fact_sheet",
+      "origin": "official_publication",
+      "categories": ["space", "science", "fact-sheet"],
+      "features": ["graphic-heavy", "multi-column", "headings", "lists", "callouts"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+        "hypothesis": "Likely U.S. government work, but NASA insignia and credited imagery have separate restrictions. External-only."
+      }
+    },
+    {
+      "id": "nasa-ignition",
+      "pdf": "fact-sheets/nasa-ignition.pdf",
+      "title": "Ignition",
+      "publisher": "National Aeronautics and Space Administration",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.nasa.gov/wp-content/uploads/2026/03/ignition.pdf",
+        "final_url": "https://www.nasa.gov/wp-content/uploads/2026/03/ignition.pdf",
+        "publisher_page_url": "https://www.nasa.gov/ignition/"
+      },
+      "sha256": "459ea8e1ea0a5d892de2ffc53dfacb5577a63800ab650a57781e83ccb3e44665",
+      "bytes": 158862,
+      "pages": 4,
+      "document_type": "fact_sheet",
+      "origin": "official_publication",
+      "categories": ["space", "strategy", "fact-sheet"],
+      "features": ["graphic-heavy", "multi-column", "headings", "lists", "program-cards"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+        "hypothesis": "Likely U.S. government work, but NASA insignia and credited imagery have separate restrictions. External-only."
+      }
+    },
+    {
+      "id": "nasa-low-earth-orbit",
+      "pdf": "fact-sheets/nasa-low-earth-orbit.pdf",
+      "title": "Staying in Low Earth Orbit",
+      "publisher": "National Aeronautics and Space Administration",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.nasa.gov/wp-content/uploads/2026/03/staying-in-low-earth-orbit.pdf",
+        "final_url": "https://www.nasa.gov/wp-content/uploads/2026/03/staying-in-low-earth-orbit.pdf",
+        "publisher_page_url": "https://www.nasa.gov/ignition/"
+      },
+      "sha256": "e2a1aa26085d1bda249744c3fde008e851ef68591a32dd3c8ef93625cf13b1a3",
+      "bytes": 155420,
+      "pages": 4,
+      "document_type": "fact_sheet",
+      "origin": "official_publication",
+      "categories": ["space", "strategy", "fact-sheet"],
+      "features": ["graphic-heavy", "multi-column", "headings", "lists", "program-cards"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+        "hypothesis": "Likely U.S. government work, but NASA insignia and credited imagery have separate restrictions. External-only."
+      }
+    },
+    {
+      "id": "nasa-marshall-fact-sheet",
+      "pdf": "fact-sheets/nasa-marshall-fact-sheet.pdf",
+      "title": "Marshall Space Flight Center Fact Sheet",
+      "publisher": "National Aeronautics and Space Administration",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.nasa.gov/wp-content/uploads/2023/07/msfc-fact-sheet-layout-071223.pdf",
+        "final_url": "https://www.nasa.gov/wp-content/uploads/2023/07/msfc-fact-sheet-layout-071223.pdf",
+        "publisher_page_url": "https://www.nasa.gov/reference/marshall-space-flight-center-fact-sheet/"
+      },
+      "sha256": "0881d27d32de411040e2adca571aa07fe8789ed665e686ad9651649eaa97532f",
+      "bytes": 2973104,
+      "pages": 6,
+      "document_type": "fact_sheet",
+      "origin": "official_publication",
+      "categories": ["space", "engineering", "fact-sheet"],
+      "features": ["photographs", "multi-column", "headings", "captions", "numeric-facts"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+        "hypothesis": "Likely U.S. government work, but NASA insignia and individually credited imagery have separate restrictions. External-only."
+      }
+    },
+    {
+      "id": "nasa-nuclear-power",
+      "pdf": "fact-sheets/nasa-nuclear-power.pdf",
+      "title": "America Underway in Space on Nuclear Power",
+      "publisher": "National Aeronautics and Space Administration",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.nasa.gov/wp-content/uploads/2026/03/america-underway-in-space-on-nuclear-power.pdf",
+        "final_url": "https://www.nasa.gov/wp-content/uploads/2026/03/america-underway-in-space-on-nuclear-power.pdf",
+        "publisher_page_url": "https://www.nasa.gov/ignition/"
+      },
+      "sha256": "08d9a3e9af1efab6ee286edda82719157189a3461399290ea27e25c3426a558b",
+      "bytes": 198822,
+      "pages": 2,
+      "document_type": "fact_sheet",
+      "origin": "official_publication",
+      "categories": ["space", "energy", "fact-sheet"],
+      "features": ["graphic-heavy", "two-column", "headings", "lists", "callouts"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+        "hypothesis": "Likely U.S. government work, but NASA insignia and credited imagery have separate restrictions. External-only."
+      }
+    },
+    {
+      "id": "nist-reference-tables-2019",
+      "pdf": "reports/nist-reference-tables-2019.pdf",
+      "title": "NISTIR 6969 Section 9: Reference Tables",
+      "publisher": "National Institute of Standards and Technology",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.nist.gov/system/files/documents/2019/05/29/section-9-reference-tables-20190506.pdf",
+        "final_url": "https://www.nist.gov/system/files/documents/2019/05/29/section-9-reference-tables-20190506.pdf",
+        "publisher_page_url": "https://doi.org/10.6028/NIST.IR.6969-2019"
+      },
+      "sha256": "6d6078f0da2862aad112da41bab45e0eeed108f42477ae9b626e089d5f09295e",
+      "bytes": 508712,
+      "pages": 15,
+      "document_type": "technical_reference",
+      "origin": "official_publication",
+      "categories": ["science", "statistics", "metrology"],
+      "features": ["dense-tables", "equations", "symbols", "footnotes", "numeric-data"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.nist.gov/open/copyrights-fair-use-and-licensing",
+        "hypothesis": "Likely U.S. government work, but embedded third-party material and marks were not reviewed. External-only."
+      }
+    },
+    {
+      "id": "pacer-sample-invoice-statement",
+      "pdf": "statements/pacer-sample-invoice-statement.pdf",
+      "title": "Sample PACER Invoice and Statement of Account",
+      "publisher": "Administrative Office of the U.S. Courts",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://pacer.uscourts.gov/sites/default/files/files/sample_PACER%20invoice%20and%20statement.pdf",
+        "final_url": "https://pacer.uscourts.gov/sites/default/files/files/sample_PACER%20invoice%20and%20statement.pdf",
+        "publisher_page_url": "https://pacer.uscourts.gov/my-account-billing/billing"
+      },
+      "sha256": "95c9a7a9c8e589a74cb40184bd5d2dd1468e5d693410f52e6a09dbbd4b9d44c9",
+      "bytes": 301581,
+      "pages": 2,
+      "document_type": "billing_statement",
+      "origin": "official_sample",
+      "categories": ["financial", "invoice", "statement", "government"],
+      "features": ["sample-values", "tables", "line-items", "financial-values", "page-furniture"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.uscourts.gov/about-federal-courts/website-policies",
+        "hypothesis": "Likely U.S. government work, but seals, marks, and embedded elements were not reviewed. External-only."
+      }
+    },
+    {
+      "id": "uscis-form-i9",
+      "pdf": "forms/uscis-form-i9.pdf",
+      "title": "Form I-9: Employment Eligibility Verification",
+      "publisher": "U.S. Citizenship and Immigration Services",
+      "retrieved_at": "2026-08-12T12:57:58Z",
+      "source": {
+        "request_url": "https://www.uscis.gov/sites/default/files/document/forms/i-9.pdf",
+        "final_url": "https://www.uscis.gov/sites/default/files/document/forms/i-9.pdf",
+        "publisher_page_url": "https://www.uscis.gov/i-9"
+      },
+      "sha256": "780f348c34df694bb0b4dbbfaf9f22b99b9757b80d16a37ba89aadf069597281",
+      "bytes": 524095,
+      "pages": 4,
+      "document_type": "government_form",
+      "origin": "official_blank_form",
+      "categories": ["employment", "identity", "form"],
+      "features": ["dense-form", "checkboxes", "tables", "instructions", "document-lists"],
+      "rights": {
+        "status": "external-only",
+        "review_status": "not-legal-review",
+        "evidence_url": "https://www.uscis.gov/website-policies",
+        "hypothesis": "Likely U.S. government work. Blank official form only; external-only pending review of seals, marks, and embedded elements."
+      }
+    }
+  ]
+}

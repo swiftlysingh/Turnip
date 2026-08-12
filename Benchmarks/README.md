@@ -55,7 +55,32 @@ The only accepted document rights statuses are `cleared` and `external-only`.
 Unknown values fail manifest decoding. A private repository does not remove
 the need to review rights for every underlying PDF, image, and excerpt.
 
-## Manifest
+## External corpus acquisition (v0.2)
+
+The v0.2 acquisition manifest pins 24 public, official sample PDFs without
+committing their bytes. Five are fictional or official bank-statement
+examples; none contains customer data. The set has 128 pages in total and no
+document exceeds 17 pages.
+
+On macOS with `curl`, `jq`, `shasum`, and the Swift toolchain installed, fetch
+or revalidate the ignored corpus with:
+
+```sh
+Benchmarks/Scripts/fetch-curated-external-v2.sh
+```
+
+The script fails closed if the schema, URL after redirects, byte count,
+SHA-256, Git-ignore boundary, PDF header, PDFKit readability, lock state, or
+page count differs from the manifest. Public availability is not treated as a
+redistribution license: every document remains `external-only`, records a
+rights-evidence URL and conservative hypothesis, and is explicitly marked as
+not having received legal review.
+
+This is acquisition metadata only. It contains no DocumentKit output, raw
+engine baseline, or authored golden Markdown. Ground truth must be created and
+reviewed separately before this corpus can be used for quality scoring.
+
+## Benchmark runner manifest
 
 Schema v1 remains readable. New corpora should use schema v2:
 
