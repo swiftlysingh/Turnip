@@ -130,22 +130,26 @@ confidence are engine signals, not guarantees that text is correct.
 `DocumentKitError` distinguishes empty and oversized inputs, missing or wrong
 passwords, invalid and out-of-range page selections, invalid PDFs, documents
 with no extractable text, and internal engine failures.
+
+The existing `inspect` and `extract` calls remain unchanged. v0.2 adds
+`invalidPageSelection` and `pageOutOfRange`, so clients with exhaustive switches
+over the pre-1.0 error enum must handle those cases when updating.
 A scanned or image-only PDF commonly produces `noExtractableText` with its
 inspection attached. DocumentKit reports the OCR need but does not perform OCR.
 
 ## Sample app
 
-[`Examples/DocumentKitDemo`](Examples/DocumentKitDemo) is a native macOS
-SwiftUI app. It opens or accepts a dropped PDF, renders the source with PDFKit,
-and shows selectable raw Markdown beside it. It also exercises page selection
-and password-protected PDFs. Raw Markdown is intentional. It makes reading-order,
-table, and encoding problems easy to see.
+[`Examples/DocumentKitDemo`](Examples/DocumentKitDemo) is a native iOS and
+macOS SwiftUI app. Both versions open a PDF and show selectable raw Markdown;
+the macOS layout also renders the source with PDFKit and accepts file drops.
+The app exercises page selection and password-protected PDFs. Raw Markdown is
+intentional. It makes reading-order, table, and encoding problems easy to see.
 
 ```sh
 xcodebuild \
   -project Examples/DocumentKitDemo/DocumentKitDemo.xcodeproj \
   -scheme DocumentKitDemo \
-  -destination 'platform=macOS' \
+  -destination 'generic/platform=iOS Simulator' \
   CODE_SIGNING_ALLOWED=NO \
   build
 ```

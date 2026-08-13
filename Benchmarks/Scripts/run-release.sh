@@ -40,17 +40,25 @@ if git -C "$REPO_ROOT" ls-files --others --exclude-standard | grep -q .; then
     exit 2
 fi
 
-TIME_LOG=${DOCUMENTKIT_BENCHMARK_TIME_LOG:-"$OUTPUT/resource-usage.txt"}
+OUTPUT_PARENT=$(dirname "$OUTPUT")
+mkdir -p "$OUTPUT_PARENT"
+TEMP_TIME_LOG=$(mktemp "${TMPDIR:-/tmp}/documentkit-benchmark-time.XXXXXX")
+cleanup() {
+    rm -f "$TEMP_TIME_LOG"
+}
+trap cleanup EXIT HUP INT TERM
+
+TIME_LOG="$OUTPUT/resource-usage.txt"
 RESOURCE_JSON="$OUTPUT/resource-usage.json"
 
-mkdir -p "$(dirname "$TIME_LOG")"
-mkdir -p "$OUTPUT"
 swift build -c release --package-path "$ROOT" --scratch-path "$SCRATCH"
 BIN=$(swift build -c release --package-path "$ROOT" --scratch-path "$SCRATCH" --show-bin-path)
 
 # macOS time -l reports one process-lifetime peak RSS for the entire corpus run.
 # It is intentionally not attributed to an individual engine or document.
-/usr/bin/time -l "$BIN/documentkit-benchmark" --require-release "$@" 2>"$TIME_LOG"
+/usr/bin/time -l "$BIN/documentkit-benchmark" --require-release "$@" 2>"$TEMP_TIME_LOG"
+mv "$TEMP_TIME_LOG" "$TIME_LOG"
+trap - EXIT HUP INT TERM
 
 MAX_RSS=$(awk '/maximum resident set size/ { print $1; exit }' "$TIME_LOG")
 case "$MAX_RSS" in

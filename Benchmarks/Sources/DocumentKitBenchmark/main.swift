@@ -148,6 +148,7 @@ private struct BenchmarkRunner {
         // Preflight every input before calling the engine. This makes a rights or
         // checksum failure fail closed instead of producing a partial green run.
         let documents = try preflight(loaded.manifest, rootURL: rootURL)
+        try requireFreshOutputDirectory(arguments.outputURL)
         try FileManager.default.createDirectory(
             at: arguments.outputURL,
             withIntermediateDirectories: true
@@ -257,6 +258,11 @@ private struct BenchmarkRunner {
                         )
                     }
                     try validateCanonicalMarkdown(markdown, documentID: document.id)
+                    try validateCriticalValuesInGroundTruth(
+                        groundTruth,
+                        markdown: markdown,
+                        documentID: document.id
+                    )
                     return PreparedGroundTruth(metadata: groundTruth, markdown: markdown)
                 },
                 expectedPageCount: document.expectedPageCount,
@@ -707,6 +713,16 @@ private struct BenchmarkManifest: Codable, Sendable {
                     features: document.features
                 )
             }
+            if let documentType = document.documentType, !validIdentifier(documentType) {
+                throw BenchmarkError.invalidManifest(
+                    "\(document.id) document_type must be a safe identifier."
+                )
+            }
+            if let origin = document.origin, !validIdentifier(origin) {
+                throw BenchmarkError.invalidManifest(
+                    "\(document.id) origin must be a safe identifier."
+                )
+            }
             if let expectedPageCount = document.expectedPageCount, expectedPageCount < 1 {
                 throw BenchmarkError.invalidManifest(
                     "\(document.id) expected_page_count must be positive."
@@ -761,9 +777,61 @@ private struct BenchmarkManifest: Codable, Sendable {
                 "Release evidence requires manifest schema v2."
             )
         }
+        guard documents.count >= 20 else {
+            throw BenchmarkError.invalidManifest(
+                "Release evidence requires at least 20 unique documents."
+            )
+        }
+        guard documents.allSatisfy({ $0.documentType != nil && $0.origin != nil }) else {
+            throw BenchmarkError.invalidManifest(
+                "Release evidence requires document_type and origin for every document."
+            )
+        }
+        let bankStatements = documents.filter { $0.documentType == "bank_statement" }
+        guard bankStatements.count >= 5 else {
+            throw BenchmarkError.invalidManifest(
+                "Release evidence requires at least five bank_statement documents."
+            )
+        }
+        guard let rawEngineBaseline,
+              rawEngineBaseline.engine == "pdf-inspector",
+              rawEngineBaseline.revision.lowercased() == DocumentKit.engineRevision.lowercased() else {
+            throw BenchmarkError.invalidManifest(
+                "Release evidence requires raw pdf-inspector parity at the SDK's pinned engine revision."
+            )
+        }
         guard documents.allSatisfy({ $0.groundTruth?.effectiveState == .locked }) else {
             throw BenchmarkError.invalidManifest(
                 "Release evidence requires locked ground truth for every document."
+            )
+        }
+        guard documents.allSatisfy({ document in
+            guard let truth = document.groundTruth else { return false }
+            return document.expectedPageCount != nil
+                && document.expectedOCRPages != nil
+                && truth.minimumTokenF1 >= 0.90
+                && truth.minimumStructureF1 >= 0.80
+                && (truth.minimumWordOrderF1 ?? 0) >= 0.80
+                && truth.minimumOCRRoutingF1 == 1
+        }) else {
+            throw BenchmarkError.invalidManifest(
+                "Release evidence requires page/OCR labels and quality floors: token 0.90, structure 0.80, word order 0.80, OCR routing 1.0."
+            )
+        }
+        let tableDocuments = documents.filter { $0.features.contains("tables") }
+        guard !tableDocuments.isEmpty,
+              tableDocuments.allSatisfy({ ($0.groundTruth?.minimumTableCellF1 ?? 0) >= 0.80 }) else {
+            throw BenchmarkError.invalidManifest(
+                "Every release document marked tables requires minimum_table_cell_f1 of at least 0.80."
+            )
+        }
+        guard bankStatements.allSatisfy({ document in
+            guard let truth = document.groundTruth else { return false }
+            return !(truth.criticalValues ?? []).isEmpty
+                && truth.minimumCriticalValueAccuracy == 1
+        }) else {
+            throw BenchmarkError.invalidManifest(
+                "Every release bank statement requires independently annotated critical values and exact 1.0 accuracy."
             )
         }
     }
@@ -902,6 +970,8 @@ private struct ManifestDocument: Codable, Sendable {
     let pdf: String
     let sha256: String
     let features: [String]
+    let documentType: String?
+    let origin: String?
     let rawMarkdownSHA256: String?
     let groundTruth: GroundTruthMetadata?
     let rights: RightsMetadata
@@ -913,6 +983,8 @@ private struct ManifestDocument: Codable, Sendable {
         case pdf
         case sha256
         case features
+        case documentType = "document_type"
+        case origin
         case rawMarkdownSHA256 = "raw_markdown_sha256"
         case groundTruth = "ground_truth"
         case rights
@@ -1795,6 +1867,8 @@ private struct Counts: Codable, Sendable {
     let differingInspectionCoverageDocuments: Int
     let lockedGroundTruthDocuments: Int
     let scoredLockedGroundTruthDocuments: Int
+    let unscoredLockedGroundTruthDocuments: Int
+    let qualityFailedLockedGroundTruthDocuments: Int
     let failedLockedGroundTruthDocuments: Int
 
     enum CodingKeys: String, CodingKey {
@@ -1811,6 +1885,8 @@ private struct Counts: Codable, Sendable {
         case differingInspectionCoverageDocuments = "differing_inspection_coverage_documents"
         case lockedGroundTruthDocuments = "locked_ground_truth_documents"
         case scoredLockedGroundTruthDocuments = "scored_locked_ground_truth_documents"
+        case unscoredLockedGroundTruthDocuments = "unscored_locked_ground_truth_documents"
+        case qualityFailedLockedGroundTruthDocuments = "quality_failed_locked_ground_truth_documents"
         case failedLockedGroundTruthDocuments = "failed_locked_ground_truth_documents"
     }
 
@@ -1848,8 +1924,14 @@ private struct Counts: Codable, Sendable {
         scoredLockedGroundTruthDocuments = records.count(where: {
             $0.groundTruthState == .locked && $0.quality != nil
         })
-        failedLockedGroundTruthDocuments =
-            lockedGroundTruthDocuments - scoredLockedGroundTruthDocuments
+        unscoredLockedGroundTruthDocuments = records.count(where: {
+            $0.groundTruthState == .locked && $0.quality == nil
+        })
+        qualityFailedLockedGroundTruthDocuments = records.count(where: {
+            $0.groundTruthState == .locked && $0.quality?.passes == false
+        })
+        failedLockedGroundTruthDocuments = unscoredLockedGroundTruthDocuments
+            + qualityFailedLockedGroundTruthDocuments
     }
 }
 
@@ -1965,6 +2047,8 @@ private struct TimingSample: Sendable {
 private struct QualitySummary: Codable, Sendable {
     let expectedLockedDocuments: Int
     let scoredLockedDocuments: Int
+    let unscoredLockedDocuments: Int
+    let qualityFailedLockedDocuments: Int
     let failedLockedDocuments: Int
     let contentF1Macro: Double?
     let wordOrderBigramF1Macro: Double?
@@ -1979,6 +2063,8 @@ private struct QualitySummary: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case expectedLockedDocuments = "expected_locked_documents"
         case scoredLockedDocuments = "scored_locked_documents"
+        case unscoredLockedDocuments = "unscored_locked_documents"
+        case qualityFailedLockedDocuments = "quality_failed_locked_documents"
         case failedLockedDocuments = "failed_locked_documents"
         case contentF1Macro = "content_f1_macro"
         case wordOrderBigramF1Macro = "word_order_bigram_f1_macro"
@@ -1995,7 +2081,11 @@ private struct QualitySummary: Codable, Sendable {
         let locked = records.compactMap(\.quality).filter(\.requiredForPass)
         expectedLockedDocuments = records.count(where: { $0.groundTruthState == .locked })
         scoredLockedDocuments = locked.count
-        failedLockedDocuments = expectedLockedDocuments - scoredLockedDocuments
+        unscoredLockedDocuments = records.count(where: {
+            $0.groundTruthState == .locked && $0.quality == nil
+        })
+        qualityFailedLockedDocuments = locked.count(where: { !$0.passes })
+        failedLockedDocuments = unscoredLockedDocuments + qualityFailedLockedDocuments
         contentF1Macro = mean(locked.map(\.tokenF1))
         wordOrderBigramF1Macro = mean(locked.map(\.wordOrderBigramF1))
         structureF1Macro = mean(locked.map(\.structureF1))
@@ -2147,6 +2237,32 @@ private enum BenchmarkError: Error, LocalizedError {
     }
 }
 
+private func requireFreshOutputDirectory(_ url: URL) throws {
+    let fileManager = FileManager.default
+    var isDirectory: ObjCBool = false
+    guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+        return
+    }
+    guard isDirectory.boolValue else {
+        throw BenchmarkError.runFailed(
+            "Benchmark output path already exists and is not a directory: \(url.path)"
+        )
+    }
+    let contents: [String]
+    do {
+        contents = try fileManager.contentsOfDirectory(atPath: url.path)
+    } catch {
+        throw BenchmarkError.runFailed(
+            "Could not inspect benchmark output directory \(url.path): \(error.localizedDescription)"
+        )
+    }
+    guard contents.isEmpty else {
+        throw BenchmarkError.runFailed(
+            "Benchmark output directory must be new or empty: \(url.path)"
+        )
+    }
+}
+
 private func resolveRelativePath(_ path: String, rootURL: URL) throws -> URL {
     guard !path.isEmpty, !path.hasPrefix("/"), !path.contains("\\") else {
         throw BenchmarkError.invalidManifest("Path must be relative and safe: \(path)")
@@ -2171,9 +2287,9 @@ private func validateHTTPURL(_ value: String?, field: String) throws {
     guard let value,
           let url = URL(string: value),
           let scheme = url.scheme?.lowercased(),
-          scheme == "http" || scheme == "https",
+          scheme == "https",
           url.host != nil else {
-        throw BenchmarkError.invalidManifest("\(field) must be an http(s) URL.")
+        throw BenchmarkError.invalidManifest("\(field) must be an HTTPS URL.")
     }
 }
 
@@ -2258,6 +2374,29 @@ private func validateCanonicalMarkdown(_ markdown: String, documentID: String) t
         throw BenchmarkError.invalidManifest(
             "\(documentID) ground truth violates the canonical Markdown file-normalization rules."
         )
+    }
+}
+
+private func validateCriticalValuesInGroundTruth(
+    _ metadata: GroundTruthMetadata,
+    markdown: String,
+    documentID: String
+) throws {
+    for criticalValue in metadata.criticalValues ?? [] {
+        let valueOccurrences = literalOccurrenceCount(of: criticalValue.value, in: markdown)
+        guard valueOccurrences == criticalValue.occurrences else {
+            throw BenchmarkError.invalidManifest(
+                "\(documentID) critical value \(criticalValue.id) declares \(criticalValue.occurrences) occurrences, but the locked Markdown contains \(valueOccurrences)."
+            )
+        }
+        if let context = criticalValue.context {
+            let contextOccurrences = literalOccurrenceCount(of: context, in: markdown)
+            guard contextOccurrences == criticalValue.occurrences else {
+                throw BenchmarkError.invalidManifest(
+                    "\(documentID) critical value \(criticalValue.id) context occurs \(contextOccurrences) times, expected \(criticalValue.occurrences)."
+                )
+            }
+        }
     }
 }
 

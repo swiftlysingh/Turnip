@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import DocumentKit
 import SwiftUI
@@ -507,3 +508,4 @@ private extension Duration {
         return "\(components.attoseconds / 1_000_000_000_000_000)ms"
     }
 }
+#endif

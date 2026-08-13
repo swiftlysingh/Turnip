@@ -7,8 +7,9 @@ missing, unreviewed, or checksum-mismatched PDF as a valid run.
 The runner deliberately has three measurement layers:
 
 1. **Upstream parity:** compare the Swift wrapper with a pinned raw
-   `pdf-inspector` baseline. This is the first release gate. Markdown and
-   inspection metadata should be identical; timing is reported separately.
+   `pdf-inspector` baseline. This is the first release gate. Exact Markdown
+   SHA-256 is the raw-engine comparison; wrapper inspection snapshots are
+   checked for repeatability separately.
 2. **Human ground truth:** compare extracted Markdown with independently authored
    UTF-8 Markdown under
    [`Documentation/CanonicalMarkdown.md`](../Documentation/CanonicalMarkdown.md).
@@ -16,8 +17,9 @@ The runner deliberately has three measurement layers:
    cells, exact critical values, and OCR routing. Draft and reviewed truth are
    diagnostic; only locked truth gates a release.
 3. **Native baseline:** compare the same truth with PDFKit embedded-text output.
-   This is intentionally plain text, non-OCR, and non-gating. It is not a second
-   Markdown parser.
+   This is intentionally plain text and non-OCR. Its quality score is
+   non-gating, while successful deterministic execution is required so a
+   comparative run cannot silently omit the native baseline.
 
 Each measured repetition also runs inspection two ways: the unchanged SDK
 default, which uses the pinned engine's up-to-eight-page sample, and an explicit
@@ -103,6 +105,9 @@ Schema v1 remains readable. New corpora should use schema v2:
       "id": "document-001",
       "pdf": "Corpus/pdfs/document-001.pdf",
       "sha256": "<64-hex-pdf-digest>",
+      "document_type": "bank_statement",
+      "origin": "official_sample",
+      "features": ["tables", "critical-values"],
       "expected_page_count": 1,
       "expected_ocr_pages": [],
       "raw_markdown_sha256": "<64-hex-baseline-digest>",
@@ -142,7 +147,8 @@ Schema v1 remains readable. New corpora should use schema v2:
 }
 ```
 
-`raw_engine_baseline` is optional. When present, it must have an exact
+`raw_engine_baseline` is optional for diagnostic runs and required by
+`--require-release`. When present, it must have an exact
 40-character engine revision and every document must provide
 `raw_markdown_sha256`. The runner compares the SHA-256 of every successful
 Markdown extraction with that pinned value. `markdown_directory` is provenance
@@ -160,7 +166,8 @@ verified before any engine call. Schema v2 requires a `draft`, `reviewed`, or
 DocumentKit output. Locked truth additionally requires distinct author and
 reviewer identities plus an ISO review date. Locked critical values require a
 1.0 threshold and exact canonical context containing the literal; missing,
-duplicated, or relocated occurrences fail. OCR indexes are zero-based,
+duplicated, or relocated occurrences fail. The declared literal and context
+counts are also checked against the golden itself before the engine runs. OCR indexes are zero-based,
 ascending, unique, and range-checked.
 
 The built-in table metric recognizes simple GFM pipe tables and reports
@@ -198,10 +205,14 @@ The wrapper requires a clean committed checkout whose `HEAD` equals the exact
 beside the benchmark result and writes `resource-usage.json` with the maximum
 resident set size plus hashes of the resource log and `summary.json`. This is
 the process-lifetime high-water mark for the corpus run, not a per-document or
-per-engine measurement. Release evidence also requires schema v2 and locked
-truth for every case; use a direct release-mode invocation for diagnostic draft
-corpora such as the smoke fixture. The v0.2 manifest path above becomes valid
-only after the external corpus and every locked truth file have been prepared.
+per-engine measurement. The output directory must be new or empty, so a failed
+rerun cannot leave stale green evidence. Release evidence also requires schema
+v2, at least 20 documents, five bank statements, exact pinned raw-engine parity,
+locked truth for every case, page/OCR labels, explicit quality floors, table
+thresholds where applicable, and exact critical-value gates for every bank
+statement. Use a direct release-mode invocation for diagnostic draft corpora
+such as the smoke fixture. The v0.2 manifest path above becomes valid only after
+the external corpus and every locked truth file have been prepared.
 
 The verification script regenerates the 1-page PDF from the tracked Swift
 source and checks both fixture digests. This is benchmark tooling only;
@@ -240,9 +251,9 @@ measured repetitions. Sampled and explicit-full inspect timings have separate
 aggregates. Per-document records keep
 the input digest, inspect and extract attempts, Markdown digests, errors,
 repeatability, baseline comparison, ground-truth scores, and elapsed
-milliseconds. It preserves expected, scored, and failed locked-truth counts so
-engine failures cannot disappear from quality denominators. Failed-run timings
-remain diagnostic.
+milliseconds. It reports expected, scored, unscored, threshold-failed, and total
+failed locked-truth counts separately, so engine failures and quality failures
+cannot disappear from the denominator. Failed-run timings remain diagnostic.
 
 Inspection coverage is semantic, not a proportional-speed promise. The pinned
 detector's undecodable-font checks can still examine all pages, so even the

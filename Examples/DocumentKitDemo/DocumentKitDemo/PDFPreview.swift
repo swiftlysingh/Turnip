@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import PDFKit
 import SwiftUI
@@ -20,3 +21,4 @@ struct PDFPreview: NSViewRepresentable {
         view.autoScales = true
     }
 }
+#endif

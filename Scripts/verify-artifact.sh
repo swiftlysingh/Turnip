@@ -29,8 +29,12 @@ expect_symbols() {
     info=$(xcrun lipo -info "$file")
     if echo "$info" | grep -q "Non-fat file"; then
         for symbol in \
+            _documentkit_inspect \
+            _documentkit_extract \
             _documentkit_inspect_with_options \
-            _documentkit_extract_with_options; do
+            _documentkit_extract_with_options \
+            _documentkit_buffer_free \
+            _documentkit_engine_version; do
             xcrun nm -gU "$file" 2>/dev/null | awk '{print $NF}' | grep -qx "$symbol"
         done
         return
@@ -41,8 +45,12 @@ expect_symbols() {
             thin=$(mktemp "${TMPDIR:-/tmp}/documentkit-symbols.XXXXXX")
             xcrun lipo "$file" -thin "$architecture" -output "$thin"
             for symbol in \
+                _documentkit_inspect \
+                _documentkit_extract \
                 _documentkit_inspect_with_options \
-                _documentkit_extract_with_options; do
+                _documentkit_extract_with_options \
+                _documentkit_buffer_free \
+                _documentkit_engine_version; do
                 xcrun nm -gU "$thin" 2>/dev/null | awk '{print $NF}' | grep -qx "$symbol"
             done
             rm -f "$thin"
