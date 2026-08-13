@@ -1,4 +1,6 @@
 .cache/
 Corpus/
+GroundTruth/
 RawBaseline/
 Results/
+Manifests/v0.2-development.json

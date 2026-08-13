@@ -151,9 +151,11 @@ Schema v1 remains readable. New corpora should use schema v2:
 `--require-release`. When present, it must have an exact
 40-character engine revision and every document must provide
 `raw_markdown_sha256`. The runner compares the SHA-256 of every successful
-Markdown extraction with that pinned value. `markdown_directory` is provenance
-for the checked-out baseline; the digest in the manifest is the comparison
-contract, so baseline Markdown need not be committed.
+Markdown extraction with that pinned value. When `markdown_directory` is set,
+preflight also reads `<markdown_directory>/<document-id>.md` and verifies its
+SHA-256 before either engine runs. Release evidence requires this materialized
+directory, so hashes copied into the manifest are not accepted as a raw baseline
+on their own. Baseline Markdown need not be committed.
 
 Paths are relative to the manifest directory unless `--root` is supplied.
 Paths may not escape that root. All documents are preflighted before the Rust
@@ -236,6 +238,24 @@ manifest preserves per-document source, reuse basis, attribution, and digest.
 They remain external-only because each publisher warns that government or
 openly licensed publications may still contain separately owned elements.
 
+For the v0.2 development corpus, first run the checksum-pinned acquisition
+script, then generate the ignored raw-engine baseline from the exact pinned and
+patched `pdf-inspector` source. Locked truth is also local and ignored because
+the acquisition manifest does not assert redistribution rights for the source
+documents or their full transcriptions:
+
+```sh
+Benchmarks/Scripts/fetch-curated-external-v2.sh
+Benchmarks/Scripts/generate-raw-baseline-v2.sh
+```
+
+The baseline generator verifies every source PDF hash, builds `pdf2md` offline,
+writes one Markdown file per extractable document under
+`Benchmarks/RawBaseline/`, and records OCR-only documents explicitly rather than
+hashing an empty file. Its checksum index pins the engine revision, patch hash,
+and CLI binary hash. Corpus PDFs and raw Markdown stay ignored and are not
+redistributed.
+
 The runner writes:
 
 ```text
@@ -283,13 +303,12 @@ rendering.
   evaluator commit, and result JSON.
 
 Do not turn a missing download, unreviewed golden, or evaluator failure into a
-zero score or a green result. The 21 researched entries in
-[`CorpusSources/v0.2-candidates.json`](CorpusSources/v0.2-candidates.json),
-including six fictional or blank sample statements, are candidates only. Each
-still requires retrieval, SHA-256/size/page pinning, privacy and rights review,
-independent canonical Markdown, and an explicit review state. With the four
-existing external documents this is a 25-document sourcing plan, not a claim
-that 25 documents have been benchmarked.
+zero score or a green result. The tracked
+[`curated-external-v2.json`](Manifests/curated-external-v2.json) acquisition
+manifest pins 24 externally hosted PDFs, including five fictional or sample
+bank statements. Acquisition and PDF readability do not make them benchmark
+truth: release evidence still requires independently reviewed local goldens,
+the materialized raw baseline, and a generated development manifest.
 
 ## Current verification status
 

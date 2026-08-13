@@ -46,7 +46,7 @@ jobs:
           swift build --package-path Benchmarks \
             --triple arm64-apple-ios16.0 \
             --sdk "$DOCUMENTKIT_IOS_DEVICE_SDK"
-      - name: Build sample app
+      - name: Build sample app for macOS
         run: >-
           xcodebuild
           -project Examples/DocumentKitDemo/DocumentKitDemo.xcodeproj
@@ -55,6 +55,18 @@ jobs:
           -destination 'platform=macOS'
           -derivedDataPath "$RUNNER_TEMP/DocumentKitDemo-DerivedData"
           -clonedSourcePackagesDirPath "$RUNNER_TEMP/DocumentKitDemo-Packages"
+          CODE_SIGNING_ALLOWED=NO
+          -jobs 1
+          build
+      - name: Build sample app for iPhone Simulator
+        run: >-
+          xcodebuild
+          -project Examples/DocumentKitDemo/DocumentKitDemo.xcodeproj
+          -scheme DocumentKitDemo
+          -configuration Debug
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/DocumentKitDemo-iOS-DerivedData"
+          -clonedSourcePackagesDirPath "$RUNNER_TEMP/DocumentKitDemo-iOS-Packages"
           CODE_SIGNING_ALLOWED=NO
           -jobs 1
           build

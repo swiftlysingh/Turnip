@@ -169,10 +169,12 @@ The existing four-document external baseline is checksum-pinned and remains a
 useful historical parity check. The committed project-owned smoke fixture runs
 in CI with source-authored draft truth. Neither is the v0.2 accuracy corpus.
 
-The v0.2 release gate is being built as a 20-plus-document, rights- and
-provenance-tracked corpus with independently authored and reviewed canonical
-Markdown. Until those PDFs are retrieved, hashed, and their truth is locked,
-DocumentKit does not claim a release-quality extraction score.
+The v0.2 release gate uses a 20-plus-document, rights- and provenance-tracked
+external corpus with independently authored and reviewed canonical Markdown.
+The corpus, locked truth, and raw-engine baseline remain local and ignored;
+the repository carries the reproducible acquisition, verification, and
+assembly tooling. DocumentKit does not claim a release-quality extraction
+score until the complete release run passes its accuracy and performance gates.
 
 See [`Benchmarks/README.md`](Benchmarks/README.md) for the manifest, fetch, run,
 and ground-truth workflow. See

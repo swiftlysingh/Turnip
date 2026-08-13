@@ -202,7 +202,14 @@ private struct BenchmarkRunner {
         _ manifest: BenchmarkManifest,
         rootURL: URL
     ) throws -> [PreparedDocument] {
-        try manifest.documents.map { document in
+        let rawMarkdownDirectory: URL?
+        if let directory = manifest.rawEngineBaseline?.markdownDirectory {
+            rawMarkdownDirectory = try resolveRelativePath(directory, rootURL: rootURL)
+        } else {
+            rawMarkdownDirectory = nil
+        }
+
+        return try manifest.documents.map { document in
             let pdfURL = try resolveRelativePath(document.pdf, rootURL: rootURL)
             let data: Data
             do {
@@ -221,6 +228,28 @@ private struct BenchmarkRunner {
                     expected: document.sha256.lowercased(),
                     actual: actualSHA256
                 )
+            }
+            if let expectedRawHash = document.rawMarkdownSHA256,
+               let rawMarkdownDirectory {
+                let rawMarkdownURL = rawMarkdownDirectory
+                    .appendingPathComponent("\(document.id).md")
+                let rawMarkdownData: Data
+                do {
+                    rawMarkdownData = try Data(contentsOf: rawMarkdownURL)
+                } catch {
+                    throw BenchmarkError.inputReadFailed(
+                        path: rawMarkdownURL.path,
+                        message: error.localizedDescription
+                    )
+                }
+                let actualRawHash = digestSHA256(rawMarkdownData)
+                guard actualRawHash == expectedRawHash.lowercased() else {
+                    throw BenchmarkError.checksumMismatch(
+                        id: "\(document.id) raw baseline",
+                        expected: expectedRawHash.lowercased(),
+                        actual: actualRawHash
+                    )
+                }
             }
             return PreparedDocument(
                 id: document.id,
@@ -795,9 +824,10 @@ private struct BenchmarkManifest: Codable, Sendable {
         }
         guard let rawEngineBaseline,
               rawEngineBaseline.engine == "pdf-inspector",
-              rawEngineBaseline.revision.lowercased() == DocumentKit.engineRevision.lowercased() else {
+              rawEngineBaseline.revision.lowercased() == DocumentKit.engineRevision.lowercased(),
+              rawEngineBaseline.markdownDirectory != nil else {
             throw BenchmarkError.invalidManifest(
-                "Release evidence requires raw pdf-inspector parity at the SDK's pinned engine revision."
+                "Release evidence requires a materialized raw pdf-inspector Markdown directory at the SDK's pinned engine revision."
             )
         }
         guard documents.allSatisfy({ $0.groundTruth?.effectiveState == .locked }) else {
