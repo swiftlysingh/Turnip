@@ -47,6 +47,16 @@ if [ -z "$RAW_BINARY" ]; then
     echo "error: DOCUMENTKIT_RAW_ENGINE_BINARY must identify the exact pdf2md binary used for the baseline" >&2
     exit 2
 fi
+if [ -e "$OUTPUT" ]; then
+    if [ ! -d "$OUTPUT" ]; then
+        echo "error: benchmark output path exists and is not a directory: $OUTPUT" >&2
+        exit 2
+    fi
+    if /usr/bin/python3 -c 'import os, sys; sys.exit(0 if any(os.scandir(sys.argv[1])) else 1)' "$OUTPUT"; then
+        echo "error: benchmark output directory must be new or empty: $OUTPUT" >&2
+        exit 2
+    fi
+fi
 if ! printf '%s' "$SOURCE_REVISION" | grep -Eq '^[0-9a-fA-F]{40}$'; then
     echo "error: DOCUMENTKIT_BENCHMARK_SOURCE_REVISION must be an exact 40-character commit SHA" >&2
     exit 2

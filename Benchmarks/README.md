@@ -201,7 +201,7 @@ DOCUMENTKIT_RAW_ENGINE_BINARY=/absolute/path/to/pdf2md \
 ```
 
 The assembler hashes the exact `pdf2md` binary, requires the canonical raw
-`index.json`, validates every acquired PDF/raw Markdown/golden/review file as
+`index.json`, validates every consumed PDF/raw Markdown/golden/review file as
 ignored and untracked, and accepts only locked reviews with the explicit
 source-only release attestation contract. OCR-only raw-engine cases and truth
 that is still draft or reviewed are reported as exclusions. It then fails

@@ -819,6 +819,9 @@ def assemble(args: argparse.Namespace) -> tuple[int, list[str]]:
     require_ignored_untracked(repo_root, truth_root, "locked ground truth")
     require_ignored_untracked(repo_root, output_path, "development manifest output")
     require_ignored_untracked(repo_root, raw_index_path, "raw baseline index")
+    for truth_file in truth_root.rglob("*"):
+        if truth_file.is_file():
+            require_ignored_untracked(repo_root, truth_file, "ground truth input")
 
     acquisition = load_json(acquisition_path, "acquisition manifest")
     documents = validated_acquisition(acquisition, corpus_root)
