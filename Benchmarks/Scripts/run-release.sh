@@ -56,7 +56,11 @@ BIN=$(swift build -c release --package-path "$ROOT" --scratch-path "$SCRATCH" --
 
 # macOS time -l reports one process-lifetime peak RSS for the entire corpus run.
 # It is intentionally not attributed to an individual engine or document.
+set +e
 /usr/bin/time -l "$BIN/documentkit-benchmark" --require-release "$@" 2>"$TEMP_TIME_LOG"
+BENCHMARK_EXIT=$?
+set -e
+mkdir -p "$OUTPUT"
 mv "$TEMP_TIME_LOG" "$TIME_LOG"
 trap - EXIT HUP INT TERM
 
@@ -68,14 +72,17 @@ case "$MAX_RSS" in
         ;;
 esac
 
-SUMMARY="$OUTPUT/summary.json"
-SUMMARY_SHA256=$(shasum -a 256 "$SUMMARY" | awk '{ print $1 }')
 LOG_SHA256=$(shasum -a 256 "$TIME_LOG" | awk '{ print $1 }')
-printf '{\n  "schema_version": 1,\n  "scope": "entire-corpus-process",\n  "maximum_resident_set_size_bytes": %s,\n  "source_revision": "%s",\n  "summary_sha256": "%s",\n  "resource_log_sha256": "%s"\n}\n' \
-    "$MAX_RSS" \
-    "$SOURCE_REVISION" \
-    "$SUMMARY_SHA256" \
-    "$LOG_SHA256" \
-    > "$RESOURCE_JSON"
+SUMMARY="$OUTPUT/summary.json"
+if [ -f "$SUMMARY" ]; then
+    SUMMARY_SHA256=$(shasum -a 256 "$SUMMARY" | awk '{ print $1 }')
+    printf '{\n  "schema_version": 1,\n  "scope": "entire-corpus-process",\n  "maximum_resident_set_size_bytes": %s,\n  "source_revision": "%s",\n  "summary_sha256": "%s",\n  "resource_log_sha256": "%s"\n}\n' \
+        "$MAX_RSS" \
+        "$SOURCE_REVISION" \
+        "$SUMMARY_SHA256" \
+        "$LOG_SHA256" \
+        > "$RESOURCE_JSON"
+    echo "Corpus-process resource evidence: $RESOURCE_JSON"
+fi
 
-echo "Corpus-process resource evidence: $RESOURCE_JSON"
+exit "$BENCHMARK_EXIT"

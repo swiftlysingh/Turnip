@@ -189,6 +189,26 @@ swift run --package-path Benchmarks documentkit-benchmark \
   --repetitions 2
 ```
 
+The v0.2 release manifest is generated locally because the external PDFs,
+materialized raw-engine Markdown, and source-only golden truth are intentionally
+ignored by Git. After those inputs exist, assemble them with:
+
+```sh
+DOCUMENTKIT_RAW_ENGINE_BINARY=/absolute/path/to/pdf2md \
+  Benchmarks/Scripts/assemble-v0.2-development.py --dry-run
+DOCUMENTKIT_RAW_ENGINE_BINARY=/absolute/path/to/pdf2md \
+  Benchmarks/Scripts/assemble-v0.2-development.py
+```
+
+The assembler hashes the exact `pdf2md` binary, requires the canonical raw
+`index.json`, validates every acquired PDF/raw Markdown/golden/review file as
+ignored and untracked, and accepts only locked reviews with the explicit
+source-only release attestation contract. OCR-only raw-engine cases and truth
+that is still draft or reviewed are reported as exclusions. It then fails
+unless at least 20 Markdown-capable documents and five bank statements remain.
+Bank statements additionally require exact context-associated critical values.
+No PDF, raw extraction, or full golden transcription is written to the repo.
+
 For release performance evidence, require an optimized build, discard at least
 one warm-up, and keep enough samples for tail percentiles:
 
@@ -207,8 +227,10 @@ The wrapper requires a clean committed checkout whose `HEAD` equals the exact
 beside the benchmark result and writes `resource-usage.json` with the maximum
 resident set size plus hashes of the resource log and `summary.json`. This is
 the process-lifetime high-water mark for the corpus run, not a per-document or
-per-engine measurement. The output directory must be new or empty, so a failed
-rerun cannot leave stale green evidence. Release evidence also requires schema
+per-engine measurement. A semantic-quality failure still preserves the summary
+and resource evidence while returning a nonzero status. The output directory
+must be new or empty, so a failed rerun cannot leave stale green evidence.
+Release evidence also requires schema
 v2, at least 20 documents, five bank statements, exact pinned raw-engine parity,
 locked truth for every case, page/OCR labels, explicit quality floors, table
 thresholds where applicable, and exact critical-value gates for every bank
@@ -287,7 +309,9 @@ DocumentKit currently runs before PDFKit, so cross-engine timings contain
 cache/order bias. Treat them as separate baselines, not a definitive speed
 ranking, until isolated randomized subprocess runs are added. Apple Vision is
 not part of this non-OCR baseline; when added, its timing must include PDF page
-rendering.
+rendering. Timing aggregates include every individually successful measured run
+regardless of its semantic quality score; errored runs are excluded. Accuracy
+is reported separately and never filters the operational speed sample.
 
 ## Test cadence
 

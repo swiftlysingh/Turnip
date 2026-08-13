@@ -1981,9 +1981,8 @@ private struct TimingSummary: Codable, Sendable {
     }
 
     init(_ records: [DocumentResultRecord]) {
-        let eligible = records.filter(\.passed)
         inspectSampled = TimingAggregate(
-            eligible.flatMap { record in
+            records.flatMap { record in
                 return record.inspectRuns.compactMap {
                     $0.error == nil && $0.coverage.strategy == .defaultSampled
                         ? TimingSample(
@@ -1995,7 +1994,7 @@ private struct TimingSummary: Codable, Sendable {
             }
         )
         inspectFull = TimingAggregate(
-            eligible.flatMap { record in
+            records.flatMap { record in
                 return record.inspectRuns.compactMap {
                     $0.error == nil && $0.coverage.strategy == .explicitFull
                         ? TimingSample(
@@ -2007,7 +2006,7 @@ private struct TimingSummary: Codable, Sendable {
             }
         )
         extract = TimingAggregate(
-            eligible.flatMap { record in
+            records.flatMap { record in
                 let pages = record.extractRuns.first?.inspection?.pageCount
                     ?? record.expectedPageCount
                 return record.extractRuns.compactMap {
@@ -2016,7 +2015,7 @@ private struct TimingSummary: Codable, Sendable {
             }
         )
         pdfKit = TimingAggregate(
-            eligible.flatMap { record in
+            records.flatMap { record in
                 record.pdfKitBaseline.runs.compactMap {
                     $0.error == nil
                         ? TimingSample(
@@ -2027,7 +2026,7 @@ private struct TimingSummary: Codable, Sendable {
                 }
             }
         )
-        eligibility = "Only documents passing execution, determinism, parity, and any applicable locked quality gates contribute."
+        eligibility = "Every individually successful measured run contributes, regardless of semantic quality score; errored runs are excluded."
     }
 }
 

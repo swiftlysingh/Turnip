@@ -117,6 +117,20 @@ def first_string(value: dict[str, Any], paths: Iterable[str], label: str, *, req
     return None
 
 
+def matching_string(value: dict[str, Any], paths: Iterable[str], label: str, *, required: bool = True) -> str | None:
+    found: list[str] = []
+    for path, candidate in present_values(value, paths):
+        normalized = normalized_string(candidate, f"{label} ({path})", allow_placeholder=True)
+        if normalized:
+            found.append(normalized)
+    if required:
+        require(found, f"{label} is required")
+    if not found:
+        return None
+    require(len(set(found)) == 1, f"{label} has conflicting aliases")
+    return found[0]
+
+
 def check_sha256(value: Any, label: str) -> str:
     result = normalized_string(value, label).lower()
     require(bool(SHA256_RE.fullmatch(result)), f"{label} must be a lowercase SHA-256")
@@ -183,7 +197,7 @@ def relative_to_benchmark(path: Path, benchmark_root: Path, label: str) -> str:
         fail(f"{label} must live under benchmark root {benchmark_root}: {path}")
 
 
-def is_git_ignored(repo_root: Path, path: Path, label: str) -> None:
+def require_ignored_untracked(repo_root: Path, path: Path, label: str) -> None:
     try:
         relative = path.resolve(strict=False).relative_to(repo_root.resolve()).as_posix()
     except ValueError:
@@ -196,6 +210,13 @@ def is_git_ignored(repo_root: Path, path: Path, label: str) -> None:
         check=False,
     )
     require(result.returncode == 0, f"{label} must be ignored by Git: {relative}")
+    tracked = subprocess.run(
+        ["git", "-C", str(repo_root), "ls-files", "--error-unmatch", "--", relative],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    require(tracked.returncode != 0, f"{label} must not be tracked by Git: {relative}")
 
 
 def pdf_page_count(path: Path) -> int:
@@ -260,23 +281,27 @@ def require_matching_scalars(
         require(value == expected, f"{label} mismatch at {path}: expected {expected!r}, found {value!r}")
 
 
-def state_is_locked(review: dict[str, Any], document_id: str) -> None:
-    states = present_values(review, ("state", "review_state"))
-    if not states:
-        states = present_values(review, ("status",))
+def state_is_locked(review: dict[str, Any], document_id: str) -> bool:
+    states = present_values(review, ("state", "review_state", "status"))
     require(states, f"{document_id} review has no lock state")
-    for path, value in states:
-        require(normalized_string(value, f"{document_id} review {path}").lower() == "locked", f"{document_id} review is not locked")
+    normalized = [normalized_string(value, f"{document_id} review {path}").lower() for path, value in states]
+    require(len(set(normalized)) == 1, f"{document_id} review has conflicting lock states")
+    require(normalized[0] in {"locked", "reviewed", "draft"}, f"{document_id} review has unsupported state {normalized[0]!r}")
+    return normalized[0] == "locked"
 
 
 def review_date(review: dict[str, Any], document_id: str) -> str:
-    raw = first_string(review, ("reviewed_at", "review_date", "locked_at", "metadata_snapshot.reviewed_at"), f"{document_id} review date")
-    assert raw is not None
-    candidate = raw[:10]
-    try:
-        return dt.date.fromisoformat(candidate).isoformat()
-    except ValueError:
-        fail(f"{document_id} review date must begin with YYYY-MM-DD: {raw!r}")
+    values = present_values(review, ("reviewed_at", "review_date", "locked_at", "metadata_snapshot.reviewed_at"))
+    require(values, f"{document_id} review date is required")
+    normalized: list[str] = []
+    for path, value in values:
+        raw = normalized_string(value, f"{document_id} review date ({path})")
+        try:
+            normalized.append(dt.date.fromisoformat(raw[:10]).isoformat())
+        except ValueError:
+            fail(f"{document_id} review date must begin with YYYY-MM-DD: {raw!r}")
+    require(len(set(normalized)) == 1, f"{document_id} review date has conflicting aliases")
+    return normalized[0]
 
 
 def review_identity(review: dict[str, Any], document_id: str, role: str) -> str:
@@ -286,108 +311,46 @@ def review_identity(review: dict[str, Any], document_id: str, role: str) -> str:
             "author",
             "identities.author",
             "metadata_snapshot.author_identity",
-            "reference_identity",
-            "identities.reference",
         )
     else:
         paths = ("reviewer_identity", "reviewer", "identities.reviewer", "metadata_snapshot.reviewer_identity")
-    identity = first_string(review, paths, f"{document_id} {role} identity")
+    identity = matching_string(review, paths, f"{document_id} {role} identity", required=False)
+    if role == "author" and identity is None:
+        require(
+            get_path(review, "attestations.author_draft_present") is False,
+            f"{document_id} cannot substitute a reference identity without explicitly recording that no author draft existed",
+        )
+        identity = matching_string(
+            review,
+            ("reference_identity", "identities.reference", "metadata_snapshot.author_identity"),
+            f"{document_id} source-only reference identity",
+        )
+    require(identity is not None, f"{document_id} {role} identity is required")
     assert identity is not None
     require(identity.casefold() not in {"null", "none"}, f"{document_id} {role} identity must not be a placeholder")
     return identity
 
 
-def iter_leaf_values(value: Any, prefix: str = "") -> Iterable[tuple[str, Any]]:
-    if isinstance(value, dict):
-        for key, nested in value.items():
-            path = f"{prefix}.{key}" if prefix else str(key)
-            yield from iter_leaf_values(nested, path)
-    elif isinstance(value, list):
-        for index, nested in enumerate(value):
-            yield from iter_leaf_values(nested, f"{prefix}[{index}]")
-    else:
-        yield prefix.lower(), value
+RELEASE_ATTESTATIONS = {
+    "source_pages_visually_inspected": True,
+    "outline_and_critical_values_recorded_before_candidate_markdown": True,
+    "documentkit_output_consulted": False,
+    "raw_engine_output_consulted": False,
+    "benchmark_output_consulted": False,
+    "zero_unresolved_critical_discrepancies": True,
+}
 
 
-def source_only_attestation(review: dict[str, Any], document_id: str) -> bool:
-    negative_categories: set[str] = set()
-    positive_source_evidence = False
-    output_use_errors: list[str] = []
-    text_fragments: list[str] = []
-
-    def categories(key: str) -> set[str]:
-        found: set[str] = set()
-        if "documentkit" in key:
-            found.add("documentkit")
-        if "pdf_inspector" in key or "pdf-inspector" in key or "engine" in key:
-            found.add("engine")
-        if "raw" in key:
-            found.add("raw")
-        if "benchmark" in key or "score" in key or "diff" in key:
-            found.add("benchmark")
-        return found
-
-    for path, value in iter_leaf_values(review):
-        key = path.lower()
-        if isinstance(value, str):
-            text_fragments.append(value.lower())
-        if not isinstance(value, bool):
-            continue
-        if any(token in key for token in ("source_only", "source_render", "rendered_source", "all_pages_rendered", "source_pages_visually")) and value:
-            positive_source_evidence = True
-        covered = categories(key)
-        if not covered:
-            continue
-        if "without" in key or key.startswith("no_") or ".no_" in key:
-            if value:
-                negative_categories.update(covered)
-            else:
-                output_use_errors.append(path)
-        elif value:
-            output_use_errors.append(path)
-        else:
-            negative_categories.update(covered)
-
-    joined_text = "\n".join(text_fragments)
-    source_words = ("rendered source", "source pdf", "source-only", "source only", "page-by-page visual")
-    positive_source_evidence = positive_source_evidence or any(word in joined_text for word in source_words)
-    no_output_words = (
-        "no documentkit output",
-        "did not inspect documentkit",
-        "without documentkit output",
-        "no documentkit,",
-    )
-    if any(word in joined_text for word in no_output_words):
-        negative_categories.add("documentkit")
-    if any(word in joined_text for word in ("no engine output", "raw extraction output", "pdf-inspector output", "raw baseline")):
-        negative_categories.add("engine")
-        negative_categories.add("raw")
-    if any(word in joined_text for word in ("no benchmark", "benchmark output", "benchmark result")) and any(
-        word in joined_text for word in ("no benchmark", "did not inspect", "not consulted", "no documentkit")
-    ):
-        negative_categories.add("benchmark")
-
-    require(not output_use_errors, f"{document_id} review indicates extractor or benchmark output was consulted: {', '.join(output_use_errors)}")
-    require(positive_source_evidence, f"{document_id} review lacks source-only visual/source evidence")
-    require(
-        {"documentkit", "engine", "raw"}.intersection(negative_categories),
-        f"{document_id} review lacks a no-DocumentKit/no-engine attestation",
-    )
-
-    explicit_author_without_output = present_values(
-        review,
-        (
-            "authored_without_documentkit_output",
-            "attestations.author_authored_without_documentkit_output",
-            "metadata_snapshot.authored_without_documentkit_output",
-        ),
-    )
-    for path, value in explicit_author_without_output:
-        require(value is True, f"{document_id} {path} must be true")
-    return bool(explicit_author_without_output) or bool({"documentkit", "engine", "raw"}.intersection(negative_categories))
+def has_release_attestations(review: dict[str, Any], document_id: str) -> bool:
+    value = review.get("release_attestations")
+    if value is None:
+        return False
+    require(isinstance(value, dict), f"{document_id} release_attestations must be an object")
+    require(value == RELEASE_ATTESTATIONS, f"{document_id} release_attestations must exactly match the canonical release contract")
+    return True
 
 
-def authoring_method(review: dict[str, Any], document_id: str, source_only: bool) -> str:
+def authoring_method(review: dict[str, Any], document_id: str) -> str:
     method = first_string(
         review,
         ("authoring_method", "metadata_snapshot.authoring_method"),
@@ -395,7 +358,6 @@ def authoring_method(review: dict[str, Any], document_id: str, source_only: bool
         required=False,
     )
     if method is None:
-        require(source_only, f"{document_id} cannot infer authoring method without source-only attestation")
         return "visual-transcription"
     require(method in {"source-authored", "visual-transcription"}, f"{document_id} authoring method is unsupported: {method!r}")
     return method
@@ -404,6 +366,7 @@ def authoring_method(review: dict[str, Any], document_id: str, source_only: bool
 def unresolved_critical_discrepancies_are_zero(review: dict[str, Any], document_id: str) -> None:
     paths = (
         "unresolved_critical_discrepancies",
+        "unresolved_discrepancies",
         "unresolved",
         "critical_discrepancies",
         "page_review.critical_discrepancies",
@@ -431,7 +394,6 @@ def unresolved_critical_discrepancies_are_zero(review: dict[str, Any], document_
 def checked_pages(review: dict[str, Any], document_id: str, page_count: int) -> None:
     paths = (
         "pages_checked_zero_based",
-        "pages_checked",
         "source.pages_checked_zero_based",
         "pages.zero_based_checked",
         "pages.checked_zero_based",
@@ -464,12 +426,19 @@ def expected_ocr_pages(review: dict[str, Any], document_id: str, page_count: int
     )
     values = present_values(review, inherent_zero_based)
     generic_values = present_values(review, ("pages.expected_ocr_pages", "expected_ocr_pages"))
-    if generic_values:
+    if generic_values and not values:
         require(
             bool(present_values(review, numbering_paths)),
             f"{document_id} generic OCR page labels need an explicit zero-based declaration",
         )
         values.extend(generic_values)
+    elif generic_values:
+        canonical = check_index_list(values[0][1], f"{document_id} {values[0][0]}", page_count)
+        for path, value in generic_values:
+            require(
+                check_index_list(value, f"{document_id} {path}", page_count) == canonical,
+                f"{document_id} generic OCR page labels conflict with the explicit zero-based field",
+            )
     require(values, f"{document_id} review has no expected OCR-page labels")
 
     normalized = [check_index_list(value, f"{document_id} {path}", page_count) for path, value in values]
@@ -587,6 +556,8 @@ def critical_values(review: dict[str, Any], document_id: str, markdown: str) -> 
     if not candidates:
         return []
     _, source = candidates[0]
+    for path, candidate in candidates[1:]:
+        require(candidate == source, f"{document_id} has conflicting critical-value arrays at {path}")
     require(isinstance(source, list), f"{document_id} critical values must be an array")
     output: list[dict[str, Any]] = []
     ids: set[str] = set()
@@ -641,25 +612,25 @@ def normalized_ground_truth(
     markdown: str,
     markdown_hash: str,
     markdown_path: str,
+    include_critical_values: bool,
 ) -> tuple[dict[str, Any], list[int]]:
     document_id = document["id"]
-    state_is_locked(review, document_id)
+    require(state_is_locked(review, document_id), f"{document_id} review is not locked")
     source_metadata_matches(review, document)
     checked_pages(review, document_id, document["pages"])
     ocr_pages = expected_ocr_pages(review, document_id, document["pages"])
     review_markdown_hash(review, document_id, markdown_hash)
-    source_only = source_only_attestation(review, document_id)
     unresolved_critical_discrepancies_are_zero(review, document_id)
     author = review_identity(review, document_id, "author")
     reviewer = review_identity(review, document_id, "reviewer")
     require(author.casefold() != reviewer.casefold(), f"{document_id} author and reviewer must be distinct")
-    values = critical_values(review, document_id, markdown)
+    values = critical_values(review, document_id, markdown) if include_critical_values else []
 
     ground_truth: dict[str, Any] = {
         "markdown": markdown_path,
         "sha256": markdown_hash,
         "state": "locked",
-        "authoring_method": authoring_method(review, document_id, source_only),
+        "authoring_method": authoring_method(review, document_id),
         "authored_without_documentkit_output": True,
         "author": author,
         "reviewer": reviewer,
@@ -715,6 +686,8 @@ def validated_acquisition(manifest: dict[str, Any], corpus_root: Path) -> list[d
         require(isinstance(features, list) and features, f"{document_id} needs at least one extraction feature")
         features = [check_identifier(feature, f"{document_id} feature") for feature in features]
         require(len(features) == len(set(features)), f"{document_id} has duplicate features")
+        if any("table" in feature for feature in features) and "tables" not in features:
+            features.append("tables")
         source = raw_document.get("source")
         rights = raw_document.get("rights")
         require(isinstance(source, dict) and isinstance(rights, dict), f"{document_id} source and rights must be objects")
@@ -759,7 +732,7 @@ def validated_acquisition(manifest: dict[str, Any], corpus_root: Path) -> list[d
     return output
 
 
-def checked_engine_revision(repo_root: Path, raw_index: dict[str, Any]) -> tuple[str, str, str]:
+def checked_engine_revision(repo_root: Path, raw_index: dict[str, Any], raw_binary: Path) -> tuple[str, str, str]:
     revision = check_revision(raw_index.get("engine_revision"), "raw baseline engine_revision")
     require(raw_index.get("engine") == "pdf-inspector", "raw baseline must identify pdf-inspector")
     expected_revision = normalized_string((repo_root / "ENGINE_REVISION").read_text(encoding="utf-8"), "ENGINE_REVISION").lower()
@@ -768,6 +741,9 @@ def checked_engine_revision(repo_root: Path, raw_index: dict[str, Any]) -> tuple
     actual_patch_hash = sha256_file(repo_root / "Patches" / "pdf-inspector-embed-apple-cmaps.patch")
     require(patch_hash == actual_patch_hash, "raw baseline Apple CMaps patch SHA-256 differs from the checked-in patch")
     binary_hash = check_sha256(raw_index.get("binary_sha256"), "raw baseline binary SHA-256")
+    require(raw_binary.is_file() and not raw_binary.is_symlink(), f"raw engine binary is missing or not regular: {raw_binary}")
+    actual_binary_hash = sha256_file(raw_binary)
+    require(binary_hash == actual_binary_hash, f"raw engine binary SHA-256 differs from the baseline index: {raw_binary}")
     return revision, patch_hash, binary_hash
 
 
@@ -806,29 +782,52 @@ def raw_records(raw_index: dict[str, Any], documents: list[dict[str, Any]], raw_
 
 def assemble(args: argparse.Namespace) -> tuple[int, list[str]]:
     repo_root = Path(__file__).resolve().parents[2]
+    for path, label in (
+        (args.benchmark_root, "benchmark root"),
+        (args.corpus_root, "corpus root"),
+        (args.raw_root, "raw baseline root"),
+        (args.ground_truth_root, "ground truth root"),
+        (args.raw_index, "raw baseline index"),
+        (args.raw_binary, "raw engine binary"),
+        (args.output, "development manifest output"),
+    ):
+        require(not path.is_symlink(), f"{label} must not be a symbolic link: {path}")
     benchmark_root = args.benchmark_root.resolve()
     acquisition_path = args.acquisition_manifest.resolve()
     corpus_root = args.corpus_root.resolve()
     raw_index_path = args.raw_index.resolve()
     raw_root = args.raw_root.resolve()
     truth_root = args.ground_truth_root.resolve()
+    raw_binary = args.raw_binary.resolve()
     output_path = args.output.resolve()
 
     for path, label in ((benchmark_root, "benchmark root"), (corpus_root, "corpus root"), (raw_root, "raw baseline root"), (truth_root, "ground truth root")):
         require(path.is_dir() and not path.is_symlink(), f"{label} is missing or not a regular directory: {path}")
         relative_to_benchmark(path, benchmark_root, label)
     relative_to_benchmark(acquisition_path, benchmark_root, "acquisition manifest")
+    require(
+        raw_index_path == safe_child(raw_root, PurePosixPath("index.json"), "raw baseline index").resolve(),
+        "raw baseline index must be the canonical index.json inside the raw baseline root",
+    )
     relative_to_benchmark(output_path, benchmark_root, "development manifest output")
-    is_git_ignored(repo_root, corpus_root, "external corpus")
-    is_git_ignored(repo_root, raw_root, "raw baseline")
-    is_git_ignored(repo_root, truth_root, "locked ground truth")
-    is_git_ignored(repo_root, output_path, "development manifest output")
+    require_ignored_untracked(repo_root, corpus_root, "external corpus")
+    require_ignored_untracked(repo_root, raw_root, "raw baseline")
+    require_ignored_untracked(repo_root, truth_root, "locked ground truth")
+    require_ignored_untracked(repo_root, output_path, "development manifest output")
+    require_ignored_untracked(repo_root, raw_index_path, "raw baseline index")
 
     acquisition = load_json(acquisition_path, "acquisition manifest")
     documents = validated_acquisition(acquisition, corpus_root)
+    for document in documents:
+        source_file = safe_child(corpus_root, PurePosixPath(document["pdf"]), f"{document['id']} source PDF")
+        require_ignored_untracked(repo_root, source_file, f"{document['id']} source PDF")
     raw_index = load_json(raw_index_path, "raw baseline index")
-    revision, patch_hash, binary_hash = checked_engine_revision(repo_root, raw_index)
+    revision, patch_hash, binary_hash = checked_engine_revision(repo_root, raw_index, raw_binary)
     raw_by_id = raw_records(raw_index, documents, raw_root)
+    for document_id, record in raw_by_id.items():
+        if record["status"] == "markdown":
+            raw_file = safe_child(raw_root, PurePosixPath(record["markdown"]), f"{document_id} raw baseline Markdown")
+            require_ignored_untracked(repo_root, raw_file, f"{document_id} raw baseline Markdown")
 
     goldens_root = truth_root / "goldens"
     reviews_root = truth_root / "reviews"
@@ -850,10 +849,25 @@ def assemble(args: argparse.Namespace) -> tuple[int, list[str]]:
         markdown = validate_canonical_markdown(golden_data, document_id)
         golden_hash = sha256_bytes(golden_data)
         review = load_json(review_file, f"{document_id} locked review")
-        review_id = first_string(review, ("id", "document_id"), f"{document_id} review document id")
+        review_id = matching_string(review, ("id", "document_id"), f"{document_id} review document id")
         require(review_id == document_id, f"{document_id} review ID does not match its filename")
+        locked = state_is_locked(review, document_id)
+        release_attested = has_release_attestations(review, document_id)
+        if not locked or not release_attested:
+            reason = "not locked" if not locked else "missing canonical release attestations"
+            diagnostics.append(f"excluded non-release truth: {document_id} ({reason})")
+            continue
+        require_ignored_untracked(repo_root, golden_file, f"{document_id} locked Markdown")
+        require_ignored_untracked(repo_root, review_file, f"{document_id} locked review")
         ground_truth_path = (truth_root / "goldens" / f"{document_id}.md").resolve().relative_to(benchmark_root).as_posix()
-        ground_truth, ocr_pages = normalized_ground_truth(review, document, markdown, golden_hash, ground_truth_path)
+        ground_truth, ocr_pages = normalized_ground_truth(
+            review,
+            document,
+            markdown,
+            golden_hash,
+            ground_truth_path,
+            document["document_type"] == "bank_statement",
+        )
         if document["document_type"] == "bank_statement":
             require(ground_truth.get("critical_values"), f"{document_id} bank statement needs locked critical values")
             require(ground_truth.get("minimum_critical_value_accuracy") == 1.0, f"{document_id} bank statement critical-value accuracy must be 1.0")
@@ -932,6 +946,12 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--corpus-root", type=Path, default=benchmarks / "Corpus" / "curated-v2")
     result.add_argument("--raw-index", type=Path, default=benchmarks / "RawBaseline" / "curated-v2" / "index.json")
     result.add_argument("--raw-root", type=Path, default=benchmarks / "RawBaseline" / "curated-v2")
+    result.add_argument(
+        "--raw-binary",
+        type=Path,
+        default=Path(os.environ.get("DOCUMENTKIT_RAW_ENGINE_BINARY", Path(tempfile.gettempdir()) / "documentkit-raw-engine-build" / "release" / "pdf2md")),
+        help="exact pdf2md binary whose SHA-256 is pinned by the raw baseline index",
+    )
     result.add_argument("--ground-truth-root", type=Path, default=benchmarks / "GroundTruth" / "curated-v2")
     result.add_argument("--output", type=Path, default=benchmarks / "Manifests" / "v0.2-development.json")
     result.add_argument("--dry-run", action="store_true", help="validate every input without writing the manifest")
