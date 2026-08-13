@@ -213,6 +213,7 @@ For release performance evidence, require an optimized build, discard at least
 one warm-up, and keep enough samples for tail percentiles:
 
 ```sh
+DOCUMENTKIT_RAW_ENGINE_BINARY=/absolute/path/to/pdf2md \
 DOCUMENTKIT_BENCHMARK_SOURCE_REVISION="$(git rev-parse HEAD)" \
   Benchmarks/Scripts/run-release.sh \
   --manifest Benchmarks/Manifests/v0.2-development.json \
@@ -223,7 +224,11 @@ DOCUMENTKIT_BENCHMARK_SOURCE_REVISION="$(git rev-parse HEAD)" \
 ```
 
 The wrapper requires a clean committed checkout whose `HEAD` equals the exact
-`DOCUMENTKIT_BENCHMARK_SOURCE_REVISION`. It preserves `/usr/bin/time -l` output
+`DOCUMENTKIT_BENCHMARK_SOURCE_REVISION`. Before either engine runs, it regenerates
+the canonical ignored manifest through the assembler and verifies the exact
+raw-engine binary, index, reviewed truth records, and rights evidence. A
+hand-written release manifest is not accepted. The wrapper preserves
+`/usr/bin/time -l` output
 beside the benchmark result and writes `resource-usage.json` with the maximum
 resident set size plus hashes of the resource log and `summary.json`. This is
 the process-lifetime high-water mark for the corpus run, not a per-document or

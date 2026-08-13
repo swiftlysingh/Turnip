@@ -695,6 +695,8 @@ def validated_acquisition(manifest: dict[str, Any], corpus_root: Path) -> list[d
         check_https(source.get("request_url"), f"{document_id} request URL")
         check_https(source.get("final_url"), f"{document_id} final URL")
         require(rights.get("status") == "external-only", f"{document_id} rights status must remain external-only")
+        rights_review_status = check_identifier(rights.get("review_status"), f"{document_id} rights review status")
+        rights_evidence_url = check_https(rights.get("evidence_url"), f"{document_id} rights evidence URL")
         rights_hypothesis = normalized_string(rights.get("hypothesis"), f"{document_id} rights hypothesis")
         title = normalized_string(raw_document.get("title"), f"{document_id} title")
         publisher = normalized_string(raw_document.get("publisher"), f"{document_id} publisher")
@@ -723,6 +725,8 @@ def validated_acquisition(manifest: dict[str, Any], corpus_root: Path) -> list[d
                 "title": title,
                 "publisher": publisher,
                 "publisher_url": publisher_url,
+                "rights_review_status": rights_review_status,
+                "rights_evidence_url": rights_evidence_url,
                 "rights_hypothesis": rights_hypothesis,
             }
         )
@@ -860,6 +864,7 @@ def assemble(args: argparse.Namespace) -> tuple[int, list[str]]:
         require_ignored_untracked(repo_root, golden_file, f"{document_id} locked Markdown")
         require_ignored_untracked(repo_root, review_file, f"{document_id} locked review")
         ground_truth_path = (truth_root / "goldens" / f"{document_id}.md").resolve().relative_to(benchmark_root).as_posix()
+        review_path = review_file.resolve().relative_to(benchmark_root).as_posix()
         ground_truth, ocr_pages = normalized_ground_truth(
             review,
             document,
@@ -868,6 +873,9 @@ def assemble(args: argparse.Namespace) -> tuple[int, list[str]]:
             ground_truth_path,
             document["document_type"] == "bank_statement",
         )
+        ground_truth["review_metadata"] = review_path
+        ground_truth["review_sha256"] = sha256_file(review_file)
+        ground_truth["release_attestations"] = RELEASE_ATTESTATIONS
         if document["document_type"] == "bank_statement":
             require(ground_truth.get("critical_values"), f"{document_id} bank statement needs locked critical values")
             require(ground_truth.get("minimum_critical_value_accuracy") == 1.0, f"{document_id} bank statement critical-value accuracy must be 1.0")
@@ -889,6 +897,8 @@ def assemble(args: argparse.Namespace) -> tuple[int, list[str]]:
                     "status": "external-only",
                     "license": document["rights_hypothesis"],
                     "source_url": document["publisher_url"],
+                    "review_status": document["rights_review_status"],
+                    "evidence_url": document["rights_evidence_url"],
                     "attribution": f"{document['publisher']}: {document['title']}",
                 },
             }
@@ -912,6 +922,7 @@ def assemble(args: argparse.Namespace) -> tuple[int, list[str]]:
             "engine": "pdf-inspector",
             "revision": revision,
             "markdown_directory": raw_directory,
+            "index": relative_to_benchmark(raw_index_path, benchmark_root, "raw baseline index"),
             "apple_cmaps_patch_sha256": patch_hash,
             "binary_sha256": binary_hash,
             "index_sha256": sha256_file(raw_index_path),

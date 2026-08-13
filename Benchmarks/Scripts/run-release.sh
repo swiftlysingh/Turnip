@@ -6,11 +6,18 @@ SCRATCH=${DOCUMENTKIT_BENCHMARK_SCRATCH:-"$ROOT/.cache/release-build"}
 SOURCE_REVISION=${DOCUMENTKIT_BENCHMARK_SOURCE_REVISION:-}
 OUTPUT=
 EXPECT_OUTPUT=0
+MANIFEST=
+EXPECT_MANIFEST=0
 
 for ARG in "$@"; do
-    if [ "$EXPECT_OUTPUT" -eq 1 ]; then
+    if [ "$EXPECT_MANIFEST" -eq 1 ]; then
+        MANIFEST=$ARG
+        EXPECT_MANIFEST=0
+    elif [ "$EXPECT_OUTPUT" -eq 1 ]; then
         OUTPUT=$ARG
         EXPECT_OUTPUT=0
+    elif [ "$ARG" = "--manifest" ]; then
+        EXPECT_MANIFEST=1
     elif [ "$ARG" = "--output" ]; then
         EXPECT_OUTPUT=1
     fi
@@ -18,6 +25,26 @@ done
 
 if [ -z "$OUTPUT" ]; then
     echo "error: --output is required" >&2
+    exit 2
+fi
+if [ -z "$MANIFEST" ]; then
+    echo "error: --manifest is required" >&2
+    exit 2
+fi
+MANIFEST_DIR=$(dirname "$MANIFEST")
+if [ ! -d "$MANIFEST_DIR" ]; then
+    echo "error: manifest parent directory does not exist: $MANIFEST_DIR" >&2
+    exit 2
+fi
+MANIFEST_ABS=$(CDPATH= cd -- "$MANIFEST_DIR" && pwd -P)/$(basename "$MANIFEST")
+CANONICAL_MANIFEST="$ROOT/Manifests/v0.2-development.json"
+if [ "$MANIFEST_ABS" != "$CANONICAL_MANIFEST" ]; then
+    echo "error: release benchmark requires the canonical generated manifest $CANONICAL_MANIFEST" >&2
+    exit 2
+fi
+RAW_BINARY=${DOCUMENTKIT_RAW_ENGINE_BINARY:-}
+if [ -z "$RAW_BINARY" ]; then
+    echo "error: DOCUMENTKIT_RAW_ENGINE_BINARY must identify the exact pdf2md binary used for the baseline" >&2
     exit 2
 fi
 if ! printf '%s' "$SOURCE_REVISION" | grep -Eq '^[0-9a-fA-F]{40}$'; then
@@ -39,6 +66,10 @@ if git -C "$REPO_ROOT" ls-files --others --exclude-standard | grep -q .; then
     echo "error: release benchmarks require no untracked source files" >&2
     exit 2
 fi
+
+"$ROOT/Scripts/assemble-v0.2-development.py" \
+    --raw-binary "$RAW_BINARY" \
+    --output "$MANIFEST_ABS"
 
 OUTPUT_PARENT=$(dirname "$OUTPUT")
 mkdir -p "$OUTPUT_PARENT"

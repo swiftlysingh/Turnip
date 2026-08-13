@@ -208,6 +208,48 @@ private struct BenchmarkRunner {
         } else {
             rawMarkdownDirectory = nil
         }
+        if let baseline = manifest.rawEngineBaseline,
+           let indexPath = baseline.index,
+           let expectedIndexHash = baseline.indexSHA256 {
+            let indexURL = try resolveRelativePath(indexPath, rootURL: rootURL)
+            let indexData: Data
+            do {
+                indexData = try Data(contentsOf: indexURL)
+            } catch {
+                throw BenchmarkError.inputReadFailed(
+                    path: indexURL.path,
+                    message: error.localizedDescription
+                )
+            }
+            let actualIndexHash = digestSHA256(indexData)
+            guard actualIndexHash == expectedIndexHash.lowercased() else {
+                throw BenchmarkError.checksumMismatch(
+                    id: "raw baseline index",
+                    expected: expectedIndexHash.lowercased(),
+                    actual: actualIndexHash
+                )
+            }
+            let evidence: RawBaselineIndexEvidence
+            do {
+                evidence = try JSONDecoder().decode(
+                    RawBaselineIndexEvidence.self,
+                    from: indexData
+                )
+            } catch {
+                throw BenchmarkError.invalidManifest(
+                    "Raw baseline index provenance could not be decoded: \(error.localizedDescription)"
+                )
+            }
+            guard evidence.engine == baseline.engine,
+                  evidence.engineRevision.lowercased() == baseline.revision.lowercased(),
+                  evidence.binarySHA256.lowercased() == baseline.binarySHA256?.lowercased(),
+                  evidence.appleCMapsPatchSHA256.lowercased()
+                    == baseline.appleCMapsPatchSHA256?.lowercased() else {
+                throw BenchmarkError.invalidManifest(
+                    "Raw baseline index provenance differs from the release manifest."
+                )
+            }
+        }
 
         return try manifest.documents.map { document in
             let pdfURL = try resolveRelativePath(document.pdf, rootURL: rootURL)
@@ -260,6 +302,48 @@ private struct BenchmarkRunner {
                 expectedSHA256: document.sha256.lowercased(),
                 rawMarkdownSHA256: document.rawMarkdownSHA256,
                 groundTruth: try document.groundTruth.map { groundTruth in
+                    if let reviewMetadata = groundTruth.reviewMetadata,
+                       let expectedReviewHash = groundTruth.reviewSHA256,
+                       let expectedAttestations = groundTruth.releaseAttestations {
+                        let reviewURL = try resolveRelativePath(
+                            reviewMetadata,
+                            rootURL: rootURL
+                        )
+                        let reviewData: Data
+                        do {
+                            reviewData = try Data(contentsOf: reviewURL)
+                        } catch {
+                            throw BenchmarkError.inputReadFailed(
+                                path: reviewURL.path,
+                                message: error.localizedDescription
+                            )
+                        }
+                        let actualReviewHash = digestSHA256(reviewData)
+                        guard actualReviewHash == expectedReviewHash.lowercased() else {
+                            throw BenchmarkError.checksumMismatch(
+                                id: "\(document.id) review metadata",
+                                expected: expectedReviewHash.lowercased(),
+                                actual: actualReviewHash
+                            )
+                        }
+                        let envelope: ReleaseReviewEnvelope
+                        do {
+                            envelope = try JSONDecoder().decode(
+                                ReleaseReviewEnvelope.self,
+                                from: reviewData
+                            )
+                        } catch {
+                            throw BenchmarkError.invalidManifest(
+                                "\(document.id) review metadata lacks the canonical release envelope."
+                            )
+                        }
+                        guard envelope.releaseAttestations == expectedAttestations,
+                              expectedAttestations.isCanonical else {
+                            throw BenchmarkError.invalidManifest(
+                                "\(document.id) review attestations differ from the release manifest."
+                            )
+                        }
+                    }
                     let markdownURL = try resolveRelativePath(
                         groundTruth.markdown,
                         rootURL: rootURL
@@ -729,6 +813,20 @@ private struct BenchmarkManifest: Codable, Sendable {
                         "\(document.id) has an invalid ground-truth SHA-256."
                     )
                 }
+                if let reviewMetadata = groundTruth.reviewMetadata {
+                    let reviewURL = try resolveRelativePath(reviewMetadata, rootURL: rootURL)
+                    guard reviewURL.pathExtension.lowercased() == "json" else {
+                        throw BenchmarkError.invalidManifest(
+                            "\(document.id) review metadata path must end in .json."
+                        )
+                    }
+                }
+                if let reviewSHA256 = groundTruth.reviewSHA256,
+                   !isHex(reviewSHA256, count: 64) {
+                    throw BenchmarkError.invalidManifest(
+                        "\(document.id) has an invalid review metadata SHA-256."
+                    )
+                }
                 guard (0...1).contains(groundTruth.minimumTokenF1),
                       (0...1).contains(groundTruth.minimumStructureF1) else {
                     throw BenchmarkError.invalidManifest(
@@ -786,6 +884,32 @@ private struct BenchmarkManifest: Codable, Sendable {
             if let markdownDirectory = baseline.markdownDirectory {
                 _ = try resolveRelativePath(markdownDirectory, rootURL: rootURL)
             }
+            if let index = baseline.index {
+                _ = try resolveRelativePath(index, rootURL: rootURL)
+            }
+            let rawProvenanceFields: [Any?] = [
+                baseline.index,
+                baseline.indexSHA256,
+                baseline.binarySHA256,
+                baseline.appleCMapsPatchSHA256,
+            ]
+            guard rawProvenanceFields.allSatisfy({ $0 == nil })
+                    || rawProvenanceFields.allSatisfy({ $0 != nil }) else {
+                throw BenchmarkError.invalidManifest(
+                    "raw_engine_baseline provenance fields must be provided together."
+                )
+            }
+            for (name, value) in [
+                ("index_sha256", baseline.indexSHA256),
+                ("binary_sha256", baseline.binarySHA256),
+                ("apple_cmaps_patch_sha256", baseline.appleCMapsPatchSHA256),
+            ] where value != nil {
+                guard isHex(value!, count: 64) else {
+                    throw BenchmarkError.invalidManifest(
+                        "raw_engine_baseline.\(name) must be a SHA-256."
+                    )
+                }
+            }
             guard documents.allSatisfy({ $0.rawMarkdownSHA256 != nil }) else {
                 throw BenchmarkError.invalidManifest(
                     "Every document needs raw_markdown_sha256 when a baseline is pinned."
@@ -825,9 +949,34 @@ private struct BenchmarkManifest: Codable, Sendable {
         guard let rawEngineBaseline,
               rawEngineBaseline.engine == "pdf-inspector",
               rawEngineBaseline.revision.lowercased() == DocumentKit.engineRevision.lowercased(),
-              rawEngineBaseline.markdownDirectory != nil else {
+              rawEngineBaseline.markdownDirectory != nil,
+              rawEngineBaseline.index != nil,
+              rawEngineBaseline.indexSHA256 != nil,
+              rawEngineBaseline.binarySHA256 != nil,
+              rawEngineBaseline.appleCMapsPatchSHA256 != nil else {
             throw BenchmarkError.invalidManifest(
-                "Release evidence requires a materialized raw pdf-inspector Markdown directory at the SDK's pinned engine revision."
+                "Release evidence requires materialized raw pdf-inspector Markdown plus pinned index, binary, and patch provenance at the SDK's engine revision."
+            )
+        }
+        guard documents.allSatisfy({ document in
+            guard let truth = document.groundTruth else { return false }
+            return truth.reviewMetadata != nil
+                && truth.reviewSHA256 != nil
+                && truth.releaseAttestations?.isCanonical == true
+        }) else {
+            throw BenchmarkError.invalidManifest(
+                "Release evidence requires hashed review metadata and the canonical source-only attestation for every document."
+            )
+        }
+        guard documents.allSatisfy({ document in
+            document.rights.status != .externalOnly
+                || (
+                    document.rights.reviewStatus?.isEmpty == false
+                        && document.rights.evidenceURL != nil
+                )
+        }) else {
+            throw BenchmarkError.invalidManifest(
+                "Every external-only release document requires rights.review_status and rights.evidence_url."
             )
         }
         guard documents.allSatisfy({ $0.groundTruth?.effectiveState == .locked }) else {
@@ -872,6 +1021,17 @@ private struct BenchmarkManifest: Codable, Sendable {
         schemaVersion: Int,
         features: [String]
     ) throws {
+        let reviewFields: [Any?] = [
+            groundTruth.reviewMetadata,
+            groundTruth.reviewSHA256,
+            groundTruth.releaseAttestations,
+        ]
+        guard reviewFields.allSatisfy({ $0 == nil })
+                || reviewFields.allSatisfy({ $0 != nil }) else {
+            throw BenchmarkError.invalidManifest(
+                "\(documentID) review metadata, SHA-256, and release attestations must be provided together."
+            )
+        }
         if schemaVersion == 2 {
             guard groundTruth.state != nil,
                   groundTruth.authoredWithoutDocumentKitOutput != nil,
@@ -885,6 +1045,12 @@ private struct BenchmarkManifest: Codable, Sendable {
             guard groundTruth.authoredWithoutDocumentKitOutput == true else {
                 throw BenchmarkError.invalidManifest(
                     "\(documentID) locked ground truth must be authored without DocumentKit output."
+                )
+            }
+            if let attestations = groundTruth.releaseAttestations,
+               !attestations.isCanonical {
+                throw BenchmarkError.invalidManifest(
+                    "\(documentID) release_attestations do not match the canonical source-only contract."
                 )
             }
             guard let author = groundTruth.author?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -955,6 +1121,15 @@ private struct BenchmarkManifest: Codable, Sendable {
             throw BenchmarkError.invalidManifest("\(documentID) must include rights.license.")
         }
         try validateHTTPURL(rights.sourceURL, field: "\(documentID).rights.source_url")
+        if let evidenceURL = rights.evidenceURL {
+            try validateHTTPURL(evidenceURL, field: "\(documentID).rights.evidence_url")
+        }
+        if let reviewStatus = rights.reviewStatus,
+           !validIdentifier(reviewStatus) {
+            throw BenchmarkError.invalidManifest(
+                "\(documentID).rights.review_status must be a safe identifier."
+            )
+        }
         guard rights.status == .cleared || rights.status == .externalOnly else {
             throw BenchmarkError.unapprovedRights(
                 id: documentID,
@@ -987,11 +1162,19 @@ private struct RawEngineBaseline: Codable, Sendable {
     let engine: String
     let revision: String
     let markdownDirectory: String?
+    let index: String?
+    let indexSHA256: String?
+    let binarySHA256: String?
+    let appleCMapsPatchSHA256: String?
 
     enum CodingKeys: String, CodingKey {
         case engine
         case revision
         case markdownDirectory = "markdown_directory"
+        case index
+        case indexSHA256 = "index_sha256"
+        case binarySHA256 = "binary_sha256"
+        case appleCMapsPatchSHA256 = "apple_cmaps_patch_sha256"
     }
 }
 
@@ -1034,6 +1217,9 @@ private struct GroundTruthMetadata: Codable, Sendable {
     let author: String?
     let reviewer: String?
     let reviewedAt: String?
+    let reviewMetadata: String?
+    let reviewSHA256: String?
+    let releaseAttestations: ReleaseAttestations?
     let criticalValues: [CriticalValue]?
     let minimumWordOrderF1: Double?
     let minimumTableCellF1: Double?
@@ -1054,11 +1240,63 @@ private struct GroundTruthMetadata: Codable, Sendable {
         case author
         case reviewer
         case reviewedAt = "reviewed_at"
+        case reviewMetadata = "review_metadata"
+        case reviewSHA256 = "review_sha256"
+        case releaseAttestations = "release_attestations"
         case criticalValues = "critical_values"
         case minimumWordOrderF1 = "minimum_word_order_f1"
         case minimumTableCellF1 = "minimum_table_cell_f1"
         case minimumCriticalValueAccuracy = "minimum_critical_value_accuracy"
         case minimumOCRRoutingF1 = "minimum_ocr_routing_f1"
+    }
+}
+
+private struct ReleaseAttestations: Codable, Equatable, Sendable {
+    let sourcePagesVisuallyInspected: Bool
+    let outlineAndCriticalValuesRecordedBeforeCandidateMarkdown: Bool
+    let documentKitOutputConsulted: Bool
+    let rawEngineOutputConsulted: Bool
+    let benchmarkOutputConsulted: Bool
+    let zeroUnresolvedCriticalDiscrepancies: Bool
+
+    var isCanonical: Bool {
+        sourcePagesVisuallyInspected
+            && outlineAndCriticalValuesRecordedBeforeCandidateMarkdown
+            && !documentKitOutputConsulted
+            && !rawEngineOutputConsulted
+            && !benchmarkOutputConsulted
+            && zeroUnresolvedCriticalDiscrepancies
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case sourcePagesVisuallyInspected = "source_pages_visually_inspected"
+        case outlineAndCriticalValuesRecordedBeforeCandidateMarkdown = "outline_and_critical_values_recorded_before_candidate_markdown"
+        case documentKitOutputConsulted = "documentkit_output_consulted"
+        case rawEngineOutputConsulted = "raw_engine_output_consulted"
+        case benchmarkOutputConsulted = "benchmark_output_consulted"
+        case zeroUnresolvedCriticalDiscrepancies = "zero_unresolved_critical_discrepancies"
+    }
+}
+
+private struct ReleaseReviewEnvelope: Decodable {
+    let releaseAttestations: ReleaseAttestations
+
+    enum CodingKeys: String, CodingKey {
+        case releaseAttestations = "release_attestations"
+    }
+}
+
+private struct RawBaselineIndexEvidence: Decodable {
+    let engine: String
+    let engineRevision: String
+    let binarySHA256: String
+    let appleCMapsPatchSHA256: String
+
+    enum CodingKeys: String, CodingKey {
+        case engine
+        case engineRevision = "engine_revision"
+        case binarySHA256 = "binary_sha256"
+        case appleCMapsPatchSHA256 = "apple_cmaps_patch_sha256"
     }
 }
 
@@ -1085,12 +1323,16 @@ private struct RightsMetadata: Codable, Sendable {
     let status: RightsStatus
     let license: String
     let sourceURL: String
+    let reviewStatus: String?
+    let evidenceURL: String?
     let attribution: String?
 
     enum CodingKeys: String, CodingKey {
         case status
         case license
         case sourceURL = "source_url"
+        case reviewStatus = "review_status"
+        case evidenceURL = "evidence_url"
         case attribution
     }
 }
