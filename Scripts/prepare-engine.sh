@@ -2,7 +2,7 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-REPOSITORY=https://github.com/firecrawl/pdf-inspector.git
+REPOSITORY=https://github.com/swiftlysingh/pdf-inspector.git
 REVISION=$(tr -d '[:space:]' < "$ROOT/ENGINE_REVISION")
 ENGINE="$ROOT/Build/vendor/pdf-inspector"
 PATCH="$ROOT/Patches/pdf-inspector-embed-apple-cmaps.patch"

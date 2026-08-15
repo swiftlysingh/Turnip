@@ -183,10 +183,11 @@ for the recorded parity, quality, and local timing baseline.
 
 ## Engine pin and rebuild
 
-The upstream revision is fixed in [`ENGINE_REVISION`](ENGINE_REVISION). The
-build does not follow `main` or a semver range. `Scripts/prepare-engine.sh`
-clones that exact revision into the ignored `Build` directory and applies the
-tracked Apple patch.
+The engine revision is fixed in [`ENGINE_REVISION`](ENGINE_REVISION). The build
+does not follow `main` or a semver range. `Scripts/prepare-engine.sh` clones that
+exact revision into the ignored `Build` directory and applies the tracked Apple
+patch. The current pre-release pin uses `swiftlysingh/pdf-inspector` while the
+indirect Form resource and transaction-row fixes are prepared for upstream.
 
 The patch makes three narrow changes to the pinned engine:
 
