@@ -2,13 +2,19 @@ use pdf_inspector::{
     DetectionConfig, PdfError, PdfOptions, PdfProcessResult, PdfType, ScanStrategy,
 };
 use serde::Serialize;
-use std::ffi::{c_char, CStr};
+use std::ffi::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
 
-const PDF_INSPECTOR_VERSION: &str = "1.14.1";
+const PDF_INSPECTOR_VERSION: &str = env!("DOCUMENTKIT_PDF_INSPECTOR_VERSION");
 const MAX_INPUT_BYTES: usize = 100 * 1024 * 1024;
-const VERSION: &CStr = c"pdf-inspector/1.14.1";
+const VERSION: &[u8] = concat!(
+    "pdf-inspector/",
+    env!("DOCUMENTKIT_PDF_INSPECTOR_VERSION"),
+    "\0"
+)
+.as_bytes();
+const REVISION: &[u8] = concat!(env!("DOCUMENTKIT_PDF_INSPECTOR_REVISION"), "\0").as_bytes();
 
 #[derive(Serialize)]
 struct Response {
@@ -161,7 +167,12 @@ pub unsafe extern "C" fn documentkit_buffer_free(buffer: DocumentKitBuffer) {
 
 #[no_mangle]
 pub extern "C" fn documentkit_engine_version() -> *const c_char {
-    VERSION.as_ptr()
+    VERSION.as_ptr().cast()
+}
+
+#[no_mangle]
+pub extern "C" fn documentkit_engine_revision() -> *const c_char {
+    REVISION.as_ptr().cast()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -484,6 +495,21 @@ fn encode_response(response: Response) -> DocumentKitBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn engine_identity_uses_the_verified_build_provenance() {
+        let version = unsafe { std::ffi::CStr::from_ptr(documentkit_engine_version()) };
+        let revision = unsafe { std::ffi::CStr::from_ptr(documentkit_engine_revision()) };
+
+        assert_eq!(
+            version.to_str().unwrap(),
+            format!("pdf-inspector/{PDF_INSPECTOR_VERSION}")
+        );
+        assert_eq!(
+            revision.to_str().unwrap(),
+            env!("DOCUMENTKIT_PDF_INSPECTOR_REVISION")
+        );
+    }
 
     #[test]
     fn empty_input_returns_typed_error() {

@@ -10,7 +10,7 @@
 The artifact includes indirect Form resource decoding and first-transaction-row
 deduplication from the pinned fork. It was built with CMaps embedded, the Apple
 single-threaded lopdf configuration, and selection-aware sparse-text/font
-quality heuristics from the tracked patch. Rebuilds must update this file and pass
-`Scripts/verify-artifact.sh` plus Swift runtime and parity tests. Artifact
-verification checks the legacy and options-aware C symbols in every packaged
-library variant.
+quality heuristics from the tracked patch. Rebuilds must update this file and
+pass `Scripts/verify-artifact.sh` plus Swift runtime and parity tests. Artifact
+verification matches this identity across the source pin, lockfile, notices,
+headers, and every packaged library slice.

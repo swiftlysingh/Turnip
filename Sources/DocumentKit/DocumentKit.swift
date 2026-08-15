@@ -3,7 +3,7 @@ import Foundation
 
 public enum DocumentKit {
     public static let maximumInputSize = 100 * 1024 * 1024
-    public static let engineRevision = "f4aab3b36f7fa1752c65ea45fa64be1274f671cf"
+    public static let engineRevision = String(cString: documentkit_engine_revision())
 
     public static func inspect(_ data: Data) async throws -> DocumentInspection {
         try await inspect(data, options: DocumentOptions())
