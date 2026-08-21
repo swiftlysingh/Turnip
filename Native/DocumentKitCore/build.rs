@@ -123,7 +123,7 @@ fn main() {
     );
     println!("cargo:rerun-if-changed={}", patch_path.display());
     for path in &expected_paths {
-        rerun_if_changed(&path);
+        rerun_if_changed(path);
     }
     for directory in engine_rerun_directories(&engine, &expected_paths) {
         rerun_if_changed(&directory);
