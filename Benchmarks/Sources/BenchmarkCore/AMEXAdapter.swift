@@ -31,7 +31,7 @@ enum AMEXAdapter {
     /// Digest of the normalized source aggregate for this adapter and exact
     /// financial scorer. `testAdapterImplementationSourceDigestIsRepinned`
     /// makes a source edit fail until this value and the manifest are repinned.
-    static let implementationSourceDigest = "eecd6085a49ee569ff068b6f4663be55242f4f9177c5e468031bcb7748fb1505"
+    static let implementationSourceDigest = "c275ecd37b6319454c6555efe887986c3e8efce9fae4d1015a30b22774a653b8"
 
     static let checksum = contractChecksum(
         contract: canonicalizationContract,
@@ -93,6 +93,7 @@ enum FinancialNormalizer {
         var malformedTransactionCandidates = 0
         var unexpectedCriticalCandidates = 0
         var inTransactions = false
+        var inTransactionSummary = false
         var sawTransactionSection = false
         var index = 0
 
@@ -104,7 +105,14 @@ enum FinancialNormalizer {
             }
             if isTransactionHeading(line) {
                 inTransactions = true
+                inTransactionSummary = false
                 sawTransactionSection = true
+                index += 1
+                continue
+            }
+            if isTransactionSummaryHeading(line) {
+                inTransactions = false
+                inTransactionSummary = true
                 index += 1
                 continue
             }
@@ -142,7 +150,9 @@ enum FinancialNormalizer {
 
             if let critical = parseCritical(line: line, currency: currency, rules: rules) {
                 criticalValues.append(critical)
-            } else if isKnownCriticalCandidate(line, rules: rules) || looksLikeSummaryCandidate(line) {
+            } else if isKnownCriticalCandidate(line, rules: rules)
+                || looksLikeSummaryCandidate(line, inTransactionSummary: inTransactionSummary)
+            {
                 // Preserve an unknown or malformed summary candidate as an
                 // unexpected critical without retaining its source text.
                 unexpectedCriticalCandidates += 1
@@ -293,6 +303,10 @@ enum FinancialNormalizer {
         return normalized == "transactions" || normalized == "transaction activity"
     }
 
+    private static func isTransactionSummaryHeading(_ line: String) -> Bool {
+        fold(line) == "transaction summary"
+    }
+
     private static func isStatementMetadata(_ line: String) -> Bool {
         let normalized = fold(line)
         return normalized.hasPrefix("statement period") || normalized.hasPrefix("currency")
@@ -370,9 +384,15 @@ enum FinancialNormalizer {
         }
     }
 
-    private static func looksLikeSummaryCandidate(_ line: String) -> Bool {
-        line.contains(":")
-            && (containsAmountLikeToken(line) || firstFullySpecifiedDate(in: line) != nil)
+    private static func looksLikeSummaryCandidate(
+        _ line: String,
+        inTransactionSummary: Bool
+    ) -> Bool {
+        guard let separator = line.firstIndex(of: ":"), separator > line.startIndex else { return false }
+        return inTransactionSummary
+            || fold(String(line[..<separator])).contains("summary")
+            || containsAmountLikeToken(line)
+            || firstFullySpecifiedDate(in: line) != nil
     }
 
     private static func looksTransactionLike(_ line: String) -> Bool {

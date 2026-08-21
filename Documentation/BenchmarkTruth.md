@@ -87,7 +87,11 @@ direction. A transaction-like malformed candidate remains a row false positive.
 Unknown or malformed summary candidates, including date-valued summaries, are
 counted as unexpected critical candidates. Preregistered critical fields may
 occur before or after the transaction section; a field label embedded in
-transaction merchant prose is not a summary.
+transaction merchant prose is not a summary. An explicit `Transaction Summary`
+heading ends transaction parsing. Any otherwise-unparsed colon field in that
+section is unexpected. Outside it, the adapter counts an unknown colon field
+only when its label says summary or its value is amount/date-shaped. Valid
+date-led transaction rows parse before that check.
 
 Transaction years must resolve consistently with the extracted statement
 period. Two-digit years are accepted only when one period-consistent year is

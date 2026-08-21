@@ -253,6 +253,50 @@ final class BenchmarkCoreTests: XCTestCase {
         XCTAssertFalse(score.perfect)
     }
 
+    func testMalformedUnknownSummaryDoesNotReclassifyMerchantProse() throws {
+        let raw = """
+        Statement Period: 01/01/2026 - 01/31/2026
+        Currency: USD
+        Transactions
+        Date Description Amount
+        01/03 Store: Annex $12.34
+        Transaction Summary
+        Unregistered Summary: N/A
+        01/04 Summary Row $2.00
+        """
+        let observed = try AMEXAdapter.extract(rawSurface: raw)
+        XCTAssertEqual(
+            observed.transactions,
+            [TransactionRow(date: "2026-01-03", merchant: "store: annex", signedAmountMinor: 1234, pageIndex: nil)]
+        )
+        XCTAssertEqual(observed.malformedTransactionCandidates, 0)
+        XCTAssertEqual(observed.unexpectedCriticalCandidates, 1)
+
+        let score = FinancialScorer.score(
+            truth: makeTruth(rows: [row("2026-01-03", "Store: Annex", 1234)], criticals: []),
+            observed: observed
+        )
+        XCTAssertEqual(score.row.f1, 1)
+        XCTAssertEqual(score.unexpectedCriticalValues, 1)
+        XCTAssertFalse(score.perfect)
+    }
+
+    func testUnknownAmountAndDateSummaryFieldsBeforeTransactionsAreUnexpected() throws {
+        let raw = """
+        Statement Period: 01/01/2026 - 01/31/2026
+        Currency: USD
+        Other Amount: $2.00
+        Other Date: 02/15/2026
+        Transactions
+        Date Description Amount
+        01/03 Lantern Cafe $12.34
+        """
+        let observed = try AMEXAdapter.extract(rawSurface: raw)
+        XCTAssertEqual(observed.transactions.count, 1)
+        XCTAssertEqual(observed.malformedTransactionCandidates, 0)
+        XCTAssertEqual(observed.unexpectedCriticalCandidates, 2)
+    }
+
     func testCriticalOwnershipCurrencyMultiplicityAndStatementPeriodGuards() {
         let expectedCriticals = [
             amount("new_balance", 100),
