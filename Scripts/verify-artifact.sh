@@ -9,6 +9,16 @@ RUST_SOURCE="$ROOT/Native/DocumentKitCore/src/lib.rs"
 SWIFT_SOURCE="$ROOT/Sources/DocumentKit/DocumentKit.swift"
 ENGINE_REVISION=$(tr -d '[:space:]' < "$ROOT/ENGINE_REVISION")
 ENGINE_VERSION=$(sed -n 's/^pdf-inspector = {.*version = "=\([^"]*\)".*}$/\1/p' "$MANIFEST")
+THIN_FILE=
+
+cleanup_thin_file() {
+    if [ -n "$THIN_FILE" ]; then
+        rm -f "$THIN_FILE"
+    fi
+}
+trap cleanup_thin_file 0
+trap 'cleanup_thin_file; exit 1' HUP INT TERM
+
 LOCKED_VERSION=$(awk '
     $0 == "[[package]]" { package = 0 }
     $0 == "name = \"pdf-inspector\"" { package = 1; next }
@@ -86,8 +96,8 @@ expect_symbols() {
 
     for architecture in arm64 x86_64; do
         if echo "$info" | grep -q "$architecture"; then
-            thin=$(mktemp "${TMPDIR:-/tmp}/documentkit-symbols.XXXXXX")
-            xcrun lipo "$file" -thin "$architecture" -output "$thin"
+            THIN_FILE=$(mktemp "${TMPDIR:-/tmp}/documentkit-symbols.XXXXXX")
+            xcrun lipo "$file" -thin "$architecture" -output "$THIN_FILE"
             for symbol in \
                 _documentkit_inspect \
                 _documentkit_extract \
@@ -96,9 +106,10 @@ expect_symbols() {
                 _documentkit_buffer_free \
                 _documentkit_engine_version \
                 _documentkit_engine_revision; do
-                xcrun nm -gU "$thin" 2>/dev/null | awk '{print $NF}' | grep -qx "$symbol"
+                xcrun nm -gU "$THIN_FILE" 2>/dev/null | awk '{print $NF}' | grep -qx "$symbol"
             done
-            rm -f "$thin"
+            rm -f "$THIN_FILE"
+            THIN_FILE=
         fi
     done
 }
@@ -121,15 +132,15 @@ expect_identity() {
 
     for architecture in arm64 x86_64; do
         if echo "$info" | grep -q "$architecture"; then
-            thin=$(mktemp "${TMPDIR:-/tmp}/documentkit-identity.XXXXXX")
-            xcrun lipo "$file" -thin "$architecture" -output "$thin"
-            if ! strings "$thin" | grep -Fqx "pdf-inspector/$ENGINE_VERSION" || \
-                ! strings "$thin" | grep -Fqx "$ENGINE_REVISION"; then
-                rm -f "$thin"
-                echo "Packaged engine identity does not match $ENGINE_VERSION@$ENGINE_REVISION" >&2
+            THIN_FILE=$(mktemp "${TMPDIR:-/tmp}/documentkit-identity.XXXXXX")
+            xcrun lipo "$file" -thin "$architecture" -output "$THIN_FILE"
+            if ! strings "$THIN_FILE" | grep -Fqx "pdf-inspector/$ENGINE_VERSION" || \
+                ! strings "$THIN_FILE" | grep -Fqx "$ENGINE_REVISION"; then
+                echo "Packaged engine identity does not match $ENGINE_VERSION@$ENGINE_REVISION in $file ($architecture)" >&2
                 exit 1
             fi
-            rm -f "$thin"
+            rm -f "$THIN_FILE"
+            THIN_FILE=
         fi
     done
 }

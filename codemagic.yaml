@@ -113,6 +113,8 @@ workflows:
           echo "PATH=$HOME/.cargo/bin:$PATH" >> "$CM_ENV"
       - name: Prepare pinned engine
         script: Scripts/prepare-engine.sh
+      - name: Test engine provenance reruns
+        script: Scripts/test-engine-provenance.sh
       - name: Test bridge
         script: cargo test --locked --manifest-path Native/DocumentKitCore/Cargo.toml
       - name: Lint bridge

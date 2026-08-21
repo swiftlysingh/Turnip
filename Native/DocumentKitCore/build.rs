@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::env;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -121,8 +122,11 @@ fn main() {
         manifest_dir.join("Cargo.lock").display()
     );
     println!("cargo:rerun-if-changed={}", patch_path.display());
-    for path in expected_paths {
+    for path in &expected_paths {
         rerun_if_changed(&path);
+    }
+    for directory in engine_rerun_directories(&engine, &expected_paths) {
+        rerun_if_changed(&directory);
     }
     for path in git_metadata_paths(&engine) {
         rerun_if_changed(&path);
@@ -131,6 +135,32 @@ fn main() {
 
 fn rerun_if_changed(path: &Path) {
     println!("cargo:rerun-if-changed={}", path.display());
+}
+
+fn engine_rerun_directories(engine: &Path, paths: &[PathBuf]) -> BTreeSet<PathBuf> {
+    let mut directories = BTreeSet::new();
+    directories.insert(engine.to_owned());
+
+    for path in paths {
+        assert!(
+            path.starts_with(engine),
+            "tracked pdf-inspector path is outside the prepared engine"
+        );
+        let mut directory = path
+            .parent()
+            .expect("tracked pdf-inspector paths must have a parent directory");
+        loop {
+            directories.insert(directory.to_owned());
+            if directory == engine {
+                break;
+            }
+            directory = directory
+                .parent()
+                .expect("tracked pdf-inspector path escaped the prepared engine");
+        }
+    }
+
+    directories
 }
 
 fn tracked_engine_paths(engine: &Path, index: &Path) -> Vec<PathBuf> {
