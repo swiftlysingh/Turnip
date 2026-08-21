@@ -1,0 +1,121 @@
+workflows:
+  sdk:
+    name: SDK
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      xcode: 26.4
+    triggering:
+      events:
+        - push
+        - pull_request
+        - pull_request_labeled
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: false
+      cancel_previous_builds: true
+    when:
+      condition: (not env.CM_TRIGGER_SOURCE == "webhook") or (not event.action == "labeled") or (event.label.name == "codemagic")
+    scripts:
+      - name: Verify packaged engine
+        script: Scripts/verify-artifact.sh
+      - name: Test Swift package
+        script: swift test --parallel
+      - name: Build benchmark runner (release)
+        script: swift build -c release --package-path Benchmarks
+      - name: Verify committed benchmark fixture
+        script: Benchmarks/Scripts/verify-smoke-fixture.sh
+      - name: Run diagnostic smoke benchmark (optimized)
+        script: |
+          set -euo pipefail
+          mkdir -p "$CM_BUILD_DIR/.ci-tmp/DocumentKit-Smoke"
+          DOCUMENTKIT_BENCHMARK_SOURCE_REVISION="$CM_COMMIT" \
+            swift run -c release --package-path Benchmarks documentkit-benchmark \
+            --manifest Benchmarks/Manifests/smoke-v1.json \
+            --root Benchmarks \
+            --output "$CM_BUILD_DIR/.ci-tmp/DocumentKit-Smoke" \
+            --warmups 1 \
+            --repetitions 2
+      - name: Link iOS Simulator executable
+        script: |
+          set -euo pipefail
+          DOCUMENTKIT_IOS_SIMULATOR_SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          swift build --package-path Benchmarks \
+            --triple arm64-apple-ios16.0-simulator \
+            --sdk "$DOCUMENTKIT_IOS_SIMULATOR_SDK"
+      - name: Link iOS device executable
+        script: |
+          set -euo pipefail
+          DOCUMENTKIT_IOS_DEVICE_SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          swift build --package-path Benchmarks \
+            --triple arm64-apple-ios16.0 \
+            --sdk "$DOCUMENTKIT_IOS_DEVICE_SDK"
+      - name: Build sample app for macOS
+        script: |
+          set -euo pipefail
+          xcodebuild \
+            -project Examples/DocumentKitDemo/DocumentKitDemo.xcodeproj \
+            -scheme DocumentKitDemo \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$CM_BUILD_DIR/.ci-tmp/DocumentKitDemo-DerivedData" \
+            -clonedSourcePackagesDirPath "$CM_BUILD_DIR/.ci-tmp/DocumentKitDemo-Packages" \
+            CODE_SIGNING_ALLOWED=NO \
+            -jobs 1 \
+            build
+      - name: Build sample app for iPhone Simulator
+        script: |
+          set -euo pipefail
+          xcodebuild \
+            -project Examples/DocumentKitDemo/DocumentKitDemo.xcodeproj \
+            -scheme DocumentKitDemo \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$CM_BUILD_DIR/.ci-tmp/DocumentKitDemo-iOS-DerivedData" \
+            -clonedSourcePackagesDirPath "$CM_BUILD_DIR/.ci-tmp/DocumentKitDemo-iOS-Packages" \
+            CODE_SIGNING_ALLOWED=NO \
+            -jobs 1 \
+            build
+    artifacts:
+      - .ci-tmp/DocumentKit-Smoke/**
+
+  rust:
+    name: Rust
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      xcode: 26.4
+    cache:
+      cache_paths:
+        - $HOME/.cargo/registry
+        - $HOME/.cargo/git
+        - $CM_BUILD_DIR/Native/DocumentKitCore/target
+    triggering:
+      events:
+        - push
+        - pull_request
+        - pull_request_labeled
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: false
+      cancel_previous_builds: true
+    when:
+      condition: (not env.CM_TRIGGER_SOURCE == "webhook") or (not event.action == "labeled") or (event.label.name == "codemagic")
+    scripts:
+      - name: Install Rust 1.96.0
+        script: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
+            -y --default-toolchain 1.96.0 --profile minimal \
+            --component rustfmt --component clippy
+          echo "PATH=$HOME/.cargo/bin:$PATH" >> "$CM_ENV"
+      - name: Prepare pinned engine
+        script: Scripts/prepare-engine.sh
+      - name: Test bridge
+        script: cargo test --locked --manifest-path Native/DocumentKitCore/Cargo.toml
+      - name: Lint bridge
+        script: cargo clippy --locked --manifest-path Native/DocumentKitCore/Cargo.toml --all-targets -- -D warnings
+      - name: Check bridge formatting
+        script: cargo fmt --manifest-path Native/DocumentKitCore/Cargo.toml -- --check
