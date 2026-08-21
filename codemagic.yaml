@@ -22,6 +22,8 @@ workflows:
         script: Scripts/verify-artifact.sh
       - name: Test Swift package
         script: swift test --parallel
+      - name: Build DocC API documentation
+        script: Scripts/build-documentation.sh "$CM_BUILD_DIR/.ci-tmp/DocumentKit.doccarchive"
       - name: Build benchmark runner (release)
         script: swift build -c release --package-path Benchmarks
       - name: Test benchmark package
@@ -66,6 +68,7 @@ workflows:
             -jobs 1 \
             build
     artifacts:
+      - .ci-tmp/DocumentKit.doccarchive/**
       - .ci-tmp/DocumentKit-Smoke/**
 
   rust:

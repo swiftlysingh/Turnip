@@ -1,14 +1,39 @@
 import DocumentKitCore
 import Foundation
 
+/// Inspects local PDFs and extracts their embedded text as Markdown.
+///
+/// DocumentKit does not upload documents or perform OCR. Use ``inspect(_:)``
+/// to decide how to route a PDF, or ``extract(_:)`` when the app needs
+/// Markdown.
 public enum DocumentKit {
+    /// The largest PDF input accepted by the public API, in bytes.
+    ///
+    /// Inputs larger than this limit throw ``DocumentKitError/inputTooLarge(maximumBytes:)``.
     public static let maximumInputSize = 100 * 1024 * 1024
+
+    /// The pinned upstream engine source revision embedded in the packaged binary.
+    ///
+    /// This identifies the upstream source commit. It does not include the
+    /// hash of DocumentKit's tracked Apple patch.
     public static let engineRevision = String(cString: documentkit_engine_revision())
 
+    /// Inspects PDF data without producing Markdown.
+    ///
+    /// - Parameter data: The complete PDF data to inspect.
+    /// - Returns: Classification and OCR-routing information for the PDF.
+    /// - Throws: A ``DocumentKitError`` when the input cannot be inspected.
     public static func inspect(_ data: Data) async throws -> DocumentInspection {
         try await inspect(data, options: DocumentOptions())
     }
 
+    /// Inspects selected pages of PDF data without producing Markdown.
+    ///
+    /// - Parameters:
+    ///   - data: The complete PDF data to inspect.
+    ///   - options: Page-selection and password options.
+    /// - Returns: Classification and OCR-routing information for the PDF.
+    /// - Throws: A ``DocumentKitError`` when the input or options are invalid.
     public static func inspect(
         _ data: Data,
         options: DocumentOptions
@@ -17,10 +42,25 @@ public enum DocumentKit {
         return payload.inspection
     }
 
+    /// Inspects a PDF at a file URL without producing Markdown.
+    ///
+    /// DocumentKit checks available file-size metadata before reading and enforces
+    /// the input limit after loading.
+    ///
+    /// - Parameter url: The URL of a local PDF file.
+    /// - Returns: Classification and OCR-routing information for the PDF.
+    /// - Throws: A ``DocumentKitError`` when the file cannot be read or inspected.
     public static func inspect(contentsOf url: URL) async throws -> DocumentInspection {
         try await inspect(load(url))
     }
 
+    /// Inspects selected pages of a PDF at a file URL without producing Markdown.
+    ///
+    /// - Parameters:
+    ///   - url: The URL of a local PDF file.
+    ///   - options: Page-selection and password options.
+    /// - Returns: Classification and OCR-routing information for the PDF.
+    /// - Throws: A ``DocumentKitError`` when the file, input, or options are invalid.
     public static func inspect(
         contentsOf url: URL,
         options: DocumentOptions
@@ -28,10 +68,26 @@ public enum DocumentKit {
         try await inspect(load(url), options: options)
     }
 
+    /// Extracts Markdown from PDF data.
+    ///
+    /// The result also contains inspection information and warnings from the
+    /// same engine pass.
+    ///
+    /// - Parameter data: The complete PDF data to extract.
+    /// - Returns: Markdown together with inspection information and warnings.
+    /// - Throws: A ``DocumentKitError`` when the input is invalid or has no extractable text.
     public static func extract(_ data: Data) async throws -> DocumentExtraction {
         try await extract(data, options: DocumentOptions())
     }
 
+    /// Extracts Markdown from selected pages of PDF data.
+    ///
+    /// - Parameters:
+    ///   - data: The complete PDF data to extract.
+    ///   - options: Page-selection and password options.
+    /// - Returns: Markdown together with inspection information and warnings.
+    /// - Throws: A ``DocumentKitError`` when the input or options are invalid,
+    ///   or when the selection has no extractable text.
     public static func extract(
         _ data: Data,
         options: DocumentOptions
@@ -47,10 +103,26 @@ public enum DocumentKit {
         )
     }
 
+    /// Extracts Markdown from a PDF at a file URL.
+    ///
+    /// DocumentKit checks available file-size metadata before reading and enforces
+    /// the input limit after loading.
+    ///
+    /// - Parameter url: The URL of a local PDF file.
+    /// - Returns: Markdown together with inspection information and warnings.
+    /// - Throws: A ``DocumentKitError`` when the file cannot be read or extracted.
     public static func extract(contentsOf url: URL) async throws -> DocumentExtraction {
         try await extract(load(url))
     }
 
+    /// Extracts Markdown from selected pages of a PDF at a file URL.
+    ///
+    /// - Parameters:
+    ///   - url: The URL of a local PDF file.
+    ///   - options: Page-selection and password options.
+    /// - Returns: Markdown together with inspection information and warnings.
+    /// - Throws: A ``DocumentKitError`` when the file, input, or options are invalid,
+    ///   or when the selection has no extractable text.
     public static func extract(
         contentsOf url: URL,
         options: DocumentOptions
@@ -80,25 +152,36 @@ public enum DocumentKit {
 ///
 /// `pageIndexes` are zero-based, strictly ascending, and unique. `nil`
 /// processes the entire PDF; selected pages are emitted in document order.
-/// Passwords are passed directly to the engine for the duration of a call and
-/// are redacted from string and debug descriptions.
+/// Passwords are passed to the engine and redacted from descriptions and
+/// reflection.
 public struct DocumentOptions: Sendable, CustomStringConvertible, CustomDebugStringConvertible,
     CustomReflectable
 {
+    /// Zero-based PDF page indexes to process, or `nil` for the entire document.
     public let pageIndexes: [Int]?
     private let passwordStorage: String?
 
+    /// Creates options for inspection or extraction.
+    ///
+    /// - Parameters:
+    ///   - pageIndexes: Zero-based, unique indexes in strictly ascending document order.
+    ///     Pass `nil` to process every page.
+    ///   - password: A password for an encrypted PDF. DocumentKit passes it to the
+    ///     native call and redacts it from public descriptions.
     public init(pageIndexes: [Int]? = nil, password: String? = nil) {
         self.pageIndexes = pageIndexes
         passwordStorage = password
     }
 
+    /// A diagnostic description that redacts any supplied password.
     public var description: String {
         "DocumentOptions(pageIndexes: \(pageIndexes.map { String(describing: $0) } ?? "all"), password: \(passwordStorage == nil ? "nil" : "[REDACTED]"))"
     }
 
+    /// A diagnostic description that redacts any supplied password.
     public var debugDescription: String { description }
 
+    /// A reflection mirror that redacts any supplied password.
     public var customMirror: Mirror {
         Mirror(
             self,
@@ -137,66 +220,137 @@ public struct DocumentOptions: Sendable, CustomStringConvertible, CustomDebugStr
     }
 }
 
+/// Markdown produced from a PDF together with its inspection data and warnings.
 public struct DocumentExtraction: Sendable, Hashable {
+    /// The extracted Markdown in source-document order.
     public let markdown: String
+
+    /// Information collected during the same extraction pass.
     public let inspection: DocumentInspection
+
+    /// Extraction-quality warnings that callers should preserve with the result.
     public let warnings: [DocumentWarning]
 }
 
+/// Classification, routing, and quality information reported for a PDF.
+///
+/// ``DocumentKit/inspect(_:)`` returns the detect-only subset. Its ``layout``
+/// and ``hasEncodingIssues`` values are `nil` because Markdown is not built.
 public struct DocumentInspection: Sendable, Hashable {
+    /// The engine's classification of the source PDF.
     public let kind: DocumentKind
+
     /// Total pages in the source PDF, including pages outside a selection.
     public let pageCount: Int
+
+    /// The PDF title metadata, when present.
     public let title: String?
+
+    /// The engine's classification confidence. It is not a correctness guarantee.
     public let confidence: Float
+
+    /// The duration reported by the engine for this operation.
     public let processingTime: Duration
+
+    /// Zero-based pages the engine recommends routing through OCR.
     public let pagesNeedingOCR: [Int]
+
+    /// The zero-based pages and signals that led the engine to recommend OCR.
     public let ocrReasonsByPage: [PageOCRReasons]
+
+    /// Layout analysis from extraction, or `nil` for a detect-only inspection.
     public let layout: DocumentLayout?
+
+    /// Whether extraction found encoding issues, or `nil` for a detect-only inspection.
     public let hasEncodingIssues: Bool?
+
+    /// The engine version and embedded upstream source revision used for this result.
     public let engineVersion: String
 }
 
+/// The engine's classification of a PDF's content.
 public enum DocumentKind: String, Sendable, Hashable {
+    /// The engine classified the PDF as text-based.
     case textBased = "text_based"
+
+    /// The engine classified the PDF as scanned.
     case scanned
+
+    /// The engine classified the PDF as image-based.
     case imageBased = "image_based"
+
+    /// The engine classified the PDF as mixed.
     case mixed
 }
 
+/// Layout information found while extracting Markdown.
 public struct DocumentLayout: Sendable, Hashable {
+    /// Whether the engine identified a complex layout.
     public let isComplex: Bool
+
+    /// Zero-based pages that contain tables.
     public let pagesWithTables: [Int]
+
+    /// Zero-based pages that contain columns.
     public let pagesWithColumns: [Int]
 }
 
+/// The signals that made the engine recommend OCR for one page.
 public struct PageOCRReasons: Sendable, Hashable {
+    /// The zero-based page index.
     public let pageIndex: Int
+
+    /// Engine-provided reasons for the OCR recommendation.
     public let reasons: [String]
 }
 
+/// A quality warning returned with a Markdown extraction.
 public struct DocumentWarning: Sendable, Hashable {
+    /// The category of extraction-quality warning.
     public enum Kind: Sendable, Hashable {
+        /// The engine recommends OCR for one or more pages.
         case ocrRequired
+
+        /// The engine found text-encoding issues during extraction.
         case encodingIssues
     }
 
+    /// The warning category.
     public let kind: Kind
+
+    /// Zero-based pages affected by the warning.
     public let pageIndexes: [Int]
 }
 
+/// Errors returned by PDF inspection and Markdown extraction.
 public enum DocumentKitError: Error, Sendable, Hashable {
+    /// The input data is empty.
     case emptyInput
+
+    /// The input exceeds ``DocumentKit/maximumInputSize``.
     case inputTooLarge(maximumBytes: Int)
+
+    /// The PDF is encrypted and needs a valid password.
     case encryptedPDF
+
+    /// The requested page selection is invalid.
     case invalidPageSelection(PageSelectionError)
+
+    /// A selected page is outside the source PDF's page range.
     case pageOutOfRange(pageIndex: Int, pageCount: Int)
+
+    /// The input cannot be parsed as a PDF.
     case invalidPDF
+
+    /// The PDF has no embedded text to extract. The associated inspection explains why.
     case noExtractableText(DocumentInspection)
+
+    /// The underlying engine returned an unexpected failure.
     case engineFailure(code: String, message: String)
 }
 
 extension DocumentKitError: LocalizedError {
+    /// A user-readable description of this error.
     public var errorDescription: String? {
         switch self {
         case .emptyInput:
@@ -219,11 +373,21 @@ extension DocumentKitError: LocalizedError {
     }
 }
 
+/// Errors in a ``DocumentOptions/pageIndexes`` selection.
 public enum PageSelectionError: Sendable, Hashable {
+    /// The selection contains no pages.
     case empty
+
+    /// The selection contains a negative zero-based page index.
     case negative(pageIndex: Int)
+
+    /// The selection contains the same zero-based page index more than once.
     case duplicate(pageIndex: Int)
+
+    /// The selection is not in strictly ascending document order.
     case notAscending
+
+    /// The selection contains a page index the native engine cannot represent.
     case exceedsEngineLimit(pageIndex: Int)
 
     fileprivate var errorDescription: String {
