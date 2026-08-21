@@ -84,8 +84,8 @@ File URLs are supported too:
 let result = try await DocumentKit.extract(contentsOf: pdfURL)
 ```
 
-The URL overload checks the file size before reading. Both overloads reject
-inputs larger than `DocumentKit.maximumInputSize`, currently 100 MiB.
+The URL overload checks available file-size metadata before reading and still
+enforces `DocumentKit.maximumInputSize`, currently 100 MiB, after loading.
 
 Select pages or unlock a password-protected PDF with `DocumentOptions`:
 
@@ -136,6 +136,17 @@ The existing `inspect` and `extract` calls remain unchanged. v0.2 adds
 over the pre-1.0 error enum must handle those cases when updating.
 A scanned or image-only PDF commonly produces `noExtractableText` with its
 inspection attached. DocumentKit reports the OCR need but does not perform OCR.
+
+## API documentation
+
+On macOS with Xcode installed, build the static DocC archive locally with an
+unused output path:
+
+```sh
+Scripts/build-documentation.sh /tmp/DocumentKit.doccarchive
+```
+
+The archive is built for the `/DocumentKit` hosting path.
 
 ## Sample app
 
@@ -216,7 +227,7 @@ Artifacts/                     Prebuilt local XCFramework
 Patches/                       Minimal patch applied to pinned pdf-inspector
 Examples/DocumentKitDemo/      Native PDF-versus-Markdown sample app
 Benchmarks/                    Corpus manifest, runner, and methodology
-Scripts/                       Reproducible engine build and artifact checks
+Scripts/                       Reproducible engine, artifact, and DocC build checks
 Tests/                         Swift API and real-PDF bridge tests
 ```
 

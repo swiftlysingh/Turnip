@@ -49,7 +49,8 @@ public enum DocumentKit {
     ///
     /// - Parameter url: The URL of a local PDF file.
     /// - Returns: Classification and OCR-routing information for the PDF.
-    /// - Throws: A ``DocumentKitError`` when the file cannot be read or inspected.
+    /// - Throws: A ``DocumentKitError`` for validation or inspection failures,
+    ///   file or resource-loading errors, or `CancellationError` if the task is cancelled.
     public static func inspect(contentsOf url: URL) async throws -> DocumentInspection {
         try await inspect(load(url))
     }
@@ -60,7 +61,8 @@ public enum DocumentKit {
     ///   - url: The URL of a local PDF file.
     ///   - options: Page-selection and password options.
     /// - Returns: Classification and OCR-routing information for the PDF.
-    /// - Throws: A ``DocumentKitError`` when the file, input, or options are invalid.
+    /// - Throws: A ``DocumentKitError`` for validation or inspection failures,
+    ///   file or resource-loading errors, or `CancellationError` if the task is cancelled.
     public static func inspect(
         contentsOf url: URL,
         options: DocumentOptions
@@ -110,7 +112,8 @@ public enum DocumentKit {
     ///
     /// - Parameter url: The URL of a local PDF file.
     /// - Returns: Markdown together with inspection information and warnings.
-    /// - Throws: A ``DocumentKitError`` when the file cannot be read or extracted.
+    /// - Throws: A ``DocumentKitError`` for validation or extraction failures,
+    ///   file or resource-loading errors, or `CancellationError` if the task is cancelled.
     public static func extract(contentsOf url: URL) async throws -> DocumentExtraction {
         try await extract(load(url))
     }
@@ -121,8 +124,8 @@ public enum DocumentKit {
     ///   - url: The URL of a local PDF file.
     ///   - options: Page-selection and password options.
     /// - Returns: Markdown together with inspection information and warnings.
-    /// - Throws: A ``DocumentKitError`` when the file, input, or options are invalid,
-    ///   or when the selection has no extractable text.
+    /// - Throws: A ``DocumentKitError`` for validation or extraction failures,
+    ///   file or resource-loading errors, or `CancellationError` if the task is cancelled.
     public static func extract(
         contentsOf url: URL,
         options: DocumentOptions
@@ -318,7 +321,7 @@ public struct DocumentWarning: Sendable, Hashable {
     /// The warning category.
     public let kind: Kind
 
-    /// Zero-based pages affected by the warning.
+    /// Zero-based pages associated with the warning or its routing context.
     public let pageIndexes: [Int]
 }
 
@@ -330,7 +333,7 @@ public enum DocumentKitError: Error, Sendable, Hashable {
     /// The input exceeds ``DocumentKit/maximumInputSize``.
     case inputTooLarge(maximumBytes: Int)
 
-    /// The PDF is encrypted and needs a valid password.
+    /// The PDF is encrypted and the password is missing or incorrect.
     case encryptedPDF
 
     /// The requested page selection is invalid.

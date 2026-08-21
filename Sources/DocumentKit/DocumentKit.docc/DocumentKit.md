@@ -59,13 +59,15 @@ explains the routing decision.
 
 ## Benchmark status
 
-Both candidate pipelines are exact on the committed two-variant, eight-row
-invented fixture. That proves mechanical benchmark-harness coverage, not a
-real-statement accuracy finding or a timing claim. The synthetic corpus passes
-the mechanical gate, but it is not real-holdout or product-adoption evidence.
-One unseen real statement period and its paired variants are the minimum useful
-holdout. Three separate unseen periods are required before a broader public
-accuracy claim.
+Both candidate pipelines are exact on the committed two-variant invented
+fixture. The two variants share one four-transaction truth. The aggregate
+report counts those four truth rows once per variant, so its eight figure is
+case-rows rather than eight distinct transactions. That proves mechanical
+benchmark-harness coverage, not a real-statement accuracy finding or a timing
+claim. The synthetic corpus passes the mechanical gate, but it is not
+real-holdout or product-adoption evidence. One unseen real statement period and
+its paired variants are the minimum useful holdout. Three separate unseen
+periods are required before a broader public accuracy claim.
 
 The [repository benchmark methodology](https://github.com/swiftlysingh/DocumentKit/blob/main/Benchmarks/README.md)
 defines the candidate boundary, frozen adapter, redacted reports, and holdout
@@ -77,8 +79,14 @@ rules.
 
 - ``DocumentKit/extract(_:)``
 - ``DocumentKit/extract(_:options:)``
+- ``DocumentKit/extract(contentsOf:)``
+- ``DocumentKit/extract(contentsOf:options:)``
 - ``DocumentKit/inspect(_:)``
 - ``DocumentKit/inspect(_:options:)``
+- ``DocumentKit/inspect(contentsOf:)``
+- ``DocumentKit/inspect(contentsOf:options:)``
+- ``DocumentKit/maximumInputSize``
+- ``DocumentKit/engineRevision``
 - ``DocumentOptions``
 
 ### Results
