@@ -116,18 +116,29 @@ processing should limit concurrent calls based on their memory budget.
 
 ## Benchmark contracts
 
-The benchmark runner calls inspect and extract independently and repeats each
-operation at least twice. It keeps engine processing time out of parity
-comparisons.
+The benchmark package is macOS-only and intentionally outside the SDK API. It
+compares `DocumentKit.extract(data).markdown` and
+`PDFDocument(data: data)?.string`, each passed to one frozen AMEX adapter. The
+adapter sees only its raw candidate string; it does not receive PDF bytes,
+truth, page-level PDFKit text/layout, or candidate-specific expected values.
 
-- Input provenance is accepted only with an approved rights status, HTTPS
-  source, safe relative path, and matching SHA-256.
-- Raw-engine parity currently compares exact Markdown SHA-256 against the same
-  pinned upstream revision. Inspection metadata is covered by repeated wrapper
-  snapshots, not by the raw-engine parity digest.
-- Determinism compares Markdown hashes and inspection snapshots across runs.
-- Optional ground truth compares transparent token and Markdown-structure F1
-  against per-document thresholds.
+Manifest validation pins PDF/truth checksums, bytes, pages, the engine revision,
+and the adapter ruleset plus normalized adapter/scorer source aggregate.
+Structured truth has a checksum-pinned, human-reviewable deterministic canonical
+Markdown projection with exact financial associations. Every truth group has a
+checksum-pinned review record binding its source-variant set, truth/canonical
+hashes, statement currency, source-only independent author/reviewer prompts,
+and no-candidate-output rendered-page adjudication. Standard and
+screen-reader-shaped variants that share truth are one robustness group, not
+independent periods.
 
-The external corpus is ignored. Only its manifest, checksum-verifying fetch
-script, and non-sensitive result summaries belong in source control.
+Raw-output and full ordered semantic-output determinism are required. Failed
+cases remain in all quality denominators with zero scores. Detailed and
+shareable reports are redacted DTOs protected by a privacy sentinel and key
+allowlist; they contain safe reproducibility metadata (including sanitized code
+revision and non-host machine model) but no private input identifiers, values,
+paths, hashes, or raw surfaces. Private local inputs and reports belong under
+ignored `Benchmarks/Private/`.
+
+See [BenchmarkTruth.md](BenchmarkTruth.md) for canonicalization, scoring, and
+review requirements.

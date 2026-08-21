@@ -24,6 +24,8 @@ workflows:
         script: swift test --parallel
       - name: Build benchmark runner (release)
         script: swift build -c release --package-path Benchmarks
+      - name: Test benchmark package
+        script: swift test --package-path Benchmarks
       - name: Verify committed benchmark fixture
         script: Benchmarks/Scripts/verify-smoke-fixture.sh
       - name: Run diagnostic smoke benchmark (optimized)
@@ -36,21 +38,7 @@ workflows:
             --root Benchmarks \
             --output "$CM_BUILD_DIR/.ci-tmp/DocumentKit-Smoke" \
             --warmups 1 \
-            --repetitions 2
-      - name: Link iOS Simulator executable
-        script: |
-          set -euo pipefail
-          DOCUMENTKIT_IOS_SIMULATOR_SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
-          swift build --package-path Benchmarks \
-            --triple arm64-apple-ios16.0-simulator \
-            --sdk "$DOCUMENTKIT_IOS_SIMULATOR_SDK"
-      - name: Link iOS device executable
-        script: |
-          set -euo pipefail
-          DOCUMENTKIT_IOS_DEVICE_SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          swift build --package-path Benchmarks \
-            --triple arm64-apple-ios16.0 \
-            --sdk "$DOCUMENTKIT_IOS_DEVICE_SDK"
+            --repetitions 5
       - name: Build sample app for macOS
         script: |
           set -euo pipefail

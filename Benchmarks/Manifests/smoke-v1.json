@@ -1,43 +1,40 @@
 {
   "schema_version": 2,
-  "corpus": {
-    "id": "documentkit-smoke-v1",
-    "distribution": "committed",
-    "source_url": "https://github.com/swiftlysingh/DocumentKit"
-  },
-  "documents": [
+  "profile": "amex-retrobudget-v1",
+  "documentkit_revision": "2322bcce4cd9458d24399bf8fee42f1aa201c8c1",
+  "adapter_revision": "amex-adapter-v1",
+  "adapter_checksum": "d0158593079ea64a3f152e5ee3a3f26b747e755c1fc5e46f7b1b755d8303a5ab",
+  "cases": [
     {
-      "id": "documentkit-fixture",
-      "pdf": "Fixtures/Smoke/documentkit-fixture.pdf",
-      "sha256": "ac46f522f25e578347e8324dc6f08fe7732f64b5e522c4a648e8cdc67c288a2d",
-      "features": ["born-digital", "single-column", "headings", "lists"],
-      "expected_page_count": 1,
-      "expected_ocr_pages": [],
-      "ground_truth": {
-        "markdown": "Fixtures/Smoke/documentkit-fixture.md",
-        "sha256": "52071e6b79b8c353cb622a94724d18f5a7953b7db31967dae26b63915cd0eb66",
-        "state": "draft",
-        "authoring_method": "source-authored",
-        "authored_without_documentkit_output": true,
-        "critical_values": [
-          {
-            "id": "edition",
-            "kind": "year",
-            "value": "Edition: 2026",
-            "occurrences": 1
-          }
-        ],
-        "minimum_token_f1": 0.95,
-        "minimum_structure_f1": 0.7,
-        "minimum_word_order_f1": 0.95,
-        "minimum_critical_value_accuracy": 1.0,
-        "minimum_ocr_routing_f1": 1.0
-      },
-      "rights": {
-        "status": "cleared",
-        "license": "MIT, generated and maintained in this repository",
-        "source_url": "https://github.com/swiftlysingh/DocumentKit/tree/main/Benchmarks/Fixtures/Smoke",
-        "attribution": "DocumentKit contributors"
+      "case_token": "c01",
+      "statement_id": "synthetic-statement-a",
+      "statement_period": "2026-01",
+      "variant": "standard",
+      "pdf": "Fixtures/Smoke/synthetic-amex-standard.pdf",
+      "truth": "Fixtures/Smoke/synthetic-amex-truth.json",
+      "pdf_sha256": "a6b405a05d8051858c784edc7f6632d8776e817a0a548ac1275bedf0eede93b8",
+      "pdf_byte_count": 1304,
+      "pdf_page_count": 1,
+      "truth_sha256": "2dc9408f2057be5a0f476042ea5f0687cdf01c523f54577c9d464d1d326b311e",
+      "review": {
+        "path": "Fixtures/Smoke/synthetic-amex-equivalence-review.json",
+        "sha256": "a9c6b7a7bf998530dc888511754d2aa1ff65616ba06dd3ba559ee87ca7e79e9c"
+      }
+    },
+    {
+      "case_token": "c02",
+      "statement_id": "synthetic-statement-a",
+      "statement_period": "2026-01",
+      "variant": "screen-reader",
+      "pdf": "Fixtures/Smoke/synthetic-amex-screen-reader.pdf",
+      "truth": "Fixtures/Smoke/synthetic-amex-truth.json",
+      "pdf_sha256": "df66aaeabbc8d3073cada7ccad61e70c75e9747fdfc974195e0a27bda9425b0f",
+      "pdf_byte_count": 1358,
+      "pdf_page_count": 1,
+      "truth_sha256": "2dc9408f2057be5a0f476042ea5f0687cdf01c523f54577c9d464d1d326b311e",
+      "review": {
+        "path": "Fixtures/Smoke/synthetic-amex-equivalence-review.json",
+        "sha256": "a9c6b7a7bf998530dc888511754d2aa1ff65616ba06dd3ba559ee87ca7e79e9c"
       }
     }
   ]

@@ -30,7 +30,7 @@ adding:
 - Apple device, simulator, and macOS slices in one local XCFramework;
 - zero-based page indexes everywhere in the Swift API;
 - a native PDF-versus-Markdown sample app;
-- a reproducible parity and quality benchmark harness.
+- a reproducible AMEX transaction-integrity benchmark harness.
 
 Processing is local and synchronous inside Rust. The Swift API moves the work
 off the caller's executor, but cancellation cannot interrupt a parse already in
@@ -156,30 +156,25 @@ xcodebuild \
 
 ## Benchmarks
 
-The [`Benchmarks`](Benchmarks) package separates three questions:
+The [`Benchmarks`](Benchmarks) package is a small macOS-only AMEX
+transaction-integrity comparison. It measures exactly two local paths:
+DocumentKit Markdown followed by a frozen AMEX adapter, and document-level
+PDFKit text followed by that same adapter. It reports exact transaction-multiset
+F1, diagnostic table-cell/content F1, critical-value accuracy, determinism,
+and raw extraction timing separately. Each locked truth has a checksum-pinned
+canonical Markdown projection and review record; paired standard and
+screen-reader-shaped variants are robustness evidence, not independent periods.
 
-1. **Bridge parity:** does DocumentKit return the exact Markdown produced by
-   the pinned raw Rust engine?
-2. **Determinism:** do repeated runs return identical Markdown and inspection
-   metadata?
-3. **Extraction quality:** how closely does output match reviewed Markdown
-   ground truth?
-
-The existing four-document external baseline is checksum-pinned and remains a
-useful historical parity check. The committed project-owned smoke fixture runs
-in CI with source-authored draft truth. Neither is the v0.2 accuracy corpus.
-
-The v0.2 release gate uses a 20-plus-document, rights- and provenance-tracked
-external corpus with independently authored and reviewed canonical Markdown.
-The corpus, locked truth, and raw-engine baseline remain local and ignored;
-the repository carries the reproducible acquisition, verification, and
-assembly tooling. DocumentKit does not claim a release-quality extraction
-score until the complete release run passes its accuracy and performance gates.
-
-See [`Benchmarks/README.md`](Benchmarks/README.md) for the manifest, fetch, run,
-and ground-truth workflow. See
-[`Benchmarks/Reports/v0.1-baseline.json`](Benchmarks/Reports/v0.1-baseline.json)
-for the recorded parity, quality, and local timing baseline.
+Real benchmark inputs, truth, and reports stay in ignored
+`Benchmarks/Private/`. The committed standard/screen-reader smoke pair is
+wholly invented implementation coverage, not a claim about real statement
+quality or a release result. Reports contain redacted metrics plus safe
+reproducibility metadata (including a sanitized source revision and its local
+verification status when provided),
+never raw statement values or input identifiers. See
+[`Benchmarks/README.md`](Benchmarks/README.md) for local use and
+[`Documentation/BenchmarkTruth.md`](Documentation/BenchmarkTruth.md) for the
+locked truth, review, holdout, and scoring contract.
 
 ## Engine pin and rebuild
 
