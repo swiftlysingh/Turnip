@@ -49,13 +49,14 @@ model and reasoning effort, and attests that the author/reviewer differ,
 worked independently from rendered sources only, inspected every page, did not
 consult candidate output, and left no transaction or critical discrepancy.
 
-An adjudication may resolve the two independent reconstructions against the
-rendered pages, frozen conventions, and final structured/Markdown projection.
-It is checksum-pinned, identifies its participant and exact prompt, records
-zero unresolved discrepancies to complete a review, and never consults
-candidate output. It is not represented as a source-only pass. Historical
-authorship is provenance only: a retained historical model record must say its
-exact prompt was not retained; it never replaces the independent review.
+A completed model-assisted review record requires a checksum-pinned
+adjudication. The adjudicator resolves the two independent reconstructions
+against the rendered pages, frozen conventions, and final structured/Markdown
+projection. The record identifies the participant and exact prompt, records
+zero unresolved discrepancies, and never consults candidate output. It is not
+represented as a source-only pass. Historical authorship is provenance only: a
+retained historical model record must say its exact prompt was not retained; it
+never replaces the independent review.
 
 The committed fixture is wholly invented. Its completed review records the
 historical `gpt-5.6-terra` author at max effort with no retained exact prompt,
@@ -114,10 +115,15 @@ guard, not a component of row F1. Valid duplicate rows are preserved. An empty
 expected/observed multiset has F1 1 only when there are no malformed candidates;
 a one-sided empty multiset has F1 0.
 
-Critical accuracy requires an exact ID, kind, value, sign, currency, and
-multiplicity. Missing, unexpected, duplicate, substituted, or wrong-currency
-criticals prevent a perfect statement. Financial table-cell F1 and content
-token F1 are diagnostics only; they do not affect perfect, adoption, or exit.
+Critical accuracy is `correct expected keys / expected keys`. A correct key
+requires an exact ID, kind, value, sign, currency, and multiplicity.
+Unexpected keys are reported separately and do not reduce that expected-key
+accuracy. A duplicate for an expected ID makes that key incorrect and lowers
+accuracy. Both prevent a perfect statement and therefore adoption. When truth
+has no criticals, accuracy is 1 only when observed criticals and unexpected
+candidates are also empty, otherwise it is 0. Financial table-cell F1 and
+content token F1 are diagnostics only; they do not affect perfect, adoption,
+or exit.
 
 A case is perfect only when row and critical semantics are exact, statement
 currency/period match truth, extraction and adaptation succeed, and raw plus
@@ -166,7 +172,8 @@ test representation robustness, not independent statement diversity. Looking
 at a period's candidate output, diff, or score converts that period into
 development data; it must not be presented as an unseen holdout afterward.
 
-The committed synthetic pair is implementation coverage only. It does not
-establish real-statement accuracy, a quality finding, or adoption-gate success.
-Quality/adoption misses do not change process exit status. Invalid invocation,
+The committed synthetic pair is implementation coverage only. It can pass its
+per-corpus mechanical adoption gate, but that does not establish real-statement
+accuracy, a quality finding, or product adoption evidence. Quality/adoption
+misses do not change process exit status. Invalid invocation,
 manifest/truth/review/input/privacy/report, and internal failures exit nonzero.

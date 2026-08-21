@@ -3,7 +3,7 @@
   "profile": "amex-retrobudget-v1",
   "documentkit_revision": "2322bcce4cd9458d24399bf8fee42f1aa201c8c1",
   "adapter_revision": "amex-adapter-v1",
-  "adapter_checksum": "70325959d5bbbba5dab504ac48d56dc92e682e9f1f7847f5f8682e558dc4c939",
+  "adapter_checksum": "c947cd2fe4cd631722683e6f9c64eddc4e8f1b8e752133ffbbf04e459b22b1d5",
   "cases": [
     {
       "case_token": "c01",

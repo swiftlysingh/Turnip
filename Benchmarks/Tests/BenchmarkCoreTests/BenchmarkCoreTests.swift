@@ -20,6 +20,50 @@ final class BenchmarkCoreTests: XCTestCase {
         XCTAssertTrue(score.perfect)
     }
 
+    func testUnexpectedCriticalKeepsExpectedKeyAccuracyButFailsPerfectAndAdoption() {
+        let rows = [row("2026-01-03", "Lantern Cafe", 1234)]
+        let criticals = [amount("new_balance", 12733)]
+        let truth = makeTruth(rows: rows, criticals: criticals)
+        let observed = FinancialExtraction(
+            statementCurrency: "USD",
+            statementPeriod: "2026-01",
+            transactions: rows,
+            criticalValues: criticals,
+            unexpectedCriticalCandidates: 1
+        )
+
+        let score = FinancialScorer.score(truth: truth, observed: observed)
+        XCTAssertEqual(score.criticalAccuracy, 1)
+        XCTAssertEqual(score.unexpectedCriticalValues, 1)
+        XCTAssertFalse(score.perfect)
+
+        let candidate = BenchmarkRunner.makeCaseCandidateReport(
+            candidate: .documentKitMarkdown,
+            attempts: [MeasuredAttempt(
+                rawOutcome: .success("raw surface"),
+                semanticOutcome: .success(observed),
+                elapsedMilliseconds: 1
+            )],
+            truth: truth
+        ).report
+        XCTAssertTrue(candidate.failureCodes.contains("unexpected_critical_values"))
+        XCTAssertFalse(candidate.score.perfect)
+
+        let aggregate = BenchmarkRunner.aggregate([CaseReport(
+            caseToken: "c01",
+            statementPeriodCluster: "p01",
+            variant: .standard,
+            pages: 1,
+            inputBytes: 1,
+            transactionRows: rows.count,
+            criticalValues: criticals.count,
+            candidates: [candidate]
+        )])
+        let documentKit = aggregate.first { $0.candidate == Candidate.documentKitMarkdown.label }
+        XCTAssertEqual(documentKit?.macroCriticalAccuracy, 1)
+        XCTAssertFalse(documentKit?.adoptionGatePassed ?? true)
+    }
+
     func testSwappedAmountsKeepCellF1ButFailRowF1() {
         let expected = [row("2026-01-03", "Alpha Store", 100), row("2026-01-04", "Beta Store", 200)]
         let observed = [row("2026-01-03", "Alpha Store", 200), row("2026-01-04", "Beta Store", 100)]
@@ -102,6 +146,22 @@ final class BenchmarkCoreTests: XCTestCase {
             )
         )
         XCTAssertEqual(noFuzzy.row.f1, 0)
+    }
+
+    func testAdapterParsesCollapsedSingleLineRawSurface() throws {
+        let raw = "Statement Period: 01/01/2026 - 01/31/2026 Currency: USD New Balance: $127.33 Transactions Date Description Amount 01/03 Lantern Cafe $12.34 01/04 Orbit Paper Co. ($5.00) Transaction Summary Minimum Payment: $25.00 Payment Due Date: 02/15/2026"
+
+        let observed = try AMEXAdapter.extract(rawSurface: raw)
+        XCTAssertEqual(observed.statementPeriod, "2026-01")
+        XCTAssertEqual(observed.statementCurrency, "USD")
+        XCTAssertEqual(
+            observed.transactions,
+            [
+                TransactionRow(date: "2026-01-03", merchant: "lantern cafe", signedAmountMinor: 1234, pageIndex: nil),
+                TransactionRow(date: "2026-01-04", merchant: "orbit paper co.", signedAmountMinor: -500, pageIndex: nil),
+            ]
+        )
+        XCTAssertEqual(observed.criticalValues.map(\.id), ["new_balance", "minimum_payment", "payment_due_date"])
     }
 
     func testMalformedCommaGroupingAmbiguousSignsAndPrecisionAreFalsePositives() throws {
@@ -269,14 +329,14 @@ final class BenchmarkCoreTests: XCTestCase {
             observed.transactions,
             [TransactionRow(date: "2026-01-03", merchant: "store: annex", signedAmountMinor: 1234, pageIndex: nil)]
         )
-        XCTAssertEqual(observed.malformedTransactionCandidates, 0)
+        XCTAssertEqual(observed.malformedTransactionCandidates, 1)
         XCTAssertEqual(observed.unexpectedCriticalCandidates, 1)
 
         let score = FinancialScorer.score(
             truth: makeTruth(rows: [row("2026-01-03", "Store: Annex", 1234)], criticals: []),
             observed: observed
         )
-        XCTAssertEqual(score.row.f1, 1)
+        XCTAssertEqual(score.row.falsePositive, 1)
         XCTAssertEqual(score.unexpectedCriticalValues, 1)
         XCTAssertFalse(score.perfect)
     }
@@ -339,6 +399,28 @@ final class BenchmarkCoreTests: XCTestCase {
         )
         XCTAssertEqual(wrongPeriod.row.f1, 1)
         XCTAssertFalse(wrongPeriod.perfect)
+
+        let emptyCriticalTruth = makeTruth(rows: [], criticals: [])
+        XCTAssertEqual(
+            FinancialScorer.score(
+                truth: emptyCriticalTruth,
+                observed: extraction(rows: [], criticals: [])
+            ).criticalAccuracy,
+            1
+        )
+        XCTAssertEqual(
+            FinancialScorer.score(
+                truth: emptyCriticalTruth,
+                observed: FinancialExtraction(
+                    statementCurrency: "USD",
+                    statementPeriod: "2026-01",
+                    transactions: [],
+                    criticalValues: [],
+                    unexpectedCriticalCandidates: 1
+                )
+            ).criticalAccuracy,
+            0
+        )
     }
 
     func testZeroMinorUnitTruthDoesNotTripPrivacySubstringScanning() async throws {
@@ -353,6 +435,52 @@ final class BenchmarkCoreTests: XCTestCase {
             _ = try await BenchmarkRunner.run(corpus.configuration)
         } catch {
             XCTFail("zero-valued truth must not trip privacy validation: \(error)")
+        }
+    }
+
+    func testPrivacyUsesTokenBoundariesAndExcludesDirectoryBasenames() async throws {
+        XCTAssertNoThrow(try ReportPrivacy.validate(
+            surfaces: [Data("Raw extraction timing is available.".utf8)],
+            forbiddenValues: ["IN"]
+        ))
+        XCTAssertThrowsError(try ReportPrivacy.validate(
+            surfaces: [Data("candidate IN failed".utf8)],
+            forbiddenValues: ["IN"]
+        ))
+        for protectedValue in [
+            "smoke-v1.json",
+            "truth.json",
+            "review.json",
+            "/private/tmp/private-corpus/truth.json",
+        ] {
+            XCTAssertThrowsError(try ReportPrivacy.validate(
+                surfaces: [Data("leaked \(protectedValue)".utf8)],
+                forbiddenValues: [protectedValue]
+            ))
+        }
+
+        let temporary = FileManager.default.temporaryDirectory
+            .appendingPathComponent("documentkit-privacy-basename-\(UUID().uuidString)", isDirectory: true)
+        let inputRoot = temporary.appendingPathComponent("input/DocumentKit", isDirectory: true)
+        let outputRoot = temporary.appendingPathComponent("output/DocumentKit", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try FileManager.default.createDirectory(
+            at: inputRoot.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(at: inputRoot, withDestinationURL: benchmarkRoot)
+
+        do {
+            _ = try await BenchmarkRunner.run(BenchmarkConfiguration(
+                manifestURL: inputRoot.appendingPathComponent("Manifests/smoke-v1.json"),
+                rootURL: inputRoot,
+                outputURL: outputRoot,
+                warmups: 0,
+                repetitions: 1,
+                sourceRevision: "working-tree"
+            ))
+        } catch {
+            XCTFail("directory basenames must not trip privacy validation: \(error)")
         }
     }
 

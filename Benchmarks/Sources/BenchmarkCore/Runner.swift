@@ -575,6 +575,8 @@ public enum BenchmarkRunner {
         }
         if score.row.f1 < 1 { failureCodes.insert("row_mismatch") }
         if score.criticalAccuracy < 1 { failureCodes.insert("critical_value_mismatch") }
+        if score.unexpectedCriticalValues > 0 { failureCodes.insert("unexpected_critical_values") }
+        if score.duplicateCriticalValues > 0 { failureCodes.insert("duplicate_critical_values") }
         if !score.perfect { failureCodes.insert("not_perfect") }
 
         let successfulTimingAttempts = attempts.count(where: { attempt in
@@ -723,7 +725,7 @@ enum ReportPrivacy {
                 try validateJSONKeys(surface)
             }
             let normalized = text.lowercased()
-            if values.contains(where: { normalized.contains($0) }) {
+            if values.contains(where: { containsForbiddenValue($0, in: normalized) }) {
                 throw BenchmarkFailure.privacyGuardFailed
             }
         }
@@ -773,6 +775,38 @@ enum ReportPrivacy {
     private static func isPureNumeric(_ value: String) -> Bool {
         let unsigned = value.hasPrefix("-") ? value.dropFirst() : Substring(value)
         return !unsigned.isEmpty && unsigned.allSatisfy(\.isNumber)
+    }
+
+    private static func containsForbiddenValue(_ value: String, in text: String) -> Bool {
+        guard isShortASCIIAlphanumeric(value) else { return text.contains(value) }
+
+        var searchRange = text.startIndex ..< text.endIndex
+        while let range = text.range(of: value, range: searchRange) {
+            let startsAtBoundary = range.lowerBound == text.startIndex
+                || !isTokenCharacter(text[text.index(before: range.lowerBound)])
+            let endsAtBoundary = range.upperBound == text.endIndex
+                || !isTokenCharacter(text[range.upperBound])
+            if startsAtBoundary && endsAtBoundary { return true }
+            guard range.upperBound < text.endIndex else { return false }
+            searchRange = range.upperBound ..< text.endIndex
+        }
+        return false
+    }
+
+    private static func isShortASCIIAlphanumeric(_ value: String) -> Bool {
+        guard !value.isEmpty, value.count <= 3 else { return false }
+        return value.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 48 ... 57, 97 ... 122:
+                true
+            default:
+                false
+            }
+        }
+    }
+
+    private static func isTokenCharacter(_ character: Character) -> Bool {
+        character == "_" || character.isLetter || character.isNumber
     }
 }
 
@@ -877,12 +911,12 @@ enum CorpusPreflight {
         var prepared: [PreparedCase] = []
         var canonicalMarkdownHashes: [TruthGroupKey: String] = [:]
         var truthCurrencies: [TruthGroupKey: String] = [:]
-        var forbiddenValues = privacyValues(for: configuration.manifestURL)
-            + privacyValues(for: configuration.rootURL)
-            + privacyValues(for: configuration.outputURL)
+        var forbiddenValues = protectedFileValues(for: configuration.manifestURL)
+            + [configuration.rootURL.path, configuration.outputURL.path]
         for specification in manifest.cases {
             let pdfURL = try resolve(specification.pdf, under: configuration.rootURL)
             let truthURL = try resolve(specification.truth, under: configuration.rootURL)
+            let reviewURL = try resolve(specification.review.path, under: configuration.rootURL)
             let pdfData: Data
             let truthData: Data
             do {
@@ -940,7 +974,10 @@ enum CorpusPreflight {
                     periodCluster: "p\(String(format: "%02d", periodIndex(specification.statementPeriod, in: manifest.cases)))"
                 )
             )
-            forbiddenValues += privacyValues(for: pdfURL) + privacyValues(for: truthURL)
+            forbiddenValues += protectedFileValues(for: pdfURL)
+                + protectedFileValues(for: truthURL)
+                + protectedFileValues(for: reviewURL)
+                + protectedFileValues(for: canonicalURL)
             forbiddenValues += [
                 specification.statementID,
                 specification.statementPeriod,
@@ -1201,7 +1238,7 @@ enum CorpusPreflight {
 
     private static func isLowercaseSHA256(_ value: String) -> Bool {
         value.count == 64 && value.allSatisfy { character in
-            character.isNumber || (character >= "a" && character <= "f")
+            character.isASCII && (character.isNumber || (character >= "a" && character <= "f"))
         }
     }
 
@@ -1233,7 +1270,7 @@ enum CorpusPreflight {
         return (periods.firstIndex(of: period) ?? 0) + 1
     }
 
-    private static func privacyValues(for url: URL) -> [String] {
+    private static func protectedFileValues(for url: URL) -> [String] {
         [url.path, url.lastPathComponent]
     }
 
