@@ -721,10 +721,13 @@ enum ReportPrivacy {
             guard let text = String(data: surface, encoding: .utf8) else {
                 throw BenchmarkFailure.privacyGuardFailed
             }
+            let validationText: String
             if text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("{") {
-                try validateJSONKeys(surface)
+                validationText = try maskedPublicJSONText(surface)
+            } else {
+                validationText = maskedPublicText(text)
             }
-            let normalized = text.lowercased()
+            let normalized = validationText.lowercased()
             if values.contains(where: { containsForbiddenValue($0, in: normalized) }) {
                 throw BenchmarkFailure.privacyGuardFailed
             }
@@ -735,6 +738,20 @@ enum ReportPrivacy {
     /// manifests, review sidecars, and paths. The allowlist catches accidental
     /// widening before a private value reaches disk or stdout.
     static func validateJSONKeys(_ data: Data) throws {
+        _ = try decodedAndValidatedJSONObject(data)
+    }
+
+    private static func maskedPublicJSONText(_ data: Data) throws -> String {
+        _ = try decodedAndValidatedJSONObject(data)
+        guard let originalText = String(data: data, encoding: .utf8) else {
+            throw BenchmarkFailure.privacyGuardFailed
+        }
+        return knownPublicJSONFields.reduce(originalText) { text, field in
+            maskExactJSONField(key: field.key, value: field.value, in: text)
+        }
+    }
+
+    private static func decodedAndValidatedJSONObject(_ data: Data) throws -> Any {
         let object: Any
         do {
             object = try JSONSerialization.jsonObject(with: data)
@@ -742,6 +759,60 @@ enum ReportPrivacy {
             throw BenchmarkFailure.privacyGuardFailed
         }
         try validateKeys(in: object)
+        return object
+    }
+
+    private static var knownPublicJSONFields: [(key: String, value: String)] {
+        [
+            ("profile", BenchmarkProfile.identifier),
+            ("adapter_revision", BenchmarkProfile.adapterRevision),
+            ("adapter_contract_checksum", AMEXAdapter.checksum),
+            ("document_kit_engine_revision", DocumentKit.engineRevision),
+        ] + Candidate.allCases.map { ("candidate", $0.label) }
+    }
+
+    private static func maskExactJSONField(key: String, value: String, in text: String) -> String {
+        let pattern = "\\\"\(NSRegularExpression.escapedPattern(for: key))\\\"\\s*:\\s*\\\"\(NSRegularExpression.escapedPattern(for: value))\\\""
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return text }
+        let range = NSRange(text.startIndex ..< text.endIndex, in: text)
+        return expression.stringByReplacingMatches(
+            in: text,
+            range: range,
+            withTemplate: "<public>"
+        )
+    }
+
+    private static func maskedPublicText(_ text: String) -> String {
+        text
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { line in
+                let value = String(line)
+                if value == "DocumentKit AMEX transaction-integrity benchmark" {
+                    return "<public>"
+                }
+                if Candidate.allCases.contains(where: { value == "Candidate: \($0.label)" }) {
+                    return "Candidate: <public>"
+                }
+                var masked = value
+                masked = replacingFirst(
+                    "documentkit-engine-revision=\(DocumentKit.engineRevision)",
+                    in: masked
+                )
+                masked = replacingFirst(
+                    "adapter-revision=\(BenchmarkProfile.adapterRevision)",
+                    in: masked
+                )
+                return replacingFirst(
+                    "adapter-contract-checksum=\(AMEXAdapter.checksum)",
+                    in: masked
+                )
+            }
+            .joined(separator: "\n")
+    }
+
+    private static func replacingFirst(_ target: String, in text: String) -> String {
+        guard let range = text.range(of: target) else { return text }
+        return text.replacingCharacters(in: range, with: "<public>")
     }
 
     private static func validateKeys(in object: Any) throws {

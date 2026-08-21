@@ -205,6 +205,27 @@ final class BenchmarkCoreTests: XCTestCase {
         XCTAssertEqual(observed.malformedTransactionCandidates, 2)
     }
 
+    func testDateLedTransactionBeforeHeadingIsMalformed() throws {
+        let raw = """
+        Statement Period: 01/01/2026 - 01/31/2026
+        Currency: USD
+        01/02 Stray Before Heading $3.00
+        Unrelated amount $2.00
+        Transactions
+        Date Description Amount
+        01/03 Lantern Cafe $12.34
+        """
+        let observed = try AMEXAdapter.extract(rawSurface: raw)
+        XCTAssertEqual(observed.transactions.count, 1)
+        XCTAssertEqual(observed.malformedTransactionCandidates, 1)
+
+        let score = FinancialScorer.score(
+            truth: makeTruth(rows: [row("2026-01-03", "Lantern Cafe", 1234)], criticals: []),
+            observed: observed
+        )
+        XCTAssertEqual(score.row.falsePositive, 1)
+    }
+
     func testCrossWindowTruthAndAdapterRowsAreAccepted() throws {
         let raw = """
         Statement Period: 12/15/2025 - 01/14/2026
@@ -482,6 +503,33 @@ final class BenchmarkCoreTests: XCTestCase {
         } catch {
             XCTFail("directory basenames must not trip privacy validation: \(error)")
         }
+
+        let amexTruth = makeTruth(
+            rows: [row("2026-01-03", "AMEX", 1234)],
+            criticals: [amount("new_balance", 12733)]
+        )
+        let amexCorpus = try makeTemporaryCorpus(truth: amexTruth)
+        defer { amexCorpus.cleanup() }
+        let bundle = try await BenchmarkRunner.run(amexCorpus.configuration)
+        XCTAssertNoThrow(try ReportPrivacy.validate(
+            surfaces: [bundle.shareableJSON, Data(bundle.shareableText.utf8)],
+            forbiddenValues: ["AMEX"]
+        ))
+
+        let shareableJSON = try XCTUnwrap(String(data: bundle.shareableJSON, encoding: .utf8))
+        let leakedJSON = shareableJSON.replacingOccurrences(
+            of: Candidate.documentKitMarkdown.label,
+            with: Candidate.documentKitMarkdown.label + " AMEX"
+        )
+        XCTAssertNotEqual(shareableJSON, leakedJSON)
+        XCTAssertThrowsError(try ReportPrivacy.validate(
+            surfaces: [Data(leakedJSON.utf8)],
+            forbiddenValues: ["AMEX"]
+        ))
+        XCTAssertThrowsError(try ReportPrivacy.validate(
+            surfaces: [Data((bundle.shareableText + "AMEX\n").utf8)],
+            forbiddenValues: ["AMEX"]
+        ))
     }
 
     func testEmptyMultisetRulesAndNativeSHA256KnownVector() {
@@ -751,7 +799,7 @@ final class BenchmarkCoreTests: XCTestCase {
             XCTAssertThrowsError(try ReportPrivacy.validate(
                 surfaces: [Data(text.utf8)],
                 forbiddenValues: [sentinel]
-            ))
+            ), "sentinel \(sentinel) must be detected outside an exact public value")
         }
     }
 

@@ -31,7 +31,7 @@ enum AMEXAdapter {
     /// Digest of the normalized source aggregate for this adapter and exact
     /// financial scorer. `testAdapterImplementationSourceDigestIsRepinned`
     /// makes a source edit fail until this value and the manifest are repinned.
-    static let implementationSourceDigest = "3ca3cd600a1d9407039afb2900b92f8401f6ffea9edf6bbd9fdc8acda7e2abb6"
+    static let implementationSourceDigest = "96a74bf6d47a37d380a639d2c810b704a6e89ca5173d0682affc17fdafc7c60d"
 
     static let checksum = contractChecksum(
         contract: canonicalizationContract,
@@ -163,6 +163,11 @@ enum FinancialNormalizer {
                 // date-led or amount-like non-field line there is still a
                 // transaction-shaped candidate. Count it as a row false
                 // positive instead of letting it disappear.
+                malformedTransactionCandidates += 1
+            } else if !sawTransactionSection, datePrefix(in: line) != nil {
+                // Before the transaction heading, retain only a date-led row
+                // shape as a malformed transaction candidate. Arbitrary
+                // amount-like prose remains outside transaction scoring.
                 malformedTransactionCandidates += 1
             } else if inTransactions, looksTransactionLike(line) {
                 // A bare amount, an amount-like string, or another numeric lead

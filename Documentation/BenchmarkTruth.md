@@ -49,14 +49,14 @@ model and reasoning effort, and attests that the author/reviewer differ,
 worked independently from rendered sources only, inspected every page, did not
 consult candidate output, and left no transaction or critical discrepancy.
 
-A completed model-assisted review record requires a checksum-pinned
-adjudication. The adjudicator resolves the two independent reconstructions
-against the rendered pages, frozen conventions, and final structured/Markdown
-projection. The record identifies the participant and exact prompt, records
-zero unresolved discrepancies, and never consults candidate output. It is not
-represented as a source-only pass. Historical authorship is provenance only: a
-retained historical model record must say its exact prompt was not retained; it
-never replaces the independent review.
+Every completed review requires a checksum-pinned adjudication by a participant
+distinct from the author and reviewer. The adjudicator resolves the two
+independent reconstructions against the rendered pages, frozen conventions,
+and final structured/Markdown projection. The record identifies the participant
+and exact prompt, records zero unresolved discrepancies, and never consults
+candidate output. It is not represented as a source-only pass. Historical
+authorship is provenance only: a retained historical model record must say its
+exact prompt was not retained; it never replaces the independent review.
 
 The committed fixture is wholly invented. Its completed review records the
 historical `gpt-5.6-terra` author at max effort with no retained exact prompt,
@@ -85,14 +85,18 @@ standard comma grouping (`\d{1,3}(,\d{3})*`). Invalid grouping, unsupported
 precision, plus signs, multiple signs, and malformed/conflicting CR/DR forms
 are rejected. Parentheses, leading/trailing minus, CR, and DR preserve
 direction. A transaction-like malformed candidate remains a row false positive.
-Unknown or malformed summary candidates, including date-valued summaries, are
-counted as unexpected critical candidates. Preregistered critical fields may
-occur before or after the transaction section; a field label embedded in
-transaction merchant prose is not a summary. An explicit `Transaction Summary`
-heading ends transaction parsing. Any otherwise-unparsed colon field in that
-section is unexpected. Outside it, the adapter counts an unknown colon field
-only when its label says summary or its value is amount/date-shaped. Valid
-date-led transaction rows parse before that check.
+A date-led transaction-shaped line before `Transactions` also counts as a row
+false positive, while arbitrary pre-heading amount-like prose remains outside
+transaction scoring. Unknown or malformed summary candidates, including
+date-valued summaries, are counted as unexpected critical candidates.
+Preregistered critical fields may occur before or after the transaction
+section; a field label embedded in transaction merchant prose is not a summary.
+An explicit `Transaction Summary` heading ends transaction parsing. Any
+otherwise-unparsed colon field in that section is unexpected. A date-led or
+amount-like non-field line after that heading is a malformed row candidate.
+Outside it, the adapter counts an unknown colon field only when its label says
+summary or its value is amount/date-shaped. Valid date-led transaction rows
+parse before that check.
 
 Transaction years must resolve consistently with the extracted statement
 period. Two-digit years are accepted only when one period-consistent year is
