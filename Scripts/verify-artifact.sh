@@ -40,7 +40,7 @@ esac
 }
 
 grep -Fq -- "- pdf-inspector version: \`$ENGINE_VERSION\`" "$ROOT/Artifacts/BUILD_INFO.md"
-grep -Fq -- "- pdf-inspector revision: \`$ENGINE_REVISION\`" "$ROOT/Artifacts/BUILD_INFO.md"
+grep -Fq -- "- pdf-inspector upstream source revision: \`$ENGINE_REVISION\`" "$ROOT/Artifacts/BUILD_INFO.md"
 grep -Fq "pinned to version $ENGINE_VERSION and source commit" "$ROOT/THIRD_PARTY_NOTICES.md"
 grep -Fq "\`$ENGINE_REVISION\`" "$ROOT/THIRD_PARTY_NOTICES.md"
 grep -Fq 'env!("DOCUMENTKIT_PDF_INSPECTOR_VERSION")' "$RUST_SOURCE"
@@ -111,8 +111,11 @@ expect_identity() {
     file=$1
     info=$(xcrun lipo -info "$file")
     if echo "$info" | grep -q "Non-fat file"; then
-        strings "$file" | grep -Fqx "pdf-inspector/$ENGINE_VERSION"
-        strings "$file" | grep -Fqx "$ENGINE_REVISION"
+        if ! strings "$file" | grep -Fqx "pdf-inspector/$ENGINE_VERSION" || \
+            ! strings "$file" | grep -Fqx "$ENGINE_REVISION"; then
+            echo "Packaged engine identity does not match $ENGINE_VERSION@$ENGINE_REVISION in $file" >&2
+            exit 1
+        fi
         return
     fi
 

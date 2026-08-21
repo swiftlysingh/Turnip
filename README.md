@@ -185,9 +185,14 @@ for the recorded parity, quality, and local timing baseline.
 
 The engine revision is fixed in [`ENGINE_REVISION`](ENGINE_REVISION). The build
 does not follow `main` or a semver range. `Scripts/prepare-engine.sh` clones that
-exact revision into the ignored `Build` directory and applies the tracked Apple
-patch. The current pre-release pin uses `swiftlysingh/pdf-inspector` while the
-indirect Form resource and transaction-row fixes are prepared for upstream.
+exact upstream source revision into the ignored `Build` directory and applies
+the tracked Apple patch. `DocumentKit.engineRevision` reports the upstream
+source revision, not a full patched-tree identity. At compile time, the Rust
+build script reconstructs `HEAD` plus the patch and rejects any other prepared
+tree; [`Artifacts/SHA256SUMS`](Artifacts/SHA256SUMS) pins both that patch and
+the packaged libraries. The current pre-release pin uses
+`swiftlysingh/pdf-inspector` while the indirect Form resource and
+transaction-row fixes are prepared for upstream.
 
 The patch makes three narrow changes to the pinned engine:
 

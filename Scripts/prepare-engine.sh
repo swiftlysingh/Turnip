@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+unset GIT_INDEX_FILE
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 REPOSITORY=https://github.com/swiftlysingh/pdf-inspector.git
@@ -87,7 +88,7 @@ if ! EXPECTED_TREE=$(GIT_INDEX_FILE="$EXPECTED_INDEX" git -C "$ENGINE" write-tre
 fi
 
 if ! GIT_INDEX_FILE="$ACTUAL_INDEX" git -C "$ENGINE" read-tree HEAD || \
-    ! GIT_INDEX_FILE="$ACTUAL_INDEX" git -C "$ENGINE" add -u -- .; then
+    ! GIT_INDEX_FILE="$ACTUAL_INDEX" git -C "$ENGINE" add -A -- .; then
     echo "Could not stage the prepared pdf-inspector tree." >&2
     exit 1
 fi
@@ -99,9 +100,11 @@ if [ "$EXPECTED_TREE" != "$ACTUAL_TREE" ]; then
     echo "Prepared pdf-inspector must match $REVISION plus $PATCH exactly." >&2
     exit 1
 fi
-if [ -n "$(git -C "$ENGINE" ls-files --others --exclude-standard)" ] || \
-    [ -n "$(git -C "$ENGINE" ls-files --others --ignored --exclude-standard)" ]; then
-    echo "Prepared pdf-inspector must not contain untracked or ignored files." >&2
+# `git add -A` above stages ordinary untracked files. That allows patch-added
+# files only when they match the expected tree, and makes any unexpected file
+# fail the tree comparison. Ignored files are not staged, so reject them here.
+if [ -n "$(git -C "$ENGINE" ls-files --others --ignored --exclude-standard)" ]; then
+    echo "Prepared pdf-inspector must not contain ignored untracked files." >&2
     exit 1
 fi
 

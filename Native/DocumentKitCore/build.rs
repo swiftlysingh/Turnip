@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output};
 
 fn main() {
@@ -69,6 +69,7 @@ fn main() {
         "could not apply the tracked Apple CMap patch"
     );
     let expected_tree = write_tree(&engine, expected_index.path());
+    let expected_paths = tracked_engine_paths(&engine, expected_index.path());
 
     let actual_index = TemporaryIndex::new("actual");
     let output = git_output(&engine, Some(actual_index.path()), &["read-tree", "HEAD"]);
@@ -79,7 +80,7 @@ fn main() {
     let output = git_output(
         &engine,
         Some(actual_index.path()),
-        &["add", "-u", "--", "."],
+        &["add", "-A", "--", "."],
     );
     assert!(
         output.status.success(),
@@ -91,20 +92,22 @@ fn main() {
         "the prepared pdf-inspector tree does not match ENGINE_REVISION plus the tracked Apple CMap patch"
     );
 
-    for args in [
-        &["ls-files", "--others", "--exclude-standard"][..],
-        &["ls-files", "--others", "--ignored", "--exclude-standard"][..],
-    ] {
-        let output = git_output(&engine, None, args);
-        assert!(
-            output.status.success(),
-            "could not inspect untracked pdf-inspector files"
-        );
-        assert!(
-            output.stdout.is_empty(),
-            "the prepared pdf-inspector tree contains untracked or ignored files"
-        );
-    }
+    // `git add -A` above includes ordinary untracked files in `actual_tree`.
+    // That permits patch-added files only when they exactly match `expected_tree`,
+    // while any other ordinary untracked file makes the tree comparison fail.
+    let output = git_output(
+        &engine,
+        None,
+        &["ls-files", "--others", "--ignored", "--exclude-standard"],
+    );
+    assert!(
+        output.status.success(),
+        "could not inspect ignored pdf-inspector files"
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "the prepared pdf-inspector tree contains ignored untracked files"
+    );
 
     println!("cargo:rustc-env=DOCUMENTKIT_PDF_INSPECTOR_VERSION={expected_version}");
     println!("cargo:rustc-env=DOCUMENTKIT_PDF_INSPECTOR_REVISION={expected_revision}");
@@ -118,12 +121,101 @@ fn main() {
         manifest_dir.join("Cargo.lock").display()
     );
     println!("cargo:rerun-if-changed={}", patch_path.display());
-    println!("cargo:rerun-if-changed={}", engine.display());
-    println!("cargo:rerun-if-changed={}", engine_manifest.display());
-    println!(
-        "cargo:rerun-if-changed={}",
-        engine.join(".git/HEAD").display()
+    for path in expected_paths {
+        rerun_if_changed(&path);
+    }
+    for path in git_metadata_paths(&engine) {
+        rerun_if_changed(&path);
+    }
+}
+
+fn rerun_if_changed(path: &Path) {
+    println!("cargo:rerun-if-changed={}", path.display());
+}
+
+fn tracked_engine_paths(engine: &Path, index: &Path) -> Vec<PathBuf> {
+    let output = git_output(engine, Some(index), &["ls-files", "--cached", "-z", "--"]);
+    assert!(
+        output.status.success(),
+        "could not enumerate tracked pdf-inspector files"
     );
+
+    output
+        .stdout
+        .split(|byte| *byte == b'\0')
+        .filter(|path| !path.is_empty())
+        .map(|path| {
+            let path =
+                std::str::from_utf8(path).expect("tracked pdf-inspector paths must be valid UTF-8");
+            let relative_path = Path::new(path);
+            assert!(
+                !relative_path.is_absolute()
+                    && relative_path
+                        .components()
+                        .all(|component| matches!(component, Component::Normal(_))),
+                "tracked pdf-inspector paths must be plain relative paths"
+            );
+            engine.join(relative_path)
+        })
+        .collect()
+}
+
+fn git_metadata_paths(engine: &Path) -> Vec<PathBuf> {
+    let mut paths = [
+        "HEAD",
+        "config",
+        "config.worktree",
+        "index",
+        "packed-refs",
+        "info/exclude",
+        "info/attributes",
+    ]
+    .into_iter()
+    .map(|path| git_path(engine, path))
+    .collect::<Vec<_>>();
+
+    let output = git_output(engine, None, &["symbolic-ref", "-q", "HEAD"]);
+    if output.status.success() {
+        let reference = String::from_utf8(output.stdout)
+            .expect("pdf-inspector symbolic reference is UTF-8")
+            .trim()
+            .to_owned();
+        assert!(
+            !reference.is_empty(),
+            "pdf-inspector symbolic reference must not be empty"
+        );
+        paths.push(git_path(engine, &reference));
+    } else {
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "could not inspect the prepared pdf-inspector HEAD"
+        );
+    }
+
+    paths
+}
+
+fn git_path(engine: &Path, name: &str) -> PathBuf {
+    let output = git_output(engine, None, &["rev-parse", "--git-path", name]);
+    assert!(
+        output.status.success(),
+        "could not locate pdf-inspector Git metadata"
+    );
+    let path = String::from_utf8(output.stdout)
+        .expect("pdf-inspector Git metadata path is UTF-8")
+        .trim()
+        .to_owned();
+    assert!(
+        !path.is_empty(),
+        "pdf-inspector Git metadata path must not be empty"
+    );
+    let path = PathBuf::from(path);
+    if path.is_absolute() {
+        path
+    } else {
+        engine.join(path)
+    }
 }
 
 fn read(path: &Path) -> String {
@@ -172,6 +264,7 @@ impl Drop for TemporaryIndex {
 fn git_output(engine: &Path, index: Option<&Path>, args: &[&str]) -> Output {
     let mut command = Command::new("git");
     command.arg("-C").arg(engine);
+    command.env_remove("GIT_INDEX_FILE");
     if let Some(index) = index {
         command.env("GIT_INDEX_FILE", index);
     }
