@@ -97,7 +97,7 @@ let options = DocumentOptions(
 let result = try await DocumentKit.extract(pdfData, options: options)
 ```
 
-Page indexes are zero-based, unique, and strictly ascending. `nil` means the
+Page indexes are zero-based, unique, nonempty, and strictly ascending. `nil` means the
 entire document. `inspection.pageCount` always reports the source PDF's total
 page count, even when only some pages were selected. Selected Markdown remains
 in document order.
@@ -221,7 +221,7 @@ then verifies the XCFramework architecture and header layout.
 ## Project layout
 
 ```text
-Sources/DocumentKit/           Public Swift API and private wire decoder
+Sources/DocumentKit/           Public Swift API, DocC catalog, and private wire decoder
 Native/DocumentKitCore/        Rust static-library bridge and C header
 Artifacts/                     Prebuilt local XCFramework
 Patches/                       Minimal patch applied to pinned pdf-inspector

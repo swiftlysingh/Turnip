@@ -153,8 +153,8 @@ public enum DocumentKit {
 
 /// Options shared by PDF inspection and Markdown extraction.
 ///
-/// `pageIndexes` are zero-based, strictly ascending, and unique. `nil`
-/// processes the entire PDF; selected pages are emitted in document order.
+/// `pageIndexes` are zero-based, strictly ascending, unique, and nonempty.
+/// `nil` processes the entire PDF; selected pages are emitted in document order.
 /// Passwords are passed to the engine and redacted from descriptions and
 /// reflection.
 public struct DocumentOptions: Sendable, CustomStringConvertible, CustomDebugStringConvertible,
@@ -167,8 +167,8 @@ public struct DocumentOptions: Sendable, CustomStringConvertible, CustomDebugStr
     /// Creates options for inspection or extraction.
     ///
     /// - Parameters:
-    ///   - pageIndexes: Zero-based, unique indexes in strictly ascending document order.
-    ///     Pass `nil` to process every page.
+    ///   - pageIndexes: Zero-based, unique, nonempty indexes in strictly
+    ///     ascending document order. Pass `nil` to process every page.
     ///   - password: A password for an encrypted PDF. DocumentKit passes it to the
     ///     native call and redacts it from public descriptions.
     public init(pageIndexes: [Int]? = nil, password: String? = nil) {

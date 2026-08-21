@@ -24,12 +24,13 @@ print(result.warnings)
 Use ``DocumentKit/extract(_:)`` when your app needs Markdown. Use
 ``DocumentKit/inspect(_:)`` when it only needs to classify a PDF and decide
 whether another OCR-capable path is needed. `inspect` does not first extract
-Markdown, so its layout and encoding fields are `nil`.
+Markdown, so its layout and encoding fields are `nil`. File URLs use
+``DocumentKit/extract(contentsOf:)`` and ``DocumentKit/inspect(contentsOf:)``.
 
 ## Select pages and handle passwords
 
-All public page indexes are zero-based. A selection must be unique and strictly
-ascending. Pass `nil` to process the whole document.
+All public page indexes are zero-based. A selection must be unique, nonempty,
+and strictly ascending. Pass `nil` to process the whole document.
 
 ```swift
 let options = DocumentOptions(
