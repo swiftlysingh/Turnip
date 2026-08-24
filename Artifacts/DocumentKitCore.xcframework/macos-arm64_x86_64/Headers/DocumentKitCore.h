@@ -58,6 +58,9 @@ void documentkit_buffer_free(DocumentKitBuffer buffer);
 /// Returns a process-lifetime UTF-8 string. Do not free it.
 const char *documentkit_engine_version(void);
 
+/// Returns the process-lifetime Git revision of the packaged engine. Do not free it.
+const char *documentkit_engine_revision(void);
+
 #ifdef __cplusplus
 }
 #endif

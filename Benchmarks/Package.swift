@@ -5,7 +5,6 @@ import PackageDescription
 let package = Package(
     name: "DocumentKitBenchmarks",
     platforms: [
-        .iOS(.v16),
         .macOS(.v13),
     ],
     products: [
@@ -18,13 +17,24 @@ let package = Package(
         .package(name: "DocumentKit", path: ".."),
     ],
     targets: [
-        .executableTarget(
-            name: "DocumentKitBenchmark",
+        .target(
+            name: "BenchmarkCore",
             dependencies: [
                 .product(name: "DocumentKit", package: "DocumentKit"),
             ],
             swiftSettings: [
                 .define("DOCUMENTKIT_BENCHMARK_RELEASE", .when(configuration: .release)),
+            ]
+        ),
+        .executableTarget(
+            name: "DocumentKitBenchmark",
+            dependencies: ["BenchmarkCore"]
+        ),
+        .testTarget(
+            name: "BenchmarkCoreTests",
+            dependencies: [
+                "BenchmarkCore",
+                .product(name: "DocumentKit", package: "DocumentKit"),
             ]
         ),
     ]

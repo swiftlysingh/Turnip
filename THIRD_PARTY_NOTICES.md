@@ -3,9 +3,10 @@
 ## pdf-inspector
 
 DocumentKit includes compiled portions of
-[`firecrawl/pdf-inspector`](https://github.com/firecrawl/pdf-inspector), pinned
-to version 1.14.1 and source commit
-`f4aab3b36f7fa1752c65ea45fa64be1274f671cf`.
+[`swiftlysingh/pdf-inspector`](https://github.com/swiftlysingh/pdf-inspector), a
+fork of [`firecrawl/pdf-inspector`](https://github.com/firecrawl/pdf-inspector),
+pinned to version 1.14.2 and source commit
+`2322bcce4cd9458d24399bf8fee42f1aa201c8c1`.
 
 Copyright (c) 2026 Firecrawl
 

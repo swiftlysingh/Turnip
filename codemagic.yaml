@@ -22,8 +22,12 @@ workflows:
         script: Scripts/verify-artifact.sh
       - name: Test Swift package
         script: swift test --parallel
+      - name: Build DocC API documentation
+        script: Scripts/build-documentation.sh "$CM_BUILD_DIR/.ci-tmp/DocumentKit.doccarchive"
       - name: Build benchmark runner (release)
         script: swift build -c release --package-path Benchmarks
+      - name: Test benchmark package
+        script: swift test --package-path Benchmarks
       - name: Verify committed benchmark fixture
         script: Benchmarks/Scripts/verify-smoke-fixture.sh
       - name: Run diagnostic smoke benchmark (optimized)
@@ -36,21 +40,7 @@ workflows:
             --root Benchmarks \
             --output "$CM_BUILD_DIR/.ci-tmp/DocumentKit-Smoke" \
             --warmups 1 \
-            --repetitions 2
-      - name: Link iOS Simulator executable
-        script: |
-          set -euo pipefail
-          DOCUMENTKIT_IOS_SIMULATOR_SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
-          swift build --package-path Benchmarks \
-            --triple arm64-apple-ios16.0-simulator \
-            --sdk "$DOCUMENTKIT_IOS_SIMULATOR_SDK"
-      - name: Link iOS device executable
-        script: |
-          set -euo pipefail
-          DOCUMENTKIT_IOS_DEVICE_SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          swift build --package-path Benchmarks \
-            --triple arm64-apple-ios16.0 \
-            --sdk "$DOCUMENTKIT_IOS_DEVICE_SDK"
+            --repetitions 5
       - name: Build sample app for macOS
         script: |
           set -euo pipefail
@@ -78,6 +68,7 @@ workflows:
             -jobs 1 \
             build
     artifacts:
+      - .ci-tmp/DocumentKit.doccarchive/**
       - .ci-tmp/DocumentKit-Smoke/**
 
   rust:
@@ -113,6 +104,8 @@ workflows:
           echo "PATH=$HOME/.cargo/bin:$PATH" >> "$CM_ENV"
       - name: Prepare pinned engine
         script: Scripts/prepare-engine.sh
+      - name: Test engine provenance reruns
+        script: Scripts/test-engine-provenance.sh
       - name: Test bridge
         script: cargo test --locked --manifest-path Native/DocumentKitCore/Cargo.toml
       - name: Lint bridge

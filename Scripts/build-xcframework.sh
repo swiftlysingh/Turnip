@@ -6,6 +6,7 @@ MANIFEST="$ROOT/Native/DocumentKitCore/Cargo.toml"
 HEADERS="$ROOT/Native/DocumentKitCore/include"
 OUTPUT="$ROOT/Artifacts/DocumentKitCore.xcframework"
 BUILD="$ROOT/Build/DocumentKitCore"
+STAGED_OUTPUT="$BUILD/DocumentKitCore.xcframework"
 DOCUMENTKIT_RUST_TOOLCHAIN=$(rustup show active-toolchain | awk 'NR == 1 { print $1 }')
 DOCUMENTKIT_CARGO=$(rustup which --toolchain "$DOCUMENTKIT_RUST_TOOLCHAIN" cargo)
 DOCUMENTKIT_RUSTC=$(rustup which --toolchain "$DOCUMENTKIT_RUST_TOOLCHAIN" rustc)
@@ -34,7 +35,7 @@ make_universal() {
     xcrun lipo -create "$@" -output "$output"
 }
 
-rm -rf -- "$ROOT/Native/DocumentKitCore/target" "$BUILD" "$OUTPUT"
+rm -rf -- "$ROOT/Native/DocumentKitCore/target" "$BUILD"
 mkdir -p "$BUILD"
 
 build_target aarch64-apple-darwin "$BUILD/slices/macos-arm64.a"
@@ -55,11 +56,21 @@ xcodebuild -create-xcframework \
     -library "$BUILD/macos/libdocumentkit_core.a" -headers "$HEADERS" \
     -library "$BUILD/libdocumentkit_core-ios.a" -headers "$HEADERS" \
     -library "$BUILD/ios-simulator/libdocumentkit_core.a" -headers "$HEADERS" \
-    -output "$OUTPUT"
+    -output "$STAGED_OUTPUT"
+
+rm -rf -- "$OUTPUT"
+mv "$STAGED_OUTPUT" "$OUTPUT"
 
 (cd "$ROOT" && shasum -a 256 \
+    ENGINE_REVISION \
     Patches/pdf-inspector-embed-apple-cmaps.patch \
+    Scripts/prepare-engine.sh \
+    Native/DocumentKitCore/Cargo.toml \
     Native/DocumentKitCore/Cargo.lock \
+    Native/DocumentKitCore/build.rs \
+    Native/DocumentKitCore/src/lib.rs \
+    Native/DocumentKitCore/include/DocumentKitCore.h \
+    Artifacts/BUILD_INFO.md \
     Artifacts/DocumentKitCore.xcframework/macos-arm64_x86_64/libdocumentkit_core.a \
     Artifacts/DocumentKitCore.xcframework/ios-arm64/libdocumentkit_core-ios.a \
     Artifacts/DocumentKitCore.xcframework/ios-arm64_x86_64-simulator/libdocumentkit_core.a \

@@ -4,6 +4,5 @@
 Native/DocumentKitCore/target/
 Build/
 DerivedData/
-Benchmarks/Corpus/
 *.xcuserstate
 xcuserdata/

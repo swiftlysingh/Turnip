@@ -1,0 +1,76 @@
+{
+  "schema_version": 2,
+  "review_status": "complete",
+  "statement_id": "synthetic-statement-a",
+  "statement_period": "2026-01",
+  "statement_currency": "USD",
+  "truth_sha256": "2dc9408f2057be5a0f476042ea5f0687cdf01c523f54577c9d464d1d326b311e",
+  "canonical_markdown_sha256": "0c971df49e36f1e5ac03094577191b036b30916c82f26c873718ea3b33f6071f",
+  "sources": [
+    {
+      "variant": "standard",
+      "pdf_sha256": "a6b405a05d8051858c784edc7f6632d8776e817a0a548ac1275bedf0eede93b8",
+      "pdf_page_count": 1
+    },
+    {
+      "variant": "screen-reader",
+      "pdf_sha256": "df66aaeabbc8d3073cada7ccad61e70c75e9747fdfc974195e0a27bda9425b0f",
+      "pdf_page_count": 1
+    }
+  ],
+  "prior_author": {
+    "kind": "model",
+    "model": "gpt-5.6-terra",
+    "reasoning_effort": "max",
+    "exact_prompt_not_retained": true
+  },
+  "author_reconstruction_prompt": {
+    "text": "Source-only author reconstruction for the committed invented DocumentKit benchmark fixture: visually inspect both rendered synthetic PDF variants only. Do not open structured truth, canonical Markdown, manifests, review records, raw candidate output, or source code. Independently transcribe every transaction date, merchant, signed minor-unit amount, page index, statement currency and period, and preregistered critical field. Report unresolved ambiguity instead of inferring or repairing values.",
+    "sha256": "53f28d71322d6dab81e4f3b60ee8212ad6ec13149a5bbbba6c8bdc2d5de3f124"
+  },
+  "reviewer_reconstruction_prompt": {
+    "text": "Independent source-only reviewer reconstruction for the committed invented DocumentKit benchmark fixture: visually inspect both rendered synthetic PDF variants only. Do not open structured truth, canonical Markdown, manifests, review records, raw candidate output, source code, or the author reconstruction. Independently transcribe every transaction date, merchant, signed minor-unit amount, page index, statement currency and period, and preregistered critical field. Report unresolved ambiguity instead of inferring or repairing values.",
+    "sha256": "9be5eee1c95d32cf088fb295b4a1d846ae275cdd448ed29653345b08dbe724f4"
+  },
+  "author": {
+    "kind": "model",
+    "model": "gpt-5.6-luna",
+    "reasoning_effort": "max",
+    "prompt": {
+      "text": "Source-only author reconstruction for the committed invented DocumentKit benchmark fixture: visually inspect both rendered synthetic PDF variants only. Do not open structured truth, canonical Markdown, manifests, review records, raw candidate output, or source code. Independently transcribe every transaction date, merchant, signed minor-unit amount, page index, statement currency and period, and preregistered critical field. Report unresolved ambiguity instead of inferring or repairing values.",
+      "sha256": "53f28d71322d6dab81e4f3b60ee8212ad6ec13149a5bbbba6c8bdc2d5de3f124"
+    }
+  },
+  "reviewer": {
+    "kind": "model",
+    "model": "gpt-5.6-luna",
+    "reasoning_effort": "max",
+    "prompt": {
+      "text": "Independent source-only reviewer reconstruction for the committed invented DocumentKit benchmark fixture: visually inspect both rendered synthetic PDF variants only. Do not open structured truth, canonical Markdown, manifests, review records, raw candidate output, source code, or the author reconstruction. Independently transcribe every transaction date, merchant, signed minor-unit amount, page index, statement currency and period, and preregistered critical field. Report unresolved ambiguity instead of inferring or repairing values.",
+      "sha256": "9be5eee1c95d32cf088fb295b4a1d846ae275cdd448ed29653345b08dbe724f4"
+    }
+  },
+  "author_reviewer_independent": true,
+  "source_only_authoring": true,
+  "source_only_review": true,
+  "all_pages_visually_inspected": true,
+  "candidate_outputs_consulted": false,
+  "unresolved_transaction_discrepancies": false,
+  "unresolved_critical_discrepancies": false,
+  "semantic_equivalence": true,
+  "adjudication": {
+    "adjudicator": {
+      "kind": "model",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "xhigh",
+      "prompt": {
+        "text": "Adjudicate the two independent source-only reconstructions against both rendered pages and the frozen benchmark conventions. Resolve only zero-based page provenance, statement-period year, visible sign notation, and preregistered critical-field identifiers. Do not consult candidate output or repair source values. Record every unresolved discrepancy.",
+        "sha256": "c8fe2ee6a94c7f125eef7bd1e3ec703cc493d95d30d8005376e35c6c52a9714b"
+      }
+    },
+    "adjudication_result": {
+      "unresolved_transaction_discrepancies": 0,
+      "unresolved_critical_discrepancies": 0
+    }
+  }
+}

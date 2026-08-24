@@ -42,7 +42,13 @@ For apps that accept arbitrary internet documents:
 - Password bytes are borrowed only for the native call and are not included in
   JSON responses, errors, descriptions, logs, benchmark output, or sample-app
   persistence.
-- Corpus downloads and ground truth fail closed on checksum or rights errors.
+- The AMEX benchmark fails closed on manifest/input checksum, structured-truth,
+  canonical-Markdown, and checksum-pinned review/adjudication errors. Its
+  private inputs and reports remain under ignored `Benchmarks/Private/`.
+  Redacted output cannot serialize raw statement text, values, paths,
+  input/truth/review hashes, or localized errors; it may contain only safe
+  reproducibility metadata such as a sanitized source revision with an explicit
+  local verification status and a non-host machine model.
 
 ## Known limitations
 

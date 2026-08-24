@@ -3,6 +3,59 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 ARTIFACT="$ROOT/Artifacts/DocumentKitCore.xcframework"
+MANIFEST="$ROOT/Native/DocumentKitCore/Cargo.toml"
+LOCKFILE="$ROOT/Native/DocumentKitCore/Cargo.lock"
+RUST_SOURCE="$ROOT/Native/DocumentKitCore/src/lib.rs"
+SWIFT_SOURCE="$ROOT/Sources/DocumentKit/DocumentKit.swift"
+ENGINE_REVISION=$(tr -d '[:space:]' < "$ROOT/ENGINE_REVISION")
+ENGINE_VERSION=$(sed -n 's/^pdf-inspector = {.*version = "=\([^"]*\)".*}$/\1/p' "$MANIFEST")
+THIN_FILE=
+
+cleanup_thin_file() {
+    if [ -n "$THIN_FILE" ]; then
+        rm -f "$THIN_FILE"
+    fi
+}
+trap cleanup_thin_file 0
+trap 'cleanup_thin_file; exit 1' HUP INT TERM
+
+LOCKED_VERSION=$(awk '
+    $0 == "[[package]]" { package = 0 }
+    $0 == "name = \"pdf-inspector\"" { package = 1; next }
+    package && /^version = "/ {
+        sub(/^version = "/, "")
+        sub(/"$/, "")
+        print
+        exit
+    }
+' "$LOCKFILE")
+
+case "$ENGINE_REVISION" in
+    ""|*[!0-9a-f]*)
+        echo "ENGINE_REVISION must contain one lowercase 40-character Git revision." >&2
+        exit 1
+        ;;
+esac
+[ "${#ENGINE_REVISION}" -eq 40 ] || {
+    echo "ENGINE_REVISION must contain one lowercase 40-character Git revision." >&2
+    exit 1
+}
+[ -n "$ENGINE_VERSION" ] || {
+    echo "pdf-inspector must use an exact version pin in $MANIFEST" >&2
+    exit 1
+}
+[ "$ENGINE_VERSION" = "$LOCKED_VERSION" ] || {
+    echo "pdf-inspector is pinned to $ENGINE_VERSION but Cargo.lock contains $LOCKED_VERSION" >&2
+    exit 1
+}
+
+grep -Fq -- "- pdf-inspector version: \`$ENGINE_VERSION\`" "$ROOT/Artifacts/BUILD_INFO.md"
+grep -Fq -- "- pdf-inspector upstream source revision: \`$ENGINE_REVISION\`" "$ROOT/Artifacts/BUILD_INFO.md"
+grep -Fq "pinned to version $ENGINE_VERSION and source commit" "$ROOT/THIRD_PARTY_NOTICES.md"
+grep -Fq "\`$ENGINE_REVISION\`" "$ROOT/THIRD_PARTY_NOTICES.md"
+grep -Fq 'env!("DOCUMENTKIT_PDF_INSPECTOR_VERSION")' "$RUST_SOURCE"
+grep -Fq 'env!("DOCUMENTKIT_PDF_INSPECTOR_REVISION")' "$RUST_SOURCE"
+grep -Fq 'documentkit_engine_revision()' "$SWIFT_SOURCE"
 
 (cd "$ROOT" && shasum -a 256 -c Artifacts/SHA256SUMS)
 
@@ -34,7 +87,8 @@ expect_symbols() {
             _documentkit_inspect_with_options \
             _documentkit_extract_with_options \
             _documentkit_buffer_free \
-            _documentkit_engine_version; do
+            _documentkit_engine_version \
+            _documentkit_engine_revision; do
             xcrun nm -gU "$file" 2>/dev/null | awk '{print $NF}' | grep -qx "$symbol"
         done
         return
@@ -42,18 +96,20 @@ expect_symbols() {
 
     for architecture in arm64 x86_64; do
         if echo "$info" | grep -q "$architecture"; then
-            thin=$(mktemp "${TMPDIR:-/tmp}/documentkit-symbols.XXXXXX")
-            xcrun lipo "$file" -thin "$architecture" -output "$thin"
+            THIN_FILE=$(mktemp "${TMPDIR:-/tmp}/documentkit-symbols.XXXXXX")
+            xcrun lipo "$file" -thin "$architecture" -output "$THIN_FILE"
             for symbol in \
                 _documentkit_inspect \
                 _documentkit_extract \
                 _documentkit_inspect_with_options \
                 _documentkit_extract_with_options \
                 _documentkit_buffer_free \
-                _documentkit_engine_version; do
-                xcrun nm -gU "$thin" 2>/dev/null | awk '{print $NF}' | grep -qx "$symbol"
+                _documentkit_engine_version \
+                _documentkit_engine_revision; do
+                xcrun nm -gU "$THIN_FILE" 2>/dev/null | awk '{print $NF}' | grep -qx "$symbol"
             done
-            rm -f "$thin"
+            rm -f "$THIN_FILE"
+            THIN_FILE=
         fi
     done
 }
@@ -61,6 +117,37 @@ expect_symbols() {
 expect_symbols "$ARTIFACT/macos-arm64_x86_64/libdocumentkit_core.a"
 expect_symbols "$ARTIFACT/ios-arm64/libdocumentkit_core-ios.a"
 expect_symbols "$ARTIFACT/ios-arm64_x86_64-simulator/libdocumentkit_core.a"
+
+expect_identity() {
+    file=$1
+    info=$(xcrun lipo -info "$file")
+    if echo "$info" | grep -q "Non-fat file"; then
+        if ! strings "$file" | grep -Fqx "pdf-inspector/$ENGINE_VERSION" || \
+            ! strings "$file" | grep -Fqx "$ENGINE_REVISION"; then
+            echo "Packaged engine identity does not match $ENGINE_VERSION@$ENGINE_REVISION in $file" >&2
+            exit 1
+        fi
+        return
+    fi
+
+    for architecture in arm64 x86_64; do
+        if echo "$info" | grep -q "$architecture"; then
+            THIN_FILE=$(mktemp "${TMPDIR:-/tmp}/documentkit-identity.XXXXXX")
+            xcrun lipo "$file" -thin "$architecture" -output "$THIN_FILE"
+            if ! strings "$THIN_FILE" | grep -Fqx "pdf-inspector/$ENGINE_VERSION" || \
+                ! strings "$THIN_FILE" | grep -Fqx "$ENGINE_REVISION"; then
+                echo "Packaged engine identity does not match $ENGINE_VERSION@$ENGINE_REVISION in $file ($architecture)" >&2
+                exit 1
+            fi
+            rm -f "$THIN_FILE"
+            THIN_FILE=
+        fi
+    done
+}
+
+expect_identity "$ARTIFACT/macos-arm64_x86_64/libdocumentkit_core.a"
+expect_identity "$ARTIFACT/ios-arm64/libdocumentkit_core-ios.a"
+expect_identity "$ARTIFACT/ios-arm64_x86_64-simulator/libdocumentkit_core.a"
 
 for headers in "$ARTIFACT"/*/Headers; do
     test -f "$headers/DocumentKitCore.h"

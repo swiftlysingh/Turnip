@@ -1,0 +1,79 @@
+{
+  "schema_version": 2,
+  "statement_id": "synthetic-statement-a",
+  "statement_period": "2026-01",
+  "statement_currency": "USD",
+  "canonical_markdown": {
+    "path": "Fixtures/Smoke/synthetic-amex-canonical.md",
+    "sha256": "0c971df49e36f1e5ac03094577191b036b30916c82f26c873718ea3b33f6071f"
+  },
+  "transactions": [
+    {
+      "date": "2026-01-03",
+      "merchant": "Lantern Cafe",
+      "signed_amount_minor": 1234,
+      "page_index": 0
+    },
+    {
+      "date": "2026-01-04",
+      "merchant": "Orbit Paper Co.",
+      "signed_amount_minor": -500,
+      "page_index": 0
+    },
+    {
+      "date": "2026-01-04",
+      "merchant": "Orbit Paper Co.",
+      "signed_amount_minor": -500,
+      "page_index": 0
+    },
+    {
+      "date": "2026-01-06",
+      "merchant": "Northwind Books",
+      "signed_amount_minor": -999,
+      "page_index": 0
+    }
+  ],
+  "critical_values": [
+    {
+      "id": "new_balance",
+      "kind": "amount",
+      "signed_amount_minor": 12733,
+      "currency": "USD"
+    },
+    {
+      "id": "minimum_payment",
+      "kind": "amount",
+      "signed_amount_minor": 2500,
+      "currency": "USD"
+    },
+    {
+      "id": "payment_due_date",
+      "kind": "date",
+      "date": "2026-02-15"
+    },
+    {
+      "id": "credit_limit",
+      "kind": "amount",
+      "signed_amount_minor": 100000,
+      "currency": "USD"
+    },
+    {
+      "id": "payments_credits",
+      "kind": "amount",
+      "signed_amount_minor": -5000,
+      "currency": "USD"
+    },
+    {
+      "id": "fees",
+      "kind": "amount",
+      "signed_amount_minor": 0,
+      "currency": "USD"
+    },
+    {
+      "id": "interest",
+      "kind": "amount",
+      "signed_amount_minor": 123,
+      "currency": "USD"
+    }
+  ]
+}
