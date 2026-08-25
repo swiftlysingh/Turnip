@@ -8,7 +8,7 @@ to the latest commit on `main`; no released version is supported yet.
 ## Reporting a vulnerability
 
 Do not open a public issue for a suspected vulnerability. Use GitHub's private
-security advisory flow for `swiftlysingh/DocumentKit`, or contact the repository
+security advisory flow for `swiftlysingh/Turnip`, or contact the repository
 owner privately with a minimal reproducer and the affected engine revision.
 
 ## Threat model

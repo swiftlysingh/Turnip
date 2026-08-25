@@ -9,7 +9,7 @@ fi
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 OUTPUT=$1
 CATALOG="$ROOT/Sources/Turnip/Turnip.docc"
-HOSTING_BASE_PATH=${TURNIP_DOCC_HOSTING_BASE_PATH:-/DocumentKit}
+HOSTING_BASE_PATH=${TURNIP_DOCC_HOSTING_BASE_PATH:-/Turnip}
 
 case "$HOSTING_BASE_PATH" in
     /*) ;;
@@ -100,7 +100,7 @@ xcrun docc convert "$CATALOG" \
     --platform name=macOS,version=13.0 \
     --checkout-path "$ROOT" \
     --source-service github \
-    --source-service-base-url https://github.com/swiftlysingh/DocumentKit/blob/main \
+    --source-service-base-url https://github.com/swiftlysingh/Turnip/blob/main \
     --hosting-base-path "$HOSTING_BASE_PATH" \
     --transform-for-static-hosting \
     --warnings-as-errors

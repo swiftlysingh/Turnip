@@ -55,7 +55,7 @@ private package in Xcode using its repository URL, then add the `Turnip`
 product to your app target:
 
 ```text
-git@github.com:swiftlysingh/DocumentKit.git
+git@github.com:swiftlysingh/Turnip.git
 ```
 
 The binary target is an implementation detail. Client code imports only:
@@ -146,7 +146,7 @@ unused output path:
 Scripts/build-documentation.sh /tmp/Turnip.doccarchive
 ```
 
-The archive is built for the repository's current `/DocumentKit` hosting path.
+The archive is built for the repository's current `/Turnip` hosting path.
 
 ## Sample app
 

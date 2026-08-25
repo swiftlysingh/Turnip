@@ -70,7 +70,7 @@ real-holdout or product-adoption evidence. One unseen real statement period and
 its paired variants are the minimum useful holdout. Three separate unseen
 periods are required before a broader public accuracy claim.
 
-The [repository benchmark methodology](https://github.com/swiftlysingh/DocumentKit/blob/main/Benchmarks/README.md)
+The [repository benchmark methodology](https://github.com/swiftlysingh/Turnip/blob/main/Benchmarks/README.md)
 defines the candidate boundary, frozen adapter, redacted reports, and holdout
 rules.
 
