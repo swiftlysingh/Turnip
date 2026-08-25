@@ -2,7 +2,7 @@
 
 ## pdf-inspector
 
-DocumentKit includes compiled portions of
+Turnip includes compiled portions of
 [`swiftlysingh/pdf-inspector`](https://github.com/swiftlysingh/pdf-inspector), a
 fork of [`firecrawl/pdf-inspector`](https://github.com/firecrawl/pdf-inspector),
 pinned to version 1.14.2 and source commit

@@ -3,7 +3,7 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 FIXTURE_DIR="$ROOT/Fixtures/Smoke"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/documentkit-smoke-fixture.XXXXXX")
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/turnip-smoke-fixture.XXXXXX")
 trap 'rm -rf "$TEMP_DIR"' EXIT HUP INT TERM
 
 (cd "$FIXTURE_DIR" && shasum -a 256 -c SHA256SUMS >/dev/null 2>&1)

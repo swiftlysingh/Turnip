@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "511111111111111111111111"
-               BuildableName = "DocumentKitDemo.app"
-               BlueprintName = "DocumentKitDemo"
-               ReferencedContainer = "container:DocumentKitDemo.xcodeproj">
+               BuildableName = "TurnipDemo.app"
+               BlueprintName = "TurnipDemo"
+               ReferencedContainer = "container:TurnipDemo.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -38,9 +38,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "511111111111111111111111"
-            BuildableName = "DocumentKitDemo.app"
-            BlueprintName = "DocumentKitDemo"
-            ReferencedContainer = "container:DocumentKitDemo.xcodeproj">
+            BuildableName = "TurnipDemo.app"
+            BlueprintName = "TurnipDemo"
+            ReferencedContainer = "container:TurnipDemo.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>

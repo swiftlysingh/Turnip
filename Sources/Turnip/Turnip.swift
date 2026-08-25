@@ -3,26 +3,26 @@ import Foundation
 
 /// Inspects local PDFs and extracts their embedded text as Markdown.
 ///
-/// DocumentKit does not upload documents or perform OCR. Use ``inspect(_:)``
+/// Turnip does not upload documents or perform OCR. Use ``inspect(_:)``
 /// to decide how to route a PDF, or ``extract(_:)`` when the app needs
 /// Markdown.
-public enum DocumentKit {
+public enum Turnip {
     /// The largest PDF input accepted by the public API, in bytes.
     ///
-    /// Inputs larger than this limit throw ``DocumentKitError/inputTooLarge(maximumBytes:)``.
+    /// Inputs larger than this limit throw ``TurnipError/inputTooLarge(maximumBytes:)``.
     public static let maximumInputSize = 100 * 1024 * 1024
 
     /// The pinned upstream engine source revision embedded in the packaged binary.
     ///
     /// This identifies the upstream source commit. It does not include the
-    /// hash of DocumentKit's tracked Apple patch.
+    /// hash of Turnip's tracked Apple patch.
     public static let engineRevision = String(cString: documentkit_engine_revision())
 
     /// Inspects PDF data without producing Markdown.
     ///
     /// - Parameter data: The complete PDF data to inspect.
     /// - Returns: Classification and OCR-routing information for the PDF.
-    /// - Throws: A ``DocumentKitError`` when the input cannot be inspected.
+    /// - Throws: A ``TurnipError`` when the input cannot be inspected.
     public static func inspect(_ data: Data) async throws -> DocumentInspection {
         try await inspect(data, options: DocumentOptions())
     }
@@ -33,7 +33,7 @@ public enum DocumentKit {
     ///   - data: The complete PDF data to inspect.
     ///   - options: Page-selection and password options.
     /// - Returns: Classification and OCR-routing information for the PDF.
-    /// - Throws: A ``DocumentKitError`` when the input or options are invalid.
+    /// - Throws: A ``TurnipError`` when the input or options are invalid.
     public static func inspect(
         _ data: Data,
         options: DocumentOptions
@@ -44,12 +44,12 @@ public enum DocumentKit {
 
     /// Inspects a PDF at a file URL without producing Markdown.
     ///
-    /// DocumentKit checks available file-size metadata before reading and enforces
+    /// Turnip checks available file-size metadata before reading and enforces
     /// the input limit after loading.
     ///
     /// - Parameter url: The URL of a local PDF file.
     /// - Returns: Classification and OCR-routing information for the PDF.
-    /// - Throws: A ``DocumentKitError`` for validation or inspection failures,
+    /// - Throws: A ``TurnipError`` for validation or inspection failures,
     ///   file or resource-loading errors, or `CancellationError` if the task is cancelled.
     public static func inspect(contentsOf url: URL) async throws -> DocumentInspection {
         try await inspect(load(url))
@@ -61,7 +61,7 @@ public enum DocumentKit {
     ///   - url: The URL of a local PDF file.
     ///   - options: Page-selection and password options.
     /// - Returns: Classification and OCR-routing information for the PDF.
-    /// - Throws: A ``DocumentKitError`` for validation or inspection failures,
+    /// - Throws: A ``TurnipError`` for validation or inspection failures,
     ///   file or resource-loading errors, or `CancellationError` if the task is cancelled.
     public static func inspect(
         contentsOf url: URL,
@@ -77,7 +77,7 @@ public enum DocumentKit {
     ///
     /// - Parameter data: The complete PDF data to extract.
     /// - Returns: Markdown together with inspection information and warnings.
-    /// - Throws: A ``DocumentKitError`` when the input is invalid or has no extractable text.
+    /// - Throws: A ``TurnipError`` when the input is invalid or has no extractable text.
     public static func extract(_ data: Data) async throws -> DocumentExtraction {
         try await extract(data, options: DocumentOptions())
     }
@@ -88,7 +88,7 @@ public enum DocumentKit {
     ///   - data: The complete PDF data to extract.
     ///   - options: Page-selection and password options.
     /// - Returns: Markdown together with inspection information and warnings.
-    /// - Throws: A ``DocumentKitError`` when the input or options are invalid,
+    /// - Throws: A ``TurnipError`` when the input or options are invalid,
     ///   or when the selection has no extractable text.
     public static func extract(
         _ data: Data,
@@ -96,7 +96,7 @@ public enum DocumentKit {
     ) async throws -> DocumentExtraction {
         let payload = try await Engine.run(.extract, data: data, options: options)
         guard let markdown = payload.markdown, !markdown.isEmpty else {
-            throw DocumentKitError.noExtractableText(payload.inspection)
+            throw TurnipError.noExtractableText(payload.inspection)
         }
         return DocumentExtraction(
             markdown: markdown,
@@ -107,12 +107,12 @@ public enum DocumentKit {
 
     /// Extracts Markdown from a PDF at a file URL.
     ///
-    /// DocumentKit checks available file-size metadata before reading and enforces
+    /// Turnip checks available file-size metadata before reading and enforces
     /// the input limit after loading.
     ///
     /// - Parameter url: The URL of a local PDF file.
     /// - Returns: Markdown together with inspection information and warnings.
-    /// - Throws: A ``DocumentKitError`` for validation or extraction failures,
+    /// - Throws: A ``TurnipError`` for validation or extraction failures,
     ///   file or resource-loading errors, or `CancellationError` if the task is cancelled.
     public static func extract(contentsOf url: URL) async throws -> DocumentExtraction {
         try await extract(load(url))
@@ -124,7 +124,7 @@ public enum DocumentKit {
     ///   - url: The URL of a local PDF file.
     ///   - options: Page-selection and password options.
     /// - Returns: Markdown together with inspection information and warnings.
-    /// - Throws: A ``DocumentKitError`` for validation or extraction failures,
+    /// - Throws: A ``TurnipError`` for validation or extraction failures,
     ///   file or resource-loading errors, or `CancellationError` if the task is cancelled.
     public static func extract(
         contentsOf url: URL,
@@ -138,7 +138,7 @@ public enum DocumentKit {
             try Task.checkCancellation()
             let values = try url.resourceValues(forKeys: [.fileSizeKey])
             if let fileSize = values.fileSize, fileSize > maximumInputSize {
-                throw DocumentKitError.inputTooLarge(maximumBytes: maximumInputSize)
+                throw TurnipError.inputTooLarge(maximumBytes: maximumInputSize)
             }
             let data = try Data(contentsOf: url, options: [.mappedIfSafe])
             try Task.checkCancellation()
@@ -169,7 +169,7 @@ public struct DocumentOptions: Sendable, CustomStringConvertible, CustomDebugStr
     /// - Parameters:
     ///   - pageIndexes: Zero-based, unique, nonempty indexes in strictly
     ///     ascending document order. Pass `nil` to process every page.
-    ///   - password: A password for an encrypted PDF. DocumentKit passes it to the
+    ///   - password: A password for an encrypted PDF. Turnip passes it to the
     ///     native call and redacts it from public descriptions.
     public init(pageIndexes: [Int]? = nil, password: String? = nil) {
         self.pageIndexes = pageIndexes
@@ -201,23 +201,23 @@ public struct DocumentOptions: Sendable, CustomStringConvertible, CustomDebugStr
     fileprivate func validatedPageIndexes() throws -> [UInt32]? {
         guard let pageIndexes else { return nil }
         guard !pageIndexes.isEmpty else {
-            throw DocumentKitError.invalidPageSelection(.empty)
+            throw TurnipError.invalidPageSelection(.empty)
         }
 
         var seen = Set<Int>()
         for pageIndex in pageIndexes {
             guard pageIndex >= 0 else {
-                throw DocumentKitError.invalidPageSelection(.negative(pageIndex: pageIndex))
+                throw TurnipError.invalidPageSelection(.negative(pageIndex: pageIndex))
             }
             guard let value = UInt32(exactly: pageIndex), value < UInt32.max else {
-                throw DocumentKitError.invalidPageSelection(.exceedsEngineLimit(pageIndex: pageIndex))
+                throw TurnipError.invalidPageSelection(.exceedsEngineLimit(pageIndex: pageIndex))
             }
             guard seen.insert(pageIndex).inserted else {
-                throw DocumentKitError.invalidPageSelection(.duplicate(pageIndex: pageIndex))
+                throw TurnipError.invalidPageSelection(.duplicate(pageIndex: pageIndex))
             }
         }
         guard zip(pageIndexes, pageIndexes.dropFirst()).allSatisfy({ $0.0 < $0.1 }) else {
-            throw DocumentKitError.invalidPageSelection(.notAscending)
+            throw TurnipError.invalidPageSelection(.notAscending)
         }
         return pageIndexes.map { UInt32($0) }
     }
@@ -237,7 +237,7 @@ public struct DocumentExtraction: Sendable, Hashable {
 
 /// Classification, routing, and quality information reported for a PDF.
 ///
-/// ``DocumentKit/inspect(_:)`` returns the detect-only subset. Its ``layout``
+/// ``Turnip/inspect(_:)`` returns the detect-only subset. Its ``layout``
 /// and ``hasEncodingIssues`` values are `nil` because Markdown is not built.
 public struct DocumentInspection: Sendable, Hashable {
     /// The engine's classification of the source PDF.
@@ -326,11 +326,11 @@ public struct DocumentWarning: Sendable, Hashable {
 }
 
 /// Errors returned by PDF inspection and Markdown extraction.
-public enum DocumentKitError: Error, Sendable, Hashable {
+public enum TurnipError: Error, Sendable, Hashable {
     /// The input data is empty.
     case emptyInput
 
-    /// The input exceeds ``DocumentKit/maximumInputSize``.
+    /// The input exceeds ``Turnip/maximumInputSize``.
     case inputTooLarge(maximumBytes: Int)
 
     /// The PDF is encrypted and the password is missing or incorrect.
@@ -352,7 +352,7 @@ public enum DocumentKitError: Error, Sendable, Hashable {
     case engineFailure(code: String, message: String)
 }
 
-extension DocumentKitError: LocalizedError {
+extension TurnipError: LocalizedError {
     /// A user-readable description of this error.
     public var errorDescription: String? {
         switch self {
@@ -420,9 +420,9 @@ private enum Engine {
         data: Data,
         options: DocumentOptions
     ) async throws -> Payload {
-        guard !data.isEmpty else { throw DocumentKitError.emptyInput }
-        guard data.count <= DocumentKit.maximumInputSize else {
-            throw DocumentKitError.inputTooLarge(maximumBytes: DocumentKit.maximumInputSize)
+        guard !data.isEmpty else { throw TurnipError.emptyInput }
+        guard data.count <= Turnip.maximumInputSize else {
+            throw TurnipError.inputTooLarge(maximumBytes: Turnip.maximumInputSize)
         }
 
         let pageIndexes = try options.validatedPageIndexes()
@@ -488,7 +488,7 @@ private enum Engine {
         }
         guard let pointer = buffer.data, buffer.length > 0 else {
             documentkit_buffer_free(buffer)
-            throw DocumentKitError.engineFailure(
+            throw TurnipError.engineFailure(
                 code: "empty_response",
                 message: "The PDF engine returned no response."
             )
@@ -499,7 +499,7 @@ private enum Engine {
         do {
             return try JSONDecoder().decode(WireResponse.self, from: data)
         } catch {
-            throw DocumentKitError.engineFailure(
+            throw TurnipError.engineFailure(
                 code: "invalid_response",
                 message: "The PDF engine returned an unreadable response."
             )
@@ -518,26 +518,26 @@ private struct Payload: Sendable {
         selectedPageIndexes: [Int]?
     ) throws {
         guard response.schemaVersion == 1 else {
-            throw DocumentKitError.engineFailure(
+            throw TurnipError.engineFailure(
                 code: "unsupported_schema",
                 message: "The PDF engine returned an unsupported response."
             )
         }
         guard response.ok, let result = response.result else {
-            throw response.error?.documentKitError
-                ?? DocumentKitError.engineFailure(
+            throw response.error?.turnipError
+                ?? TurnipError.engineFailure(
                     code: "invalid_response",
                     message: "The PDF engine returned an invalid response."
                 )
         }
         guard let kind = DocumentKind(wireValue: result.pdfType) else {
-            throw DocumentKitError.engineFailure(
+            throw TurnipError.engineFailure(
                 code: "unknown_pdf_type",
                 message: "The PDF engine returned an unknown document type."
             )
         }
         guard result.pageCount > 0 else {
-            throw DocumentKitError.engineFailure(
+            throw TurnipError.engineFailure(
                 code: "invalid_page_count",
                 message: "The PDF engine returned an invalid page count."
             )
@@ -550,7 +550,7 @@ private struct Payload: Sendable {
             result.pagesWithColumns,
         ]
         guard pageCollections.joined().allSatisfy(pageRange.contains) else {
-            throw DocumentKitError.engineFailure(
+            throw TurnipError.engineFailure(
                 code: "invalid_page_index",
                 message: "The PDF engine returned an out-of-range page index."
             )
@@ -575,7 +575,7 @@ private struct Payload: Sendable {
                 )
                 : nil,
             hasEncodingIssues: operation == .extract ? result.hasEncodingIssues : nil,
-            engineVersion: "\(result.engineVersion)@\(DocumentKit.engineRevision)"
+            engineVersion: "\(result.engineVersion)@\(Turnip.engineRevision)"
         )
 
         var warnings: [DocumentWarning] = []
@@ -672,10 +672,10 @@ private struct WireError: Decodable {
         case pageCount = "page_count"
     }
 
-    var documentKitError: DocumentKitError {
+    var turnipError: TurnipError {
         switch code {
         case "empty_input": .emptyInput
-        case "input_too_large": .inputTooLarge(maximumBytes: DocumentKit.maximumInputSize)
+        case "input_too_large": .inputTooLarge(maximumBytes: Turnip.maximumInputSize)
         case "encrypted_pdf": .encryptedPDF
         case "empty_page_selection": .invalidPageSelection(.empty)
         case "invalid_page_order": .invalidPageSelection(.notAscending)

@@ -3,38 +3,38 @@
 import PackageDescription
 
 let package = Package(
-    name: "DocumentKitBenchmarks",
+    name: "TurnipBenchmarks",
     platforms: [
         .macOS(.v13),
     ],
     products: [
         .executable(
-            name: "documentkit-benchmark",
-            targets: ["DocumentKitBenchmark"]
+            name: "turnip-benchmark",
+            targets: ["TurnipBenchmark"]
         ),
     ],
     dependencies: [
-        .package(name: "DocumentKit", path: ".."),
+        .package(name: "Turnip", path: ".."),
     ],
     targets: [
         .target(
             name: "BenchmarkCore",
             dependencies: [
-                .product(name: "DocumentKit", package: "DocumentKit"),
+                .product(name: "Turnip", package: "Turnip"),
             ],
             swiftSettings: [
-                .define("DOCUMENTKIT_BENCHMARK_RELEASE", .when(configuration: .release)),
+                .define("TURNIP_BENCHMARK_RELEASE", .when(configuration: .release)),
             ]
         ),
         .executableTarget(
-            name: "DocumentKitBenchmark",
+            name: "TurnipBenchmark",
             dependencies: ["BenchmarkCore"]
         ),
         .testTarget(
             name: "BenchmarkCoreTests",
             dependencies: [
                 "BenchmarkCore",
-                .product(name: "DocumentKit", package: "DocumentKit"),
+                .product(name: "Turnip", package: "Turnip"),
             ]
         ),
     ]

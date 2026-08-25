@@ -1,31 +1,31 @@
-# ``DocumentKit``
+# ``Turnip``
 
 Extract Markdown from PDFs locally in iOS and macOS apps.
 
 ## Overview
 
-DocumentKit wraps a pinned PDF engine behind a small Swift API. It reads PDF
+Turnip wraps a pinned PDF engine behind a small Swift API. It reads PDF
 data in the app process, produces Markdown when embedded text is available, and
 reports classification, layout, encoding, and OCR-routing signals alongside the
 result. It does not upload PDFs, call an LLM, convert Office documents, or
 perform OCR.
 
 ```swift
-import DocumentKit
+import Turnip
 import Foundation
 
-let result = try await DocumentKit.extract(pdfData)
+let result = try await Turnip.extract(pdfData)
 
 print(result.markdown)
 print(result.inspection.kind)
 print(result.warnings)
 ```
 
-Use ``DocumentKit/extract(_:)`` when your app needs Markdown. Use
-``DocumentKit/inspect(_:)`` when it only needs to classify a PDF and decide
+Use ``Turnip/extract(_:)`` when your app needs Markdown. Use
+``Turnip/inspect(_:)`` when it only needs to classify a PDF and decide
 whether another OCR-capable path is needed. `inspect` does not first extract
 Markdown, so its layout and encoding fields are `nil`. File URLs use
-``DocumentKit/extract(contentsOf:)`` and ``DocumentKit/inspect(contentsOf:)``.
+``Turnip/extract(contentsOf:)`` and ``Turnip/inspect(contentsOf:)``.
 
 ## Select pages and handle passwords
 
@@ -37,12 +37,12 @@ let options = DocumentOptions(
     pageIndexes: [0, 2, 3],
     password: suppliedPassword
 )
-let result = try await DocumentKit.extract(pdfData, options: options)
+let result = try await Turnip.extract(pdfData, options: options)
 ```
 
-DocumentKit passes the supplied password to the engine and redacts it from
+Turnip passes the supplied password to the engine and redacts it from
 `DocumentOptions` descriptions and reflection. It limits every input to
-``DocumentKit/maximumInputSize``. A parsed PDF still runs in the app process,
+``Turnip/maximumInputSize``. A parsed PDF still runs in the app process,
 so apps that accept hostile documents should apply their own concurrency and
 resource limits.
 
@@ -55,7 +55,7 @@ engine recommends OCR for one or more pages, and
 ``DocumentWarning/Kind/encodingIssues`` means the engine found decoding issues.
 
 For a scanned or image-only PDF, extraction throws
-``DocumentKitError/noExtractableText(_:)`` and includes the inspection that
+``TurnipError/noExtractableText(_:)`` and includes the inspection that
 explains the routing decision.
 
 ## Benchmark status
@@ -78,16 +78,16 @@ rules.
 
 ### Essentials
 
-- ``DocumentKit/extract(_:)``
-- ``DocumentKit/extract(_:options:)``
-- ``DocumentKit/extract(contentsOf:)``
-- ``DocumentKit/extract(contentsOf:options:)``
-- ``DocumentKit/inspect(_:)``
-- ``DocumentKit/inspect(_:options:)``
-- ``DocumentKit/inspect(contentsOf:)``
-- ``DocumentKit/inspect(contentsOf:options:)``
-- ``DocumentKit/maximumInputSize``
-- ``DocumentKit/engineRevision``
+- ``Turnip/extract(_:)``
+- ``Turnip/extract(_:options:)``
+- ``Turnip/extract(contentsOf:)``
+- ``Turnip/extract(contentsOf:options:)``
+- ``Turnip/inspect(_:)``
+- ``Turnip/inspect(_:options:)``
+- ``Turnip/inspect(contentsOf:)``
+- ``Turnip/inspect(contentsOf:options:)``
+- ``Turnip/maximumInputSize``
+- ``Turnip/engineRevision``
 - ``DocumentOptions``
 
 ### Results
@@ -101,5 +101,5 @@ rules.
 
 ### Errors
 
-- ``DocumentKitError``
+- ``TurnipError``
 - ``PageSelectionError``

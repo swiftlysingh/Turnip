@@ -1,13 +1,13 @@
 # Architecture
 
-DocumentKit keeps the public Swift API independent from the Rust engine and its
+Turnip keeps the public Swift API independent from the Rust engine and its
 wire format.
 
 ```text
 PDF Data or URL
       |
       v
-DocumentKit Swift API
+Turnip Swift API
   input/options validation, async handoff, typed errors
       |
       v
@@ -27,11 +27,11 @@ typed DocumentInspection or DocumentExtraction
 
 ## Public boundary
 
-`DocumentKit.inspect` uses the engine's detect-only mode. It is intended for
+`Turnip.inspect` uses the engine's detect-only mode. It is intended for
 cheap routing and returns no layout or encoding analysis.
 
-`DocumentKit.extract` uses the full mode once. The loaded PDF is shared across
-classification and extraction inside `pdf-inspector`; DocumentKit does not call
+`Turnip.extract` uses the full mode once. The loaded PDF is shared across
+classification and extraction inside `pdf-inspector`; Turnip does not call
 `inspect` first. The returned `DocumentExtraction` contains Markdown, the full
 inspection, and warnings.
 
@@ -80,7 +80,7 @@ heuristics use only the processed selection. Some detect-only font analysis is
 still document-wide, so page selection is an output contract rather than a
 guaranteed proportional performance optimization.
 
-DocumentKit does not expose positioned text or coordinates. A future
+Turnip does not expose positioned text or coordinates. A future
 structured model must define one normalized coordinate space before those
 fields become public.
 
@@ -96,7 +96,7 @@ Rust targets:
 | macOS | `aarch64-apple-darwin`, `x86_64-apple-darwin` |
 
 The C header and module map are copied into every variant. SwiftPM exposes the
-binary only to the source `DocumentKit` target, so client apps import the Swift
+binary only to the source `Turnip` target, so client apps import the Swift
 module rather than the bridge.
 
 The pinned upstream native code normally discovers Adobe CMaps through
@@ -117,7 +117,7 @@ processing should limit concurrent calls based on their memory budget.
 ## Benchmark contracts
 
 The benchmark package is macOS-only and intentionally outside the SDK API. It
-compares `DocumentKit.extract(data).markdown` and
+compares `Turnip.extract(data).markdown` and
 `PDFDocument(data: data)?.string`, each passed to one frozen AMEX adapter. The
 adapter sees only its raw candidate string; it does not receive PDF bytes,
 truth, page-level PDFKit text/layout, or candidate-specific expected values.

@@ -2,7 +2,7 @@
 
 ## Supported version
 
-DocumentKit is in private pre-release development. Security fixes are applied
+Turnip is in private pre-release development. Security fixes are applied
 to the latest commit on `main`; no released version is supported yet.
 
 ## Reporting a vulnerability
@@ -13,10 +13,10 @@ owner privately with a minimal reproducer and the affected engine revision.
 
 ## Threat model
 
-DocumentKit parses PDF bytes in the app process. The 100 MiB input limit and
+Turnip parses PDF bytes in the app process. The 100 MiB input limit and
 panic boundary reduce some failure modes, but they do not create hostile-input
 isolation. A malicious PDF may still consume substantial CPU or memory, trigger
-an abort, or exploit a defect in DocumentKit, `pdf-inspector`, lopdf, or another
+an abort, or exploit a defect in Turnip, `pdf-inspector`, lopdf, or another
 transitive dependency.
 
 For apps that accept arbitrary internet documents:

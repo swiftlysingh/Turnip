@@ -1,19 +1,19 @@
-# DocumentKit
+# Turnip
 
-DocumentKit extracts Markdown from PDFs locally in native Swift apps. It wraps
+Turnip extracts Markdown from PDFs locally in native Swift apps. It wraps
 Firecrawl's Rust [`pdf-inspector`](https://github.com/firecrawl/pdf-inspector)
 engine behind a small Swift API and ships the engine as a prebuilt
 XCFramework for iOS and macOS.
 
 ```swift
-let extraction = try await DocumentKit.extract(pdfData)
+let extraction = try await Turnip.extract(pdfData)
 
 print(extraction.markdown)
 print(extraction.inspection.kind)
 print(extraction.warnings)
 ```
 
-DocumentKit is private while the pre-release API is being validated. The
+Turnip is private while the pre-release API is being validated. The
 current scope is deliberately narrow: **PDF input to Markdown output**. It does not generate
 PDFs, convert Office documents, perform OCR, use an LLM, upload files, or expose
 plain-text and structured-JSON output yet.
@@ -22,7 +22,7 @@ plain-text and structured-JSON output yet.
 
 `pdf-inspector` already does the hard PDF work well: classification, embedded
 text extraction, reading order, layout analysis, table-aware Markdown, and
-page-level OCR routing. DocumentKit makes that engine practical in Swift by
+page-level OCR routing. Turnip makes that engine practical in Swift by
 adding:
 
 - an idiomatic `async throws` API with typed results and errors;
@@ -51,7 +51,7 @@ The packaged engine contains these architectures:
 ## Installation
 
 The repository currently uses a checked-in local binary target. Add this
-private package in Xcode using its repository URL, then add the `DocumentKit`
+private package in Xcode using its repository URL, then add the `Turnip`
 product to your app target:
 
 ```text
@@ -61,7 +61,7 @@ git@github.com:swiftlysingh/DocumentKit.git
 The binary target is an implementation detail. Client code imports only:
 
 ```swift
-import DocumentKit
+import Turnip
 ```
 
 ## API
@@ -69,7 +69,7 @@ import DocumentKit
 ### Extract Markdown
 
 ```swift
-let result = try await DocumentKit.extract(pdfData)
+let result = try await Turnip.extract(pdfData)
 
 result.markdown
 result.inspection.pageCount
@@ -81,11 +81,11 @@ result.warnings
 File URLs are supported too:
 
 ```swift
-let result = try await DocumentKit.extract(contentsOf: pdfURL)
+let result = try await Turnip.extract(contentsOf: pdfURL)
 ```
 
 The URL overload checks available file-size metadata before reading and still
-enforces `DocumentKit.maximumInputSize`, currently 100 MiB, after loading.
+enforces `Turnip.maximumInputSize`, currently 100 MiB, after loading.
 
 Select pages or unlock a password-protected PDF with `DocumentOptions`:
 
@@ -94,7 +94,7 @@ let options = DocumentOptions(
     pageIndexes: [0, 2, 3],
     password: suppliedPassword
 )
-let result = try await DocumentKit.extract(pdfData, options: options)
+let result = try await Turnip.extract(pdfData, options: options)
 ```
 
 Page indexes are zero-based, unique, nonempty, and strictly ascending. `nil` means the
@@ -105,7 +105,7 @@ in document order.
 ### Inspect without extracting
 
 ```swift
-let inspection = try await DocumentKit.inspect(pdfData)
+let inspection = try await Turnip.inspect(pdfData)
 ```
 
 `inspect` is the lighter routing call. It classifies the PDF, counts pages, and
@@ -127,7 +127,7 @@ confidence are engine signals, not guarantees that text is correct.
 
 ### Errors
 
-`DocumentKitError` distinguishes empty and oversized inputs, missing or wrong
+`TurnipError` distinguishes empty and oversized inputs, missing or wrong
 passwords, invalid and out-of-range page selections, invalid PDFs, documents
 with no extractable text, and internal engine failures.
 
@@ -135,7 +135,7 @@ The existing `inspect` and `extract` calls remain unchanged. v0.2 adds
 `invalidPageSelection` and `pageOutOfRange`, so clients with exhaustive switches
 over the pre-1.0 error enum must handle those cases when updating.
 A scanned or image-only PDF commonly produces `noExtractableText` with its
-inspection attached. DocumentKit reports the OCR need but does not perform OCR.
+inspection attached. Turnip reports the OCR need but does not perform OCR.
 
 ## API documentation
 
@@ -143,14 +143,14 @@ On macOS with Xcode installed, build the static DocC archive locally with an
 unused output path:
 
 ```sh
-Scripts/build-documentation.sh /tmp/DocumentKit.doccarchive
+Scripts/build-documentation.sh /tmp/Turnip.doccarchive
 ```
 
-The archive is built for the `/DocumentKit` hosting path.
+The archive is built for the repository's current `/DocumentKit` hosting path.
 
 ## Sample app
 
-[`Examples/DocumentKitDemo`](Examples/DocumentKitDemo) is a native iOS and
+[`Examples/TurnipDemo`](Examples/TurnipDemo) is a native iOS and
 macOS SwiftUI app. Both versions open a PDF and show selectable raw Markdown;
 the macOS layout also renders the source with PDFKit and accepts file drops.
 The app exercises page selection and password-protected PDFs. Raw Markdown is
@@ -158,8 +158,8 @@ intentional. It makes reading-order, table, and encoding problems easy to see.
 
 ```sh
 xcodebuild \
-  -project Examples/DocumentKitDemo/DocumentKitDemo.xcodeproj \
-  -scheme DocumentKitDemo \
+  -project Examples/TurnipDemo/TurnipDemo.xcodeproj \
+  -scheme TurnipDemo \
   -destination 'generic/platform=iOS Simulator' \
   CODE_SIGNING_ALLOWED=NO \
   build
@@ -169,7 +169,7 @@ xcodebuild \
 
 The [`Benchmarks`](Benchmarks) package is a small macOS-only AMEX
 transaction-integrity comparison. It measures exactly two local paths:
-DocumentKit Markdown followed by a frozen AMEX adapter, and document-level
+Turnip Markdown followed by a frozen AMEX adapter, and document-level
 PDFKit text followed by that same adapter. It reports exact transaction-multiset
 F1, diagnostic table-cell/content F1, critical-value accuracy, determinism,
 and raw extraction timing separately. Each locked truth has a checksum-pinned
@@ -192,7 +192,7 @@ locked truth, review, holdout, and scoring contract.
 The engine revision is fixed in [`ENGINE_REVISION`](ENGINE_REVISION). The build
 does not follow `main` or a semver range. `Scripts/prepare-engine.sh` clones that
 exact upstream source revision into the ignored `Build` directory and applies
-the tracked Apple patch. `DocumentKit.engineRevision` reports the upstream
+the tracked Apple patch. `Turnip.engineRevision` reports the upstream
 source revision, not a full patched-tree identity. At compile time, the Rust
 build script reconstructs `HEAD` plus the patch and rejects any other prepared
 tree; [`Artifacts/SHA256SUMS`](Artifacts/SHA256SUMS) pins both that patch and
@@ -221,11 +221,11 @@ then verifies the XCFramework architecture and header layout.
 ## Project layout
 
 ```text
-Sources/DocumentKit/           Public Swift API, DocC catalog, and private wire decoder
+Sources/Turnip/                Public Swift API, DocC catalog, and private wire decoder
 Native/DocumentKitCore/        Rust static-library bridge and C header
 Artifacts/                     Prebuilt local XCFramework
 Patches/                       Minimal patch applied to pinned pdf-inspector
-Examples/DocumentKitDemo/      Native PDF-versus-Markdown sample app
+Examples/TurnipDemo/           Native PDF-versus-Markdown sample app
 Benchmarks/                    Corpus manifest, runner, and methodology
 Scripts/                       Reproducible engine, artifact, and DocC build checks
 Tests/                         Swift API and real-PDF bridge tests
@@ -243,7 +243,7 @@ provider boundary and remains out of the current SDK scope.
 
 ## Security and limitations
 
-PDFs are complex, potentially hostile input. DocumentKit catches Rust panics
+PDFs are complex, potentially hostile input. Turnip catches Rust panics
 at the C boundary and limits input bytes, but it parses in-process and is not a
 sandbox. It cannot catch process aborts or out-of-memory failures. Read
 [`SECURITY.md`](SECURITY.md) before accepting arbitrary untrusted documents.
@@ -255,6 +255,6 @@ string as proof of correctness.
 
 ## License
 
-DocumentKit is MIT licensed. It includes compiled `pdf-inspector` code and
+Turnip is MIT licensed. It includes compiled `pdf-inspector` code and
 Adobe CMap data under their respective terms. See
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

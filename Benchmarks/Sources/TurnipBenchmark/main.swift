@@ -2,7 +2,7 @@ import BenchmarkCore
 import Foundation
 
 @main
-struct DocumentKitBenchmarkCommand {
+struct TurnipBenchmarkCommand {
     static func main() async {
         do {
             let arguments = Array(CommandLine.arguments.dropFirst())
@@ -22,7 +22,7 @@ struct DocumentKitBenchmarkCommand {
     }
 
     private static func fail(with code: String) -> Never {
-        FileHandle.standardError.write(Data("documentkit-benchmark failed [\(code)]\n".utf8))
+        FileHandle.standardError.write(Data("turnip-benchmark failed [\(code)]\n".utf8))
         Foundation.exit(1)
     }
 }
