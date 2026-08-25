@@ -231,7 +231,6 @@ Benchmarks/                    Corpus manifest, runner, and methodology
 Scripts/                       Reproducible engine, artifact, and DocC build checks
 Tests/                         Swift API and real-PDF bridge tests
 Documentation/                 Architecture and benchmark contracts
-ThirdPartyLicenses/            License texts for code embedded in the artifact
 ```
 
 The detailed data flow and ownership rules live in
