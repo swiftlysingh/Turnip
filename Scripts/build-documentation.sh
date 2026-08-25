@@ -107,6 +107,24 @@ xcrun docc convert "$CATALOG" \
 
 test -f "$STAGED_OUTPUT/index.html"
 test -d "$STAGED_OUTPUT/documentation/documentkit"
+
+# DocC's router has no route for the archive root, so visitors landing on the
+# base URL see "The page you're looking for can't be found". Replace the root
+# shell with a redirect to the framework's landing page.
+LANDING_PAGE="documentation/documentkit/"
+cat > "$STAGED_OUTPUT/index.html" <<HTML
+<!doctype html>
+<html lang="en-US">
+<head>
+    <meta charset="utf-8">
+    <title>DocumentKit Documentation</title>
+    <meta http-equiv="refresh" content="0; url=$LANDING_PAGE">
+    <script>window.location.replace("$LANDING_PAGE");</script>
+</head>
+<body></body>
+</html>
+HTML
+
 mv "$STAGED_OUTPUT" "$OUTPUT"
 
 echo "Created $OUTPUT"
