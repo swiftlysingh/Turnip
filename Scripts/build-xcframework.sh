@@ -10,7 +10,8 @@ STAGED_OUTPUT="$BUILD/DocumentKitCore.xcframework"
 DOCUMENTKIT_RUST_TOOLCHAIN=$(rustup show active-toolchain | awk 'NR == 1 { print $1 }')
 DOCUMENTKIT_CARGO=$(rustup which --toolchain "$DOCUMENTKIT_RUST_TOOLCHAIN" cargo)
 DOCUMENTKIT_RUSTC=$(rustup which --toolchain "$DOCUMENTKIT_RUST_TOOLCHAIN" rustc)
-DOCUMENTKIT_RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=$HOME=/DocBuild"
+DOCUMENTKIT_CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}
+DOCUMENTKIT_RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=$HOME=/BuildUser --remap-path-prefix=$DOCUMENTKIT_CARGO_HOME=/Cargo --remap-path-prefix=$ROOT=/DocumentKit"
 
 "$ROOT/Scripts/prepare-engine.sh"
 
@@ -65,7 +66,9 @@ mv "$STAGED_OUTPUT" "$OUTPUT"
 
 (cd "$ROOT" && shasum -a 256 \
     ENGINE_REVISION \
+    rust-toolchain.toml \
     Patches/pdf-inspector-embed-apple-cmaps.patch \
+    Scripts/build-xcframework.sh \
     Scripts/prepare-engine.sh \
     Native/DocumentKitCore/Cargo.toml \
     Native/DocumentKitCore/Cargo.lock \

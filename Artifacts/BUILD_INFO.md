@@ -6,7 +6,8 @@
 - Turnip patch: `Patches/pdf-inspector-embed-apple-cmaps.patch`
 - Rust toolchain: `1.96.0`
 - Packaging Xcode: `26.4.1 (17E202)`
-- DocumentKit and Cargo source paths: remapped beneath `/DocBuild`
+- DocumentKit source paths: remapped beneath `/DocumentKit`
+- Cargo source paths: remapped beneath `/Cargo`
 - Checksums: [`SHA256SUMS`](SHA256SUMS)
 
 The artifact includes indirect Form resource decoding and first-transaction-row

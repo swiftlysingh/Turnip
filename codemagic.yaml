@@ -104,8 +104,10 @@ workflows:
           echo "PATH=$HOME/.cargo/bin:$PATH" >> "$CM_ENV"
       - name: Prepare pinned engine
         script: Scripts/prepare-engine.sh
-      - name: Check Rust dependency licenses
-        script: Scripts/list-rust-licenses.sh
+      - name: Install cargo-about 0.9.1
+        script: cargo install --locked --features cli cargo-about --version 0.9.1
+      - name: Verify Rust dependency licenses
+        script: Scripts/generate-rust-licenses.sh --check
       - name: Test engine provenance reruns
         script: Scripts/test-engine-provenance.sh
       - name: Test bridge

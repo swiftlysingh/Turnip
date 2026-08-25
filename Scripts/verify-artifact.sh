@@ -153,7 +153,7 @@ expect_identity "$ARTIFACT/macos-arm64_x86_64/libdocumentkit_core.a"
 expect_identity "$ARTIFACT/ios-arm64/libdocumentkit_core-ios.a"
 expect_identity "$ARTIFACT/ios-arm64_x86_64-simulator/libdocumentkit_core.a"
 
-expect_no_personal_build_paths() {
+expect_no_local_build_paths() {
     file=$1
     STRINGS_FILE=$(mktemp "${TMPDIR:-/tmp}/documentkit-strings.XXXXXX")
     if ! strings "$file" > "$STRINGS_FILE"; then
@@ -161,20 +161,20 @@ expect_no_personal_build_paths() {
         exit 1
     fi
     # Rust's prebuilt standard-library objects retain this public toolchain CI path.
-    paths=$(grep -Eo '(/Users|/home)/[^/[:space:]]+/[^[:space:]]*' "$STRINGS_FILE" |
+    paths=$(grep -Eo '(/Users|/home|/DocBuild)/[^[:space:]]+|/[^[:space:]]*/\.t3/worktrees/[^[:space:]]+|t3code-[0-9a-f]+' "$STRINGS_FILE" |
         grep -Ev '^/Users/runner/work/rust/rust/' || true)
     rm -f "$STRINGS_FILE"
     STRINGS_FILE=
     if [ -n "$paths" ]; then
-        echo "Packaged engine contains personal build paths in $file:" >&2
+        echo "Packaged engine contains local build paths in $file:" >&2
         echo "$paths" | sort -u >&2
         exit 1
     fi
 }
 
-expect_no_personal_build_paths "$ARTIFACT/macos-arm64_x86_64/libdocumentkit_core.a"
-expect_no_personal_build_paths "$ARTIFACT/ios-arm64/libdocumentkit_core-ios.a"
-expect_no_personal_build_paths "$ARTIFACT/ios-arm64_x86_64-simulator/libdocumentkit_core.a"
+expect_no_local_build_paths "$ARTIFACT/macos-arm64_x86_64/libdocumentkit_core.a"
+expect_no_local_build_paths "$ARTIFACT/ios-arm64/libdocumentkit_core-ios.a"
+expect_no_local_build_paths "$ARTIFACT/ios-arm64_x86_64-simulator/libdocumentkit_core.a"
 
 for headers in "$ARTIFACT"/*/Headers; do
     test -f "$headers/DocumentKitCore.h"
