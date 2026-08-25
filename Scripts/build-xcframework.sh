@@ -10,6 +10,7 @@ STAGED_OUTPUT="$BUILD/DocumentKitCore.xcframework"
 DOCUMENTKIT_RUST_TOOLCHAIN=$(rustup show active-toolchain | awk 'NR == 1 { print $1 }')
 DOCUMENTKIT_CARGO=$(rustup which --toolchain "$DOCUMENTKIT_RUST_TOOLCHAIN" cargo)
 DOCUMENTKIT_RUSTC=$(rustup which --toolchain "$DOCUMENTKIT_RUST_TOOLCHAIN" rustc)
+DOCUMENTKIT_RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=$HOME=/DocBuild"
 
 "$ROOT/Scripts/prepare-engine.sh"
 
@@ -21,6 +22,7 @@ build_target() {
     IPHONEOS_DEPLOYMENT_TARGET=16.0 \
         MACOSX_DEPLOYMENT_TARGET=13.0 \
         CARGO_TARGET_DIR="$target_dir" \
+        RUSTFLAGS="$DOCUMENTKIT_RUSTFLAGS" \
         "$DOCUMENTKIT_CARGO" build --config "build.rustc = '$DOCUMENTKIT_RUSTC'" \
             --locked --release --manifest-path "$MANIFEST" --target "$target"
     mkdir -p "$(dirname "$destination")"

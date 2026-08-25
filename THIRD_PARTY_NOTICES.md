@@ -27,7 +27,6 @@ preparing the pinned engine to review the license declarations for the crates
 resolved for an Apple build. No dependency in the current lockfile reports an
 undeclared license.
 
-Before a public binary release, regenerate that inventory, review each resolved
-license and bundled asset, and add any notices required by those licenses. The
-current repository remains private and this notice is not a substitute for a
-release-time legal review.
+Before each binary release, regenerate that inventory, review each resolved
+license and bundled asset, and add any notices required by those licenses. This
+notice is not a substitute for a release-time legal review.
