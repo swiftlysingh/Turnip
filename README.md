@@ -259,5 +259,4 @@ string as proof of correctness.
 
 Turnip is MIT licensed. It includes compiled `pdf-inspector` code and
 Adobe CMap data under their respective terms. See
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and the generated
-[`RUST_THIRD_PARTY_LICENSES.md`](RUST_THIRD_PARTY_LICENSES.md).
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
