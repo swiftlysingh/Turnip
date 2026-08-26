@@ -1,4 +1,4 @@
-import DocumentKit
+import Turnip
 import Foundation
 import PDFKit
 
@@ -41,7 +41,7 @@ public struct BenchmarkRunBundle: Sendable {
 }
 
 public enum BenchmarkCommandLine {
-    public static let usage = "Usage: documentkit-benchmark --manifest <file> --root <directory> --output <directory> [--warmups <count>] [--repetitions <count>] [--source-revision <sha>]\n"
+    public static let usage = "Usage: turnip-benchmark --manifest <file> --root <directory> --output <directory> [--warmups <count>] [--repetitions <count>] [--source-revision <sha>]\n"
 
     public static func configuration(arguments: [String]) throws -> BenchmarkConfiguration {
         let allowed = Set(["--manifest", "--root", "--output", "--warmups", "--repetitions", "--source-revision"])
@@ -100,20 +100,38 @@ struct ReproducibilityMetadata: Codable, Sendable, Equatable {
     let machineModel: String
     let swiftVersion: String
     let buildConfiguration: String
-    let documentKitSourceRevision: String
-    let documentKitSourceRevisionEvidence: String
-    let documentKitEngineRevision: String
+    let turnipSourceRevision: String
+    let turnipSourceRevisionEvidence: String
+    let turnipEngineRevision: String
     let adapterRevision: String
     let adapterContractChecksum: String
     let inputPageCount: Int
     let inputByteCount: Int
+
+    // The schema-v2 field names predate the product rename and remain stable.
+    private enum CodingKeys: String, CodingKey {
+        case operatingSystem
+        case architecture
+        case machineModel
+        case swiftVersion
+        case buildConfiguration
+        case turnipSourceRevision = "document_kit_source_revision"
+        case turnipSourceRevisionEvidence = "document_kit_source_revision_evidence"
+        case turnipEngineRevision = "document_kit_engine_revision"
+        case adapterRevision
+        case adapterContractChecksum
+        case inputPageCount
+        case inputByteCount
+    }
 
     static func make(
         configuration: BenchmarkConfiguration,
         inputPageCount: Int,
         inputByteCount: Int
     ) throws -> ReproducibilityMetadata {
+        // Keep the pre-rename variable as a fallback for private automation.
         let supplied = configuration.sourceRevision
+            ?? ProcessInfo.processInfo.environment["TURNIP_BENCHMARK_SOURCE_REVISION"]
             ?? ProcessInfo.processInfo.environment["DOCUMENTKIT_BENCHMARK_SOURCE_REVISION"]
             ?? "working-tree"
         guard isSafeSourceRevision(supplied) else { throw BenchmarkFailure.invalidInvocation }
@@ -123,9 +141,9 @@ struct ReproducibilityMetadata: Codable, Sendable, Equatable {
             machineModel: machineModel(),
             swiftVersion: installedSwiftVersion(),
             buildConfiguration: buildConfiguration,
-            documentKitSourceRevision: supplied,
-            documentKitSourceRevisionEvidence: sourceRevisionEvidence(for: supplied),
-            documentKitEngineRevision: DocumentKit.engineRevision,
+            turnipSourceRevision: supplied,
+            turnipSourceRevisionEvidence: sourceRevisionEvidence(for: supplied),
+            turnipEngineRevision: Turnip.engineRevision,
             adapterRevision: BenchmarkProfile.adapterRevision,
             adapterContractChecksum: AMEXAdapter.checksum,
             inputPageCount: inputPageCount,
@@ -184,7 +202,7 @@ struct ReproducibilityMetadata: Codable, Sendable, Equatable {
     }
 
     private static var buildConfiguration: String {
-        #if DOCUMENTKIT_BENCHMARK_RELEASE
+        #if TURNIP_BENCHMARK_RELEASE
         "release"
         #else
         "debug"
@@ -690,9 +708,9 @@ public enum BenchmarkRunner {
         candidates: [CandidateAggregateReport]
     ) -> String {
         var lines = [
-            "DocumentKit AMEX transaction-integrity benchmark",
+            "Turnip AMEX transaction-integrity benchmark",
             "Methodology: exact financial row multiset and critical-value scoring; raw extraction timing only.",
-            "Reproducibility: warmups=\(warmups) repetitions=\(repetitions) os=\(reproducibility.operatingSystem) architecture=\(reproducibility.architecture) machine=\(reproducibility.machineModel) swift=\(reproducibility.swiftVersion) build=\(reproducibility.buildConfiguration) documentkit-source-revision=\(reproducibility.documentKitSourceRevision) documentkit-source-revision-evidence=\(reproducibility.documentKitSourceRevisionEvidence) documentkit-engine-revision=\(reproducibility.documentKitEngineRevision) adapter-revision=\(reproducibility.adapterRevision) adapter-contract-checksum=\(reproducibility.adapterContractChecksum) input-pages=\(reproducibility.inputPageCount) input-bytes=\(reproducibility.inputByteCount)",
+            "Reproducibility: warmups=\(warmups) repetitions=\(repetitions) os=\(reproducibility.operatingSystem) architecture=\(reproducibility.architecture) machine=\(reproducibility.machineModel) swift=\(reproducibility.swiftVersion) build=\(reproducibility.buildConfiguration) documentkit-source-revision=\(reproducibility.turnipSourceRevision) documentkit-source-revision-evidence=\(reproducibility.turnipSourceRevisionEvidence) documentkit-engine-revision=\(reproducibility.turnipEngineRevision) adapter-revision=\(reproducibility.adapterRevision) adapter-contract-checksum=\(reproducibility.adapterContractChecksum) input-pages=\(reproducibility.inputPageCount) input-bytes=\(reproducibility.inputByteCount)",
             "Corpus: cases=\(corpus.totalCases) statement-period-clusters=\(corpus.statementPeriodClusters) variants=\(corpus.standardVariants + corpus.screenReaderVariants) pages=\(corpus.pages) input-bytes=\(corpus.inputBytes) transaction-rows=\(corpus.transactionRows)",
         ]
         for candidate in candidates {
@@ -767,7 +785,7 @@ enum ReportPrivacy {
             ("profile", BenchmarkProfile.identifier),
             ("adapter_revision", BenchmarkProfile.adapterRevision),
             ("adapter_contract_checksum", AMEXAdapter.checksum),
-            ("document_kit_engine_revision", DocumentKit.engineRevision),
+            ("document_kit_engine_revision", Turnip.engineRevision),
         ] + Candidate.allCases.map { ("candidate", $0.label) }
     }
 
@@ -787,7 +805,7 @@ enum ReportPrivacy {
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { line in
                 let value = String(line)
-                if value == "DocumentKit AMEX transaction-integrity benchmark" {
+                if value == "Turnip AMEX transaction-integrity benchmark" {
                     return "<public>"
                 }
                 if Candidate.allCases.contains(where: { value == "Candidate: \($0.label)" }) {
@@ -795,7 +813,7 @@ enum ReportPrivacy {
                 }
                 var masked = value
                 masked = replacingFirst(
-                    "documentkit-engine-revision=\(DocumentKit.engineRevision)",
+                    "documentkit-engine-revision=\(Turnip.engineRevision)",
                     in: masked
                 )
                 masked = replacingFirst(
@@ -882,20 +900,20 @@ enum ReportPrivacy {
 }
 
 enum Candidate: CaseIterable, Hashable {
-    case documentKitMarkdown
+    case turnipMarkdown
     case pdfKitDocumentString
 
     var label: String {
         switch self {
-        case .documentKitMarkdown: "DocumentKit Markdown + AMEX adapter"
+        case .turnipMarkdown: "Turnip Markdown + AMEX adapter"
         case .pdfKitDocumentString: "PDFKit PDFDocument.string + AMEX adapter"
         }
     }
 
     func extract(data: Data) async throws -> String {
         switch self {
-        case .documentKitMarkdown:
-            return try await DocumentKit.extract(data).markdown
+        case .turnipMarkdown:
+            return try await Turnip.extract(data).markdown
         case .pdfKitDocumentString:
             // Construction belongs inside the timed raw extraction surface.
             guard let value = PDFDocument(data: data)?.string else {
@@ -906,8 +924,9 @@ enum Candidate: CaseIterable, Hashable {
     }
 
     func errorCode(for error: Error) -> String {
+        // These codes are serialized in schema-v2 benchmark reports.
         if let error = error as? CandidateExecutionError { return error.code }
-        if let error = error as? DocumentKitError {
+        if let error = error as? TurnipError {
             switch error {
             case .emptyInput: return "documentkit_empty_input"
             case .inputTooLarge: return "documentkit_input_too_large"
@@ -919,7 +938,7 @@ enum Candidate: CaseIterable, Hashable {
             case .engineFailure: return "documentkit_engine_failure"
             }
         }
-        return self == .documentKitMarkdown ? "documentkit_extraction_failed" : "pdfkit_extraction_failed"
+        return self == .turnipMarkdown ? "documentkit_extraction_failed" : "pdfkit_extraction_failed"
     }
 }
 
@@ -1075,7 +1094,7 @@ enum CorpusPreflight {
     private static func validateManifest(_ manifest: BenchmarkManifest) throws {
         guard manifest.schemaVersion == BenchmarkProfile.schemaVersion,
               manifest.profile == BenchmarkProfile.identifier,
-              manifest.documentKitRevision == DocumentKit.engineRevision,
+              manifest.turnipRevision == Turnip.engineRevision,
               manifest.adapterRevision == BenchmarkProfile.adapterRevision,
               manifest.adapterChecksum == AMEXAdapter.checksum,
               !manifest.cases.isEmpty,

@@ -23,7 +23,7 @@ workflows:
       - name: Test Swift package
         script: swift test --parallel
       - name: Build DocC API documentation
-        script: Scripts/build-documentation.sh "$CM_BUILD_DIR/.ci-tmp/DocumentKit.doccarchive"
+        script: Scripts/build-documentation.sh "$CM_BUILD_DIR/.ci-tmp/Turnip.doccarchive"
       - name: Build benchmark runner (release)
         script: swift build -c release --package-path Benchmarks
       - name: Test benchmark package
@@ -33,24 +33,24 @@ workflows:
       - name: Run diagnostic smoke benchmark (optimized)
         script: |
           set -euo pipefail
-          mkdir -p "$CM_BUILD_DIR/.ci-tmp/DocumentKit-Smoke"
-          DOCUMENTKIT_BENCHMARK_SOURCE_REVISION="$CM_COMMIT" \
-            swift run -c release --package-path Benchmarks documentkit-benchmark \
+          mkdir -p "$CM_BUILD_DIR/.ci-tmp/Turnip-Smoke"
+          TURNIP_BENCHMARK_SOURCE_REVISION="$CM_COMMIT" \
+            swift run -c release --package-path Benchmarks turnip-benchmark \
             --manifest Benchmarks/Manifests/smoke-v1.json \
             --root Benchmarks \
-            --output "$CM_BUILD_DIR/.ci-tmp/DocumentKit-Smoke" \
+            --output "$CM_BUILD_DIR/.ci-tmp/Turnip-Smoke" \
             --warmups 1 \
             --repetitions 5
       - name: Build sample app for macOS
         script: |
           set -euo pipefail
           xcodebuild \
-            -project Examples/DocumentKitDemo/DocumentKitDemo.xcodeproj \
-            -scheme DocumentKitDemo \
+            -project Examples/TurnipDemo/TurnipDemo.xcodeproj \
+            -scheme TurnipDemo \
             -configuration Debug \
             -destination 'platform=macOS' \
-            -derivedDataPath "$CM_BUILD_DIR/.ci-tmp/DocumentKitDemo-DerivedData" \
-            -clonedSourcePackagesDirPath "$CM_BUILD_DIR/.ci-tmp/DocumentKitDemo-Packages" \
+            -derivedDataPath "$CM_BUILD_DIR/.ci-tmp/TurnipDemo-DerivedData" \
+            -clonedSourcePackagesDirPath "$CM_BUILD_DIR/.ci-tmp/TurnipDemo-Packages" \
             CODE_SIGNING_ALLOWED=NO \
             -jobs 1 \
             build
@@ -58,18 +58,18 @@ workflows:
         script: |
           set -euo pipefail
           xcodebuild \
-            -project Examples/DocumentKitDemo/DocumentKitDemo.xcodeproj \
-            -scheme DocumentKitDemo \
+            -project Examples/TurnipDemo/TurnipDemo.xcodeproj \
+            -scheme TurnipDemo \
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$CM_BUILD_DIR/.ci-tmp/DocumentKitDemo-iOS-DerivedData" \
-            -clonedSourcePackagesDirPath "$CM_BUILD_DIR/.ci-tmp/DocumentKitDemo-iOS-Packages" \
+            -derivedDataPath "$CM_BUILD_DIR/.ci-tmp/TurnipDemo-iOS-DerivedData" \
+            -clonedSourcePackagesDirPath "$CM_BUILD_DIR/.ci-tmp/TurnipDemo-iOS-Packages" \
             CODE_SIGNING_ALLOWED=NO \
             -jobs 1 \
             build
     artifacts:
-      - .ci-tmp/DocumentKit.doccarchive/**
-      - .ci-tmp/DocumentKit-Smoke/**
+      - .ci-tmp/Turnip.doccarchive/**
+      - .ci-tmp/Turnip-Smoke/**
 
   rust:
     name: Rust

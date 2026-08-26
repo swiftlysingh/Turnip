@@ -1,5 +1,5 @@
 import Combine
-import DocumentKit
+import Turnip
 import Foundation
 import PDFKit
 
@@ -126,7 +126,7 @@ final class DemoModel: ObservableObject {
 
         extractionTask = Task { [weak self] in
             do {
-                let result = try await DocumentKit.extract(data, options: options)
+                let result = try await Turnip.extract(data, options: options)
                 try Task.checkCancellation()
                 self?.finishExtraction(result)
             } catch is CancellationError {

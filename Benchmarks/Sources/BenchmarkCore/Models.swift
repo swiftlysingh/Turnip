@@ -290,15 +290,16 @@ struct BenchmarkCase: Codable, Hashable, Sendable {
 struct BenchmarkManifest: Codable, Hashable, Sendable {
     let schemaVersion: Int
     let profile: String
-    let documentKitRevision: String
+    let turnipRevision: String
     let adapterRevision: String
     let adapterChecksum: String
     let cases: [BenchmarkCase]
 
+    // The schema-v2 key stays stable so existing private manifests still load.
     private enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
         case profile
-        case documentKitRevision = "documentkit_revision"
+        case turnipRevision = "documentkit_revision"
         case adapterRevision = "adapter_revision"
         case adapterChecksum = "adapter_checksum"
         case cases

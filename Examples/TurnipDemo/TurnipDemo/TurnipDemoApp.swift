@@ -1,9 +1,9 @@
 import SwiftUI
 
 @main
-struct DocumentKitDemoApp: App {
+struct TurnipDemoApp: App {
     var body: some Scene {
-        WindowGroup("DocumentKit Demo") {
+        WindowGroup("Turnip Demo") {
 #if os(macOS)
             ContentView()
 #else

@@ -3,7 +3,7 @@
 This macOS-only Swift package compares two local extraction paths for one
 financial-import question:
 
-1. `DocumentKit.extract(data).markdown` followed by the frozen AMEX adapter.
+1. `Turnip.extract(data).markdown` followed by the frozen AMEX adapter.
 2. `PDFDocument(data: data)?.string` followed by the same AMEX adapter.
 
 It is deliberately small. There is no raw `pdf-inspector` candidate, external
@@ -51,7 +51,7 @@ The command accepts explicit paths so a local harness may live elsewhere, but
 the private convention is intentionally simple:
 
 ```sh
-swift run -c release --package-path Benchmarks documentkit-benchmark \
+swift run -c release --package-path Benchmarks turnip-benchmark \
   --manifest Benchmarks/Private/manifest.json \
   --root Benchmarks/Private \
   --output Benchmarks/Private/results \
@@ -60,7 +60,7 @@ swift run -c release --package-path Benchmarks documentkit-benchmark \
 ```
 
 The manifest pins every PDF/truth byte hash, byte count, page count, the
-DocumentKit engine revision, and the AMEX adapter revision/checksum. Truth also
+Turnip engine revision, and the AMEX adapter revision/checksum. Truth also
 pins a deterministic canonical Markdown projection. A shared truth for a
 `standard`/`screen-reader` pair additionally needs one checksum-pinned review
 record that binds the truth/canonical hashes, statement currency, exact source
@@ -78,7 +78,7 @@ a redacted DTO allowlist and privacy sentinel check before reports are written.
 
 Supply a full 40- or 64-character lowercase hexadecimal code revision when
 publishing evidence, either with `--source-revision <sha>` or
-`DOCUMENTKIT_BENCHMARK_SOURCE_REVISION`. The report marks a supplied revision
+`TURNIP_BENCHMARK_SOURCE_REVISION`. The report marks a supplied revision
 `verified` only when it exactly equals the invocation directory's clean Git
 `HEAD`; otherwise it is explicitly `asserted`. If neither is available, reports
 say `working-tree`; that is useful locally but not publishable exact evidence.
@@ -102,10 +102,10 @@ Benchmarks/Scripts/verify-smoke-fixture.sh
 Run the synthetic pair:
 
 ```sh
-swift run -c release --package-path Benchmarks documentkit-benchmark \
+swift run -c release --package-path Benchmarks turnip-benchmark \
   --manifest Benchmarks/Manifests/smoke-v1.json \
   --root Benchmarks \
-  --output /tmp/documentkit-benchmark-smoke \
+  --output /tmp/turnip-benchmark-smoke \
   --warmups 1 \
   --repetitions 5
 ```

@@ -3,7 +3,7 @@
 - pdf-inspector version: `1.14.2`
 - pdf-inspector repository: `swiftlysingh/pdf-inspector`
 - pdf-inspector upstream source revision: `2322bcce4cd9458d24399bf8fee42f1aa201c8c1`
-- DocumentKit patch: `Patches/pdf-inspector-embed-apple-cmaps.patch`
+- Turnip patch: `Patches/pdf-inspector-embed-apple-cmaps.patch`
 - Rust toolchain: `1.96.0`
 - Xcode: `26.4.1 (17E202)`
 - Checksums: [`SHA256SUMS`](SHA256SUMS)
@@ -14,7 +14,7 @@ single-threaded lopdf configuration, and selection-aware sparse-text/font
 quality heuristics from the tracked patch. Rebuilds must update this file and
 pass `Scripts/verify-artifact.sh` plus Swift runtime and parity tests. Artifact
 runtime checks confirm the version and upstream source revision in every
-packaged library slice. `DocumentKit.engineRevision` reports that upstream
+packaged library slice. `Turnip.engineRevision` reports that upstream
 source revision, not the patch state. Compile-time verification requires the
 exact `HEAD` plus tracked-patch tree, and `SHA256SUMS` pins the revision, patch,
 build inputs, and every library slice.

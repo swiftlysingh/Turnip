@@ -7,21 +7,21 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		111111111111111111111111 /* DocumentKitDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211111111111111111111111 /* DocumentKitDemoApp.swift */; };
+		111111111111111111111111 /* TurnipDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211111111111111111111111 /* TurnipDemoApp.swift */; };
 		111111111111111111111112 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211111111111111111111112 /* ContentView.swift */; };
 		111111111111111111111113 /* DemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211111111111111111111113 /* DemoModel.swift */; };
 		111111111111111111111114 /* PDFPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211111111111111111111114 /* PDFPreview.swift */; };
-		111111111111111111111115 /* DocumentKit in Frameworks */ = {isa = PBXBuildFile; productRef = 911111111111111111111111 /* DocumentKit */; };
+		111111111111111111111115 /* Turnip in Frameworks */ = {isa = PBXBuildFile; productRef = 911111111111111111111111 /* Turnip */; };
 		111111111111111111111116 /* IOSContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211111111111111111111116 /* IOSContentView.swift */; };
 		111111111111111111111117 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 211111111111111111111117 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		211111111111111111111111 /* DocumentKitDemoApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DocumentKitDemoApp.swift; sourceTree = "<group>"; };
+		211111111111111111111111 /* TurnipDemoApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TurnipDemoApp.swift; sourceTree = "<group>"; };
 		211111111111111111111112 /* ContentView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		211111111111111111111113 /* DemoModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DemoModel.swift; sourceTree = "<group>"; };
 		211111111111111111111114 /* PDFPreview.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PDFPreview.swift; sourceTree = "<group>"; };
-		211111111111111111111115 /* DocumentKitDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DocumentKitDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		211111111111111111111115 /* TurnipDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TurnipDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		211111111111111111111116 /* IOSContentView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSContentView.swift; sourceTree = "<group>"; };
 		211111111111111111111117 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -31,7 +31,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				111111111111111111111115 /* DocumentKit in Frameworks */,
+				111111111111111111111115 /* Turnip in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -41,28 +41,28 @@
 		311111111111111111111111 = {
 			isa = PBXGroup;
 			children = (
-				311111111111111111111112 /* DocumentKitDemo */,
+				311111111111111111111112 /* TurnipDemo */,
 				311111111111111111111113 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		311111111111111111111112 /* DocumentKitDemo */ = {
+		311111111111111111111112 /* TurnipDemo */ = {
 			isa = PBXGroup;
 			children = (
-				211111111111111111111111 /* DocumentKitDemoApp.swift */,
+				211111111111111111111111 /* TurnipDemoApp.swift */,
 				211111111111111111111112 /* ContentView.swift */,
 				211111111111111111111113 /* DemoModel.swift */,
 				211111111111111111111114 /* PDFPreview.swift */,
 				211111111111111111111116 /* IOSContentView.swift */,
 				211111111111111111111117 /* Assets.xcassets */,
 			);
-			path = DocumentKitDemo;
+			path = TurnipDemo;
 			sourceTree = "<group>";
 		};
 		311111111111111111111113 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				211111111111111111111115 /* DocumentKitDemo.app */,
+				211111111111111111111115 /* TurnipDemo.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,9 +70,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		511111111111111111111111 /* DocumentKitDemo */ = {
+		511111111111111111111111 /* TurnipDemo */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 711111111111111111111112 /* Build configuration list for PBXNativeTarget "DocumentKitDemo" */;
+			buildConfigurationList = 711111111111111111111112 /* Build configuration list for PBXNativeTarget "TurnipDemo" */;
 			buildPhases = (
 				411111111111111111111112 /* Sources */,
 				411111111111111111111111 /* Frameworks */,
@@ -82,12 +82,12 @@
 			);
 			dependencies = (
 			);
-			name = DocumentKitDemo;
+			name = TurnipDemo;
 			packageProductDependencies = (
-				911111111111111111111111 /* DocumentKit */,
+				911111111111111111111111 /* Turnip */,
 			);
-			productName = DocumentKitDemo;
-			productReference = 211111111111111111111115 /* DocumentKitDemo.app */;
+			productName = TurnipDemo;
+			productReference = 211111111111111111111115 /* TurnipDemo.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -105,7 +105,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 711111111111111111111111 /* Build configuration list for PBXProject "DocumentKitDemo" */;
+			buildConfigurationList = 711111111111111111111111 /* Build configuration list for PBXProject "TurnipDemo" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -115,13 +115,13 @@
 			);
 			mainGroup = 311111111111111111111111;
 			packageReferences = (
-				811111111111111111111111 /* XCLocalSwiftPackageReference "DocumentKit" */,
+				811111111111111111111111 /* XCLocalSwiftPackageReference "Turnip" */,
 			);
 			productRefGroup = 311111111111111111111113 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				511111111111111111111111 /* DocumentKitDemo */,
+				511111111111111111111111 /* TurnipDemo */,
 			);
 		};
 /* End PBXProject section */
@@ -142,7 +142,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				111111111111111111111111 /* DocumentKitDemoApp.swift in Sources */,
+				111111111111111111111111 /* TurnipDemoApp.swift in Sources */,
 				111111111111111111111112 /* ContentView.swift in Sources */,
 				111111111111111111111113 /* DemoModel.swift in Sources */,
 				111111111111111111111114 /* PDFPreview.swift in Sources */,
@@ -183,7 +183,7 @@
 				DEVELOPMENT_TEAM = 4WMQY24R33;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "DocumentKit Demo";
+				INFOPLIST_KEY_CFBundleDisplayName = "Turnip Demo";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -196,7 +196,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swiftlysingh.DocumentKitDemo;
+				PRODUCT_BUNDLE_IDENTIFIER = com.swiftlysingh.TurnipDemo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -214,7 +214,7 @@
 				DEVELOPMENT_TEAM = 4WMQY24R33;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "DocumentKit Demo";
+				INFOPLIST_KEY_CFBundleDisplayName = "Turnip Demo";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -226,7 +226,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swiftlysingh.DocumentKitDemo;
+				PRODUCT_BUNDLE_IDENTIFIER = com.swiftlysingh.TurnipDemo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -237,7 +237,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		711111111111111111111111 /* Build configuration list for PBXProject "DocumentKitDemo" */ = {
+		711111111111111111111111 /* Build configuration list for PBXProject "TurnipDemo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				811111111111111111111112 /* Debug */,
@@ -246,7 +246,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		711111111111111111111112 /* Build configuration list for PBXNativeTarget "DocumentKitDemo" */ = {
+		711111111111111111111112 /* Build configuration list for PBXNativeTarget "TurnipDemo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				811111111111111111111114 /* Debug */,
@@ -258,17 +258,17 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		811111111111111111111111 /* XCLocalSwiftPackageReference "DocumentKit" */ = {
+		811111111111111111111111 /* XCLocalSwiftPackageReference "Turnip" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../..;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		911111111111111111111111 /* DocumentKit */ = {
+		911111111111111111111111 /* Turnip */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 811111111111111111111111 /* XCLocalSwiftPackageReference "DocumentKit" */;
-			productName = DocumentKit;
+			package = 811111111111111111111111 /* XCLocalSwiftPackageReference "Turnip" */;
+			productName = Turnip;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

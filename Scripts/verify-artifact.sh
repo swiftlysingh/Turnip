@@ -6,7 +6,7 @@ ARTIFACT="$ROOT/Artifacts/DocumentKitCore.xcframework"
 MANIFEST="$ROOT/Native/DocumentKitCore/Cargo.toml"
 LOCKFILE="$ROOT/Native/DocumentKitCore/Cargo.lock"
 RUST_SOURCE="$ROOT/Native/DocumentKitCore/src/lib.rs"
-SWIFT_SOURCE="$ROOT/Sources/DocumentKit/DocumentKit.swift"
+SWIFT_SOURCE="$ROOT/Sources/Turnip/Turnip.swift"
 ENGINE_REVISION=$(tr -d '[:space:]' < "$ROOT/ENGINE_REVISION")
 ENGINE_VERSION=$(sed -n 's/^pdf-inspector = {.*version = "=\([^"]*\)".*}$/\1/p' "$MANIFEST")
 THIN_FILE=

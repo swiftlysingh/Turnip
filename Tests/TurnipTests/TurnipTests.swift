@@ -1,40 +1,40 @@
 import Foundation
 import Testing
-@testable import DocumentKit
+@testable import Turnip
 
 @Test func emptyInputFailsBeforeCallingTheEngine() async {
-    await #expect(throws: DocumentKitError.emptyInput) {
-        try await DocumentKit.inspect(Data())
+    await #expect(throws: TurnipError.emptyInput) {
+        try await Turnip.inspect(Data())
     }
 }
 
 @Test func nonPDFFailsWithThePublicError() async {
-    await #expect(throws: DocumentKitError.invalidPDF) {
-        try await DocumentKit.inspect(Data("not a PDF".utf8))
+    await #expect(throws: TurnipError.invalidPDF) {
+        try await Turnip.inspect(Data("not a PDF".utf8))
     }
 }
 
 @Test func extractsMarkdownAndIncludesInspection() async throws {
-    let result = try await DocumentKit.extract(makeTextPDF("DocumentKit works"))
+    let result = try await Turnip.extract(makeTextPDF("Turnip works"))
 
-    #expect(result.markdown.contains("DocumentKit works"))
+    #expect(result.markdown.contains("Turnip works"))
     #expect(result.inspection.kind == .textBased)
     #expect(result.inspection.pageCount == 1)
     #expect(result.inspection.pagesNeedingOCR.isEmpty)
-    #expect(result.inspection.engineVersion == "1.14.2@\(DocumentKit.engineRevision)")
+    #expect(result.inspection.engineVersion == "1.14.2@\(Turnip.engineRevision)")
     #expect(result.inspection.layout != nil)
 }
 
 @Test func packagedEngineIdentityMatchesThePinnedSource() async throws {
     let revision = "2322bcce4cd9458d24399bf8fee42f1aa201c8c1"
-    let inspection = try await DocumentKit.inspect(makeTextPDF("Engine provenance"))
+    let inspection = try await Turnip.inspect(makeTextPDF("Engine provenance"))
 
-    #expect(DocumentKit.engineRevision == revision)
+    #expect(Turnip.engineRevision == revision)
     #expect(inspection.engineVersion == "1.14.2@\(revision)")
 }
 
 @Test func inspectionDoesNotExtractMarkdown() async throws {
-    let inspection = try await DocumentKit.inspect(makeTextPDF("Inspect me"))
+    let inspection = try await Turnip.inspect(makeTextPDF("Inspect me"))
 
     #expect(inspection.kind == .textBased)
     #expect(inspection.pageCount == 1)
@@ -50,10 +50,10 @@ import Testing
     ])
     let options = DocumentOptions(pageIndexes: [0, 2])
 
-    let inspection = try await DocumentKit.inspect(pdf, options: options)
+    let inspection = try await Turnip.inspect(pdf, options: options)
     #expect(inspection.pageCount == 3)
 
-    let extraction = try await DocumentKit.extract(pdf, options: options)
+    let extraction = try await Turnip.extract(pdf, options: options)
     #expect(extraction.inspection.pageCount == 3)
     #expect(extraction.markdown.contains("First selected page"))
     #expect(!extraction.markdown.contains("Middle excluded page"))
@@ -70,12 +70,12 @@ import Testing
 @Test func selectedPageInspectionReflectsSelectedContent() async throws {
     let pdf = makeMixedTextAndImagePDF()
 
-    let wholeDocument = try await DocumentKit.inspect(pdf)
+    let wholeDocument = try await Turnip.inspect(pdf)
     #expect(wholeDocument.pageCount == 2)
     #expect(wholeDocument.kind == .mixed)
     #expect(wholeDocument.pagesNeedingOCR == [1])
 
-    let textPage = try await DocumentKit.inspect(
+    let textPage = try await Turnip.inspect(
         pdf,
         options: DocumentOptions(pageIndexes: [0])
     )
@@ -83,7 +83,7 @@ import Testing
     #expect(textPage.kind == .textBased)
     #expect(textPage.pagesNeedingOCR.isEmpty)
 
-    let imagePage = try await DocumentKit.inspect(
+    let imagePage = try await Turnip.inspect(
         pdf,
         options: DocumentOptions(pageIndexes: [1])
     )
@@ -96,24 +96,24 @@ import Testing
 @Test func pageSelectionValidationIsTypedAndConsistent() async {
     let pdf = makeTextPDF(["First", "Second"])
 
-    await #expect(throws: DocumentKitError.invalidPageSelection(.empty)) {
-        try await DocumentKit.inspect(pdf, options: DocumentOptions(pageIndexes: []))
+    await #expect(throws: TurnipError.invalidPageSelection(.empty)) {
+        try await Turnip.inspect(pdf, options: DocumentOptions(pageIndexes: []))
     }
-    await #expect(throws: DocumentKitError.invalidPageSelection(.negative(pageIndex: -1))) {
-        try await DocumentKit.extract(pdf, options: DocumentOptions(pageIndexes: [-1]))
+    await #expect(throws: TurnipError.invalidPageSelection(.negative(pageIndex: -1))) {
+        try await Turnip.extract(pdf, options: DocumentOptions(pageIndexes: [-1]))
     }
-    await #expect(throws: DocumentKitError.invalidPageSelection(.duplicate(pageIndex: 0))) {
-        try await DocumentKit.inspect(pdf, options: DocumentOptions(pageIndexes: [0, 0]))
+    await #expect(throws: TurnipError.invalidPageSelection(.duplicate(pageIndex: 0))) {
+        try await Turnip.inspect(pdf, options: DocumentOptions(pageIndexes: [0, 0]))
     }
-    await #expect(throws: DocumentKitError.invalidPageSelection(.notAscending)) {
-        try await DocumentKit.extract(pdf, options: DocumentOptions(pageIndexes: [1, 0]))
+    await #expect(throws: TurnipError.invalidPageSelection(.notAscending)) {
+        try await Turnip.extract(pdf, options: DocumentOptions(pageIndexes: [1, 0]))
     }
     await #expect(
-        throws: DocumentKitError.invalidPageSelection(
+        throws: TurnipError.invalidPageSelection(
             .exceedsEngineLimit(pageIndex: Int(UInt32.max))
         )
     ) {
-        try await DocumentKit.inspect(
+        try await Turnip.inspect(
             pdf,
             options: DocumentOptions(pageIndexes: [Int(UInt32.max)])
         )
@@ -122,27 +122,27 @@ import Testing
 
 @Test func outOfRangePageIsReportedForInspectionAndExtraction() async {
     let pdf = makeTextPDF(["Only page"])
-    let expected = DocumentKitError.pageOutOfRange(pageIndex: 1, pageCount: 1)
+    let expected = TurnipError.pageOutOfRange(pageIndex: 1, pageCount: 1)
 
     await #expect(throws: expected) {
-        try await DocumentKit.inspect(pdf, options: DocumentOptions(pageIndexes: [1]))
+        try await Turnip.inspect(pdf, options: DocumentOptions(pageIndexes: [1]))
     }
     await #expect(throws: expected) {
-        try await DocumentKit.extract(pdf, options: DocumentOptions(pageIndexes: [1]))
+        try await Turnip.extract(pdf, options: DocumentOptions(pageIndexes: [1]))
     }
     await #expect(throws: expected) {
-        try await DocumentKit.extract(pdf, options: DocumentOptions(pageIndexes: [0, 1]))
+        try await Turnip.extract(pdf, options: DocumentOptions(pageIndexes: [0, 1]))
     }
 }
 
 @Test func encryptedPDFRequiresTheCorrectPasswordForInspectionAndExtraction() async throws {
     let pdf = try encryptedFixture()
 
-    await #expect(throws: DocumentKitError.encryptedPDF) {
-        try await DocumentKit.inspect(pdf)
+    await #expect(throws: TurnipError.encryptedPDF) {
+        try await Turnip.inspect(pdf)
     }
-    await #expect(throws: DocumentKitError.encryptedPDF) {
-        try await DocumentKit.inspect(
+    await #expect(throws: TurnipError.encryptedPDF) {
+        try await Turnip.inspect(
             pdf,
             options: DocumentOptions(password: "wrong-password")
         )
@@ -151,19 +151,19 @@ import Testing
         pageIndexes: [0],
         password: "documentkit-test-password"
     )
-    let inspection = try await DocumentKit.inspect(pdf, options: correctOptions)
+    let inspection = try await Turnip.inspect(pdf, options: correctOptions)
     #expect(inspection.pageCount == 1)
 
-    await #expect(throws: DocumentKitError.encryptedPDF) {
-        try await DocumentKit.extract(pdf)
+    await #expect(throws: TurnipError.encryptedPDF) {
+        try await Turnip.extract(pdf)
     }
-    await #expect(throws: DocumentKitError.encryptedPDF) {
-        try await DocumentKit.extract(
+    await #expect(throws: TurnipError.encryptedPDF) {
+        try await Turnip.extract(
             pdf,
             options: DocumentOptions(password: "wrong-password")
         )
     }
-    let extraction = try await DocumentKit.extract(pdf, options: correctOptions)
+    let extraction = try await Turnip.extract(pdf, options: correctOptions)
     #expect(extraction.markdown.contains("DocumentKit Fixture"))
 }
 

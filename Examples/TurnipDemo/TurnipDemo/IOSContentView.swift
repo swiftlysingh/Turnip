@@ -1,5 +1,5 @@
 #if os(iOS)
-import DocumentKit
+import Turnip
 import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
@@ -28,7 +28,7 @@ struct IOSContentView: View {
                 }
                 .padding()
             }
-            .navigationTitle("DocumentKit Demo")
+            .navigationTitle("Turnip Demo")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Open PDF", systemImage: "folder") {

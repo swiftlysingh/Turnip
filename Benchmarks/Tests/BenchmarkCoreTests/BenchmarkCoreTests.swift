@@ -1,5 +1,5 @@
 @testable import BenchmarkCore
-import DocumentKit
+import Turnip
 import Foundation
 import XCTest
 
@@ -38,7 +38,7 @@ final class BenchmarkCoreTests: XCTestCase {
         XCTAssertFalse(score.perfect)
 
         let candidate = BenchmarkRunner.makeCaseCandidateReport(
-            candidate: .documentKitMarkdown,
+            candidate: .turnipMarkdown,
             attempts: [MeasuredAttempt(
                 rawOutcome: .success("raw surface"),
                 semanticOutcome: .success(observed),
@@ -59,9 +59,9 @@ final class BenchmarkCoreTests: XCTestCase {
             criticalValues: criticals.count,
             candidates: [candidate]
         )])
-        let documentKit = aggregate.first { $0.candidate == Candidate.documentKitMarkdown.label }
-        XCTAssertEqual(documentKit?.macroCriticalAccuracy, 1)
-        XCTAssertFalse(documentKit?.adoptionGatePassed ?? true)
+        let turnip = aggregate.first { $0.candidate == Candidate.turnipMarkdown.label }
+        XCTAssertEqual(turnip?.macroCriticalAccuracy, 1)
+        XCTAssertFalse(turnip?.adoptionGatePassed ?? true)
     }
 
     func testSwappedAmountsKeepCellF1ButFailRowF1() {
@@ -481,9 +481,9 @@ final class BenchmarkCoreTests: XCTestCase {
         }
 
         let temporary = FileManager.default.temporaryDirectory
-            .appendingPathComponent("documentkit-privacy-basename-\(UUID().uuidString)", isDirectory: true)
-        let inputRoot = temporary.appendingPathComponent("input/DocumentKit", isDirectory: true)
-        let outputRoot = temporary.appendingPathComponent("output/DocumentKit", isDirectory: true)
+            .appendingPathComponent("turnip-privacy-basename-\(UUID().uuidString)", isDirectory: true)
+        let inputRoot = temporary.appendingPathComponent("input/Turnip", isDirectory: true)
+        let outputRoot = temporary.appendingPathComponent("output/Turnip", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: temporary) }
         try FileManager.default.createDirectory(
             at: inputRoot.deletingLastPathComponent(),
@@ -518,8 +518,8 @@ final class BenchmarkCoreTests: XCTestCase {
 
         let shareableJSON = try XCTUnwrap(String(data: bundle.shareableJSON, encoding: .utf8))
         let leakedJSON = shareableJSON.replacingOccurrences(
-            of: Candidate.documentKitMarkdown.label,
-            with: Candidate.documentKitMarkdown.label + " AMEX"
+            of: Candidate.turnipMarkdown.label,
+            with: Candidate.turnipMarkdown.label + " AMEX"
         )
         XCTAssertNotEqual(shareableJSON, leakedJSON)
         XCTAssertThrowsError(try ReportPrivacy.validate(
@@ -579,7 +579,7 @@ final class BenchmarkCoreTests: XCTestCase {
             MeasuredAttempt(rawOutcome: .success("raw  surface"), semanticOutcome: .success(extraction), elapsedMilliseconds: 2),
         ]
         let rawResult = BenchmarkRunner.makeCaseCandidateReport(
-            candidate: .documentKitMarkdown,
+            candidate: .turnipMarkdown,
             attempts: rawWhitespaceAttempts,
             truth: makeTruth(rows: extraction.transactions, criticals: extraction.criticalValues)
         ).report
@@ -614,7 +614,7 @@ final class BenchmarkCoreTests: XCTestCase {
         attempts.append(MeasuredAttempt(rawOutcome: .failure("raw_empty"), semanticOutcome: .failure("raw_empty"), elapsedMilliseconds: 5))
 
         let report = BenchmarkRunner.makeCaseCandidateReport(
-            candidate: .documentKitMarkdown,
+            candidate: .turnipMarkdown,
             attempts: attempts,
             truth: makeTruth(rows: semantic.transactions, criticals: semantic.criticalValues)
         ).report
@@ -639,7 +639,7 @@ final class BenchmarkCoreTests: XCTestCase {
         }
 
         let report = BenchmarkRunner.makeCaseCandidateReport(
-            candidate: .documentKitMarkdown,
+            candidate: .turnipMarkdown,
             attempts: attempts,
             truth: truth
         ).report
@@ -657,11 +657,11 @@ final class BenchmarkCoreTests: XCTestCase {
         let first = aggregateCase(token: "c01", period: "p01", samples: [100, 1], includePDFKit: false)
         let second = aggregateCase(token: "c02", period: "p01", samples: [3, 5, 7], includePDFKit: false)
         let reports = BenchmarkRunner.aggregate([first, second])
-        let documentKit = reports.first(where: { $0.candidate == Candidate.documentKitMarkdown.label })
-        XCTAssertEqual(documentKit?.rawExtractionMedianMilliseconds, 5)
-        XCTAssertEqual(documentKit?.totalCases, 2)
-        XCTAssertEqual(documentKit?.eligibleCases, 2)
-        XCTAssertEqual(documentKit?.macroFinancialTableCellF1, 1)
+        let turnip = reports.first(where: { $0.candidate == Candidate.turnipMarkdown.label })
+        XCTAssertEqual(turnip?.rawExtractionMedianMilliseconds, 5)
+        XCTAssertEqual(turnip?.totalCases, 2)
+        XCTAssertEqual(turnip?.eligibleCases, 2)
+        XCTAssertEqual(turnip?.macroFinancialTableCellF1, 1)
 
         let pdfKit = reports.first(where: { $0.candidate == Candidate.pdfKitDocumentString.label })
         XCTAssertEqual(pdfKit?.totalCases, 2)
@@ -677,7 +677,7 @@ final class BenchmarkCoreTests: XCTestCase {
         )
         let eligibility = BenchmarkRunner.aggregate([first, timingUnavailable])
         XCTAssertEqual(
-            eligibility.first(where: { $0.candidate == Candidate.documentKitMarkdown.label })?.eligibleCases,
+            eligibility.first(where: { $0.candidate == Candidate.turnipMarkdown.label })?.eligibleCases,
             1
         )
     }
@@ -769,7 +769,7 @@ final class BenchmarkCoreTests: XCTestCase {
         let bundle = try await BenchmarkRunner.run(corpus.configuration)
         XCTAssertEqual(bundle.detailedReport.cases.count, 2)
         XCTAssertEqual(bundle.shareableReport.candidates.map(\.candidate), [
-            "DocumentKit Markdown + AMEX adapter",
+            "Turnip Markdown + AMEX adapter",
             "PDFKit PDFDocument.string + AMEX adapter",
         ])
         for item in bundle.detailedReport.cases {
@@ -805,7 +805,7 @@ final class BenchmarkCoreTests: XCTestCase {
 
     func testCommittedSmokeFixtureExercisesBothCandidatePipelines() async throws {
         let output = FileManager.default.temporaryDirectory
-            .appendingPathComponent("documentkit-benchmark-smoke-test-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("turnip-benchmark-smoke-test-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: output) }
         let bundle = try await BenchmarkRunner.run(BenchmarkConfiguration(
             manifestURL: benchmarkRoot.appendingPathComponent("Manifests/smoke-v1.json"),
@@ -905,7 +905,7 @@ final class BenchmarkCoreTests: XCTestCase {
             perfect: true
         )
         let candidate = CaseCandidateReport(
-            candidate: Candidate.documentKitMarkdown.label,
+            candidate: Candidate.turnipMarkdown.label,
             rawExtractionMedianMilliseconds: timingEligible ? median(samples) : nil,
             rawExtractionSamplesMilliseconds: timingEligible ? samples : [],
             timingEligible: timingEligible,
@@ -954,7 +954,7 @@ final class BenchmarkCoreTests: XCTestCase {
         reviewCurrency: String? = nil
     ) throws -> TemporaryCorpus {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("documentkit-benchmark-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("turnip-benchmark-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         do {
             let standardName = "standard.pdf"
@@ -1087,7 +1087,7 @@ final class BenchmarkCoreTests: XCTestCase {
             let manifest = BenchmarkManifest(
                 schemaVersion: BenchmarkProfile.schemaVersion,
                 profile: BenchmarkProfile.identifier,
-                documentKitRevision: DocumentKit.engineRevision,
+                turnipRevision: Turnip.engineRevision,
                 adapterRevision: BenchmarkProfile.adapterRevision,
                 adapterChecksum: AMEXAdapter.checksum,
                 cases: cases

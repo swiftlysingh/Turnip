@@ -9,7 +9,7 @@ evaluation, raw-engine parity test, or release certification.
 
 Each candidate gives the same frozen AMEX adapter exactly one raw `String`:
 
-1. `try await DocumentKit.extract(data).markdown`
+1. `try await Turnip.extract(data).markdown`
 2. `PDFDocument(data: data)?.string`
 
 The adapter receives no truth, manifest, PDF bytes, document, page/layout
@@ -35,7 +35,7 @@ the wrong kind, sign, currency, or precision.
 
 Truth also references a checksum-pinned canonical Markdown file. This is a
 human-reviewable, reviewed deterministic projection of structured truth, not
-an independently authored candidate or DocumentKit output. The runner renders
+an independently authored candidate or Turnip output. The runner renders
 the same fixed Markdown table/field format and requires exact UTF-8 equality,
 so every transaction and critical association is present before execution.
 
@@ -154,10 +154,10 @@ per-case counts, metrics, and timings; shareable reports are aggregate-only
 apart from the public warmup/repetition methodology counts.
 
 Safe reproducibility metadata is public: OS, architecture, non-host hardware
-model, Swift version, debug/release configuration, sanitized DocumentKit source
-revision, `DocumentKit.engineRevision`, adapter revision/contract checksum, and
+model, Swift version, debug/release configuration, sanitized Turnip source
+revision, `Turnip.engineRevision`, adapter revision/contract checksum, and
 input page/byte counts. A source revision may be passed with
-`--source-revision` or `DOCUMENTKIT_BENCHMARK_SOURCE_REVISION`; it must be a
+`--source-revision` or `TURNIP_BENCHMARK_SOURCE_REVISION`; it must be a
 40- or 64-character lowercase hexadecimal revision. The report calls it
 `verified` only when it equals the clean Git `HEAD` at invocation; otherwise it
 is explicitly `asserted`. `working-tree` means no exact source revision was

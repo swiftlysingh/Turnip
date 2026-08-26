@@ -3,13 +3,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "DocumentKit",
+    name: "Turnip",
     platforms: [
         .iOS(.v16),
         .macOS(.v13),
     ],
     products: [
-        .library(name: "DocumentKit", targets: ["DocumentKit"]),
+        .library(name: "Turnip", targets: ["Turnip"]),
     ],
     targets: [
         .binaryTarget(
@@ -17,12 +17,12 @@ let package = Package(
             path: "Artifacts/DocumentKitCore.xcframework"
         ),
         .target(
-            name: "DocumentKit",
+            name: "Turnip",
             dependencies: ["DocumentKitCore"]
         ),
         .testTarget(
-            name: "DocumentKitTests",
-            dependencies: ["DocumentKit"]
+            name: "TurnipTests",
+            dependencies: ["Turnip"]
         ),
     ]
 )
