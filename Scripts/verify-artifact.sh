@@ -155,7 +155,7 @@ expect_identity "$ARTIFACT/ios-arm64_x86_64-simulator/libdocumentkit_core.a"
 
 expect_no_local_build_paths() {
     file=$1
-    STRINGS_FILE=$(mktemp "${TMPDIR:-/tmp}/documentkit-strings.XXXXXX")
+    STRINGS_FILE=$(mktemp "${TMPDIR:-/tmp}/turnip-strings.XXXXXX")
     if ! strings "$file" > "$STRINGS_FILE"; then
         echo "Could not inspect strings in $file." >&2
         exit 1

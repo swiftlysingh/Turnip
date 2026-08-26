@@ -6,7 +6,7 @@
 - Turnip patch: `Patches/pdf-inspector-embed-apple-cmaps.patch`
 - Rust toolchain: `1.96.0`
 - Packaging Xcode: `26.4.1 (17E202)`
-- DocumentKit source paths: remapped beneath `/DocumentKit`
+- Turnip source paths: remapped beneath `/DocumentKit`
 - Cargo source paths: remapped beneath `/Cargo`
 - Checksums: [`SHA256SUMS`](SHA256SUMS)
 
