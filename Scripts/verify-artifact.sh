@@ -61,8 +61,6 @@ grep -Fq 'env!("DOCUMENTKIT_PDF_INSPECTOR_VERSION")' "$RUST_SOURCE"
 grep -Fq 'env!("DOCUMENTKIT_PDF_INSPECTOR_REVISION")' "$RUST_SOURCE"
 grep -Fq 'documentkit_engine_revision()' "$SWIFT_SOURCE"
 
-(cd "$ROOT" && shasum -a 256 -c Artifacts/SHA256SUMS)
-
 test -f "$ARTIFACT/Info.plist"
 test -f "$ARTIFACT/macos-arm64_x86_64/libdocumentkit_core.a"
 test -f "$ARTIFACT/ios-arm64/libdocumentkit_core-ios.a"

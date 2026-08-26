@@ -196,8 +196,8 @@ exact upstream source revision into the ignored `Build` directory and applies
 the tracked Apple patch. `Turnip.engineRevision` reports the upstream
 source revision, not a full patched-tree identity. At compile time, the Rust
 build script reconstructs `HEAD` plus the patch and rejects any other prepared
-tree; [`Artifacts/SHA256SUMS`](Artifacts/SHA256SUMS) pins both that patch and
-the packaged libraries. The current pre-release pin uses
+tree. `Scripts/verify-artifact.sh` checks the packaged slices against that
+pin. The current pre-release pin uses
 `swiftlysingh/pdf-inspector` while the indirect Form resource and
 transaction-row fixes are prepared for upstream.
 

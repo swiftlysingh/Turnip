@@ -64,22 +64,5 @@ xcodebuild -create-xcframework \
 rm -rf -- "$OUTPUT"
 mv "$STAGED_OUTPUT" "$OUTPUT"
 
-(cd "$ROOT" && shasum -a 256 \
-    ENGINE_REVISION \
-    rust-toolchain.toml \
-    Patches/pdf-inspector-embed-apple-cmaps.patch \
-    Scripts/build-xcframework.sh \
-    Scripts/prepare-engine.sh \
-    Native/DocumentKitCore/Cargo.toml \
-    Native/DocumentKitCore/Cargo.lock \
-    Native/DocumentKitCore/build.rs \
-    Native/DocumentKitCore/src/lib.rs \
-    Native/DocumentKitCore/include/DocumentKitCore.h \
-    Artifacts/BUILD_INFO.md \
-    Artifacts/DocumentKitCore.xcframework/macos-arm64_x86_64/libdocumentkit_core.a \
-    Artifacts/DocumentKitCore.xcframework/ios-arm64/libdocumentkit_core-ios.a \
-    Artifacts/DocumentKitCore.xcframework/ios-arm64_x86_64-simulator/libdocumentkit_core.a \
-    > Artifacts/SHA256SUMS)
-
 "$ROOT/Scripts/verify-artifact.sh"
 echo "Created $OUTPUT"

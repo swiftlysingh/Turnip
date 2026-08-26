@@ -8,7 +8,6 @@
 - Packaging Xcode: `26.4.1 (17E202)`
 - Turnip source paths: remapped beneath `/DocumentKit`
 - Cargo source paths: remapped beneath `/Cargo`
-- Checksums: [`SHA256SUMS`](SHA256SUMS)
 
 The artifact includes indirect Form resource decoding and first-transaction-row
 deduplication from the pinned fork. It was built with CMaps embedded, the Apple
@@ -18,5 +17,4 @@ pass `Scripts/verify-artifact.sh` plus Swift runtime and parity tests. Artifact
 runtime checks confirm the version and upstream source revision in every
 packaged library slice. `Turnip.engineRevision` reports that upstream
 source revision, not the patch state. Compile-time verification requires the
-exact `HEAD` plus tracked-patch tree, and `SHA256SUMS` pins the revision, patch,
-build inputs, and every library slice.
+exact `HEAD` plus tracked-patch tree.
