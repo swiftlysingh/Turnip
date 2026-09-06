@@ -7,7 +7,8 @@ import PDFKit
 final class DemoModel: ObservableObject {
     @Published private(set) var pdfDocument: PDFDocument?
     @Published private(set) var fileName: String = "Untitled.pdf"
-    @Published private(set) var extraction: DocumentExtraction?
+    @Published private(set) var document: ExtractedDocument?
+    @Published private(set) var documentJSON: String?
     @Published private(set) var isExtracting = false
     @Published private(set) var errorMessage: String?
 
@@ -21,7 +22,8 @@ final class DemoModel: ObservableObject {
         let name = url.lastPathComponent
         fileName = name.isEmpty ? "Untitled.pdf" : name
         pdfDocument = nil
-        extraction = nil
+        document = nil
+        documentJSON = nil
         errorMessage = nil
         isExtracting = true
 
@@ -100,9 +102,9 @@ final class DemoModel: ObservableObject {
         extractionTask = nil
     }
 
-    var markdownFileName: String {
+    var jsonFileName: String {
         let baseName = (fileName as NSString).deletingPathExtension
-        return (baseName.isEmpty ? "document" : baseName) + ".md"
+        return (baseName.isEmpty ? "document" : baseName) + ".json"
     }
 
     private func beginExtraction(
@@ -120,15 +122,22 @@ final class DemoModel: ObservableObject {
             document?.unlock(withPassword: previewPassword)
         }
         pdfDocument = document
-        extraction = nil
+        self.document = nil
+        documentJSON = nil
         errorMessage = nil
         isExtracting = true
 
         extractionTask = Task { [weak self] in
             do {
-                let result = try await Turnip.extract(data, options: options)
+                let result = try await Turnip.extractDocument(data, options: options)
                 try Task.checkCancellation()
-                self?.finishExtraction(result)
+                let json = try await Task.detached(priority: .userInitiated) {
+                    let encoder = JSONEncoder()
+                    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                    return String(decoding: try encoder.encode(result), as: UTF8.self)
+                }.value
+                try Task.checkCancellation()
+                self?.finishExtraction(result, json: json)
             } catch is CancellationError {
                 // Replacing a document intentionally cancels the old task.
             } catch {
@@ -138,8 +147,9 @@ final class DemoModel: ObservableObject {
         }
     }
 
-    private func finishExtraction(_ result: DocumentExtraction) {
-        extraction = result
+    private func finishExtraction(_ result: ExtractedDocument, json: String) {
+        document = result
+        documentJSON = json
         isExtracting = false
         extractionTask = nil
     }

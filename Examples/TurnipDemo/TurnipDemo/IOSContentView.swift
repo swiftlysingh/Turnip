@@ -17,11 +17,11 @@ struct IOSContentView: View {
                     options
 
                     if model.isExtracting {
-                        ProgressView("Extracting Markdown…")
+                        ProgressView("Extracting document…")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 40)
-                    } else if let extraction = model.extraction {
-                        result(extraction)
+                    } else if let document = model.document {
+                        result(document, json: model.documentJSON)
                     } else {
                         emptyState
                     }
@@ -87,7 +87,7 @@ struct IOSContentView: View {
             Button {
                 extractAgain()
             } label: {
-                Label("Extract Markdown", systemImage: "text.page")
+                Label("Extract Structure", systemImage: "tablecells")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -106,7 +106,7 @@ struct IOSContentView: View {
             Text("Open a PDF")
                 .font(.title2.weight(.semibold))
 
-            Text("Inspect embedded text and extract the document as Markdown, entirely on device.")
+            Text("Inspect text and tables as a typed document, entirely on device.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
@@ -119,30 +119,39 @@ struct IOSContentView: View {
         .padding(.vertical, 48)
     }
 
-    private func result(_ extraction: DocumentExtraction) -> some View {
+    private func result(_ document: ExtractedDocument, json: String?) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("\(extraction.inspection.pageCount) pages", systemImage: "doc.on.doc")
+                Label("\(document.inspection.pageCount) pages", systemImage: "doc.on.doc")
                 Spacer()
-                Text(extraction.inspection.kind.rawValue)
+                Text(document.inspection.kind.rawValue)
             }
             .font(.callout)
             .foregroundStyle(.secondary)
 
-            if !extraction.inspection.pagesNeedingOCR.isEmpty {
+            if !document.inspection.pagesNeedingOCR.isEmpty {
                 Label(
-                    "OCR recommended for \(extraction.inspection.pagesNeedingOCR.count) page(s)",
+                    "OCR recommended for \(document.inspection.pagesNeedingOCR.count) page(s)",
                     systemImage: "text.viewfinder"
                 )
                 .font(.callout)
                 .foregroundStyle(.orange)
             }
 
-            Text(extraction.markdown)
+            ForEach(document.pages, id: \.pageIndex) { page in
+                Label(
+                    "Page \(page.pageIndex + 1): \(page.blocks.count) blocks, \(page.status.displayName)",
+                    systemImage: page.status == .extracted
+                        ? "checkmark.circle"
+                        : "exclamationmark.triangle"
+                )
+            }
+
+            Text(json ?? "Unable to encode structured JSON.")
                 .font(.system(.body, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("Extracted Markdown")
+                .accessibilityLabel("Extracted structured document JSON")
         }
     }
 
@@ -213,6 +222,16 @@ private enum IOSPageSelectionParser {
 private struct IOSPageSelectionInputError: LocalizedError {
     var errorDescription: String? {
         "Enter unique, ascending page numbers separated by commas, such as 1, 3, 5."
+    }
+}
+
+private extension DocumentPageStatus {
+    var displayName: String {
+        switch self {
+        case .extracted: "extracted"
+        case .needsOCR: "needs OCR"
+        case .extractionFailed: "extraction failed"
+        }
     }
 }
 #endif

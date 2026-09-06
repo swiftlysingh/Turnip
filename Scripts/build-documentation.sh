@@ -61,8 +61,7 @@ CLANG_MODULE_CACHE_PATH="$MACOS_CLANG_MODULE_CACHE" swift build \
     -Xswiftc "$MACOS_SYMBOL_GRAPHS" \
     -Xswiftc -symbol-graph-minimum-access-level \
     -Xswiftc public \
-    -Xswiftc -symbol-graph-skip-synthesized-members \
-    -Xswiftc -symbol-graph-skip-inherited-docs \
+    -Xswiftc -skip-inherited-docs \
     -Xswiftc -omit-extension-block-symbols \
     --configuration debug
 
@@ -79,8 +78,7 @@ CLANG_MODULE_CACHE_PATH="$IOS_CLANG_MODULE_CACHE" swift build \
     -Xswiftc "$IOS_SYMBOL_GRAPHS" \
     -Xswiftc -symbol-graph-minimum-access-level \
     -Xswiftc public \
-    -Xswiftc -symbol-graph-skip-synthesized-members \
-    -Xswiftc -symbol-graph-skip-inherited-docs \
+    -Xswiftc -skip-inherited-docs \
     -Xswiftc -omit-extension-block-symbols \
     --configuration debug
 
