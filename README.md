@@ -1,9 +1,10 @@
 # Turnip
 
 Turnip extracts Markdown from PDFs locally in native Swift apps. It wraps
-Firecrawl's Rust [`pdf-inspector`](https://github.com/firecrawl/pdf-inspector)
-engine behind a small Swift API and ships the engine as a prebuilt
-XCFramework for iOS and macOS.
+a pinned build of the Rust
+[`pdf-inspector`](https://github.com/swiftlysingh/pdf-inspector) engine behind a
+small Swift API and ships the engine as a prebuilt XCFramework for iOS and
+macOS.
 
 ```swift
 let extraction = try await Turnip.extract(pdfData)
@@ -13,8 +14,8 @@ print(extraction.inspection.kind)
 print(extraction.warnings)
 ```
 
-Turnip is private while the pre-release API is being validated. The
-current scope is deliberately narrow: **PDF input to Markdown output**. It does not generate
+Turnip is pre-release. The current scope is deliberately narrow: **PDF
+input to Markdown output**. It does not generate
 PDFs, convert Office documents, perform OCR, use an LLM, upload files, or expose
 plain-text and structured-JSON output yet.
 
@@ -51,11 +52,11 @@ The packaged engine contains these architectures:
 ## Installation
 
 The repository currently uses a checked-in local binary target. Add this
-private package in Xcode using its repository URL, then add the `Turnip`
-product to your app target:
+package in Xcode using its repository URL, then add the `Turnip` product
+to your app target:
 
 ```text
-git@github.com:swiftlysingh/Turnip.git
+https://github.com/swiftlysingh/Turnip.git
 ```
 
 The binary target is an implementation detail. Client code imports only:
@@ -195,8 +196,8 @@ exact upstream source revision into the ignored `Build` directory and applies
 the tracked Apple patch. `Turnip.engineRevision` reports the upstream
 source revision, not a full patched-tree identity. At compile time, the Rust
 build script reconstructs `HEAD` plus the patch and rejects any other prepared
-tree; [`Artifacts/SHA256SUMS`](Artifacts/SHA256SUMS) pins both that patch and
-the packaged libraries. The current pre-release pin uses
+tree. `Scripts/verify-artifact.sh` checks the packaged slices against that
+pin. The current pre-release pin uses
 `swiftlysingh/pdf-inspector` while the indirect Form resource and
 transaction-row fixes are prepared for upstream.
 
@@ -229,6 +230,7 @@ Examples/TurnipDemo/           Native PDF-versus-Markdown sample app
 Benchmarks/                    Corpus manifest, runner, and methodology
 Scripts/                       Reproducible engine, artifact, and DocC build checks
 Tests/                         Swift API and real-PDF bridge tests
+Documentation/                 Architecture and benchmark contracts
 ```
 
 The detailed data flow and ownership rules live in
