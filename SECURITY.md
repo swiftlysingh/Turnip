@@ -2,8 +2,8 @@
 
 ## Supported version
 
-Turnip is in private pre-release development. Security fixes are applied
-to the latest commit on `main`; no released version is supported yet.
+Turnip is in pre-release development. Security fixes are applied to the
+latest commit on `main`; no released version is supported yet.
 
 ## Reporting a vulnerability
 

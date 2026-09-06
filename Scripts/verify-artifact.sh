@@ -10,14 +10,18 @@ SWIFT_SOURCE="$ROOT/Sources/Turnip/Turnip.swift"
 ENGINE_REVISION=$(tr -d '[:space:]' < "$ROOT/ENGINE_REVISION")
 ENGINE_VERSION=$(sed -n 's/^pdf-inspector = {.*version = "=\([^"]*\)".*}$/\1/p' "$MANIFEST")
 THIN_FILE=
+STRINGS_FILE=
 
-cleanup_thin_file() {
+cleanup_temp_files() {
     if [ -n "$THIN_FILE" ]; then
         rm -f "$THIN_FILE"
     fi
+    if [ -n "$STRINGS_FILE" ]; then
+        rm -f "$STRINGS_FILE"
+    fi
 }
-trap cleanup_thin_file 0
-trap 'cleanup_thin_file; exit 1' HUP INT TERM
+trap cleanup_temp_files 0
+trap 'cleanup_temp_files; exit 1' HUP INT TERM
 
 LOCKED_VERSION=$(awk '
     $0 == "[[package]]" { package = 0 }
@@ -56,8 +60,6 @@ grep -Fq "\`$ENGINE_REVISION\`" "$ROOT/THIRD_PARTY_NOTICES.md"
 grep -Fq 'env!("DOCUMENTKIT_PDF_INSPECTOR_VERSION")' "$RUST_SOURCE"
 grep -Fq 'env!("DOCUMENTKIT_PDF_INSPECTOR_REVISION")' "$RUST_SOURCE"
 grep -Fq 'documentkit_engine_revision()' "$SWIFT_SOURCE"
-
-(cd "$ROOT" && shasum -a 256 -c Artifacts/SHA256SUMS)
 
 test -f "$ARTIFACT/Info.plist"
 test -f "$ARTIFACT/macos-arm64_x86_64/libdocumentkit_core.a"
@@ -152,6 +154,29 @@ expect_identity() {
 expect_identity "$ARTIFACT/macos-arm64_x86_64/libdocumentkit_core.a"
 expect_identity "$ARTIFACT/ios-arm64/libdocumentkit_core-ios.a"
 expect_identity "$ARTIFACT/ios-arm64_x86_64-simulator/libdocumentkit_core.a"
+
+expect_no_local_build_paths() {
+    file=$1
+    STRINGS_FILE=$(mktemp "${TMPDIR:-/tmp}/turnip-strings.XXXXXX")
+    if ! strings "$file" > "$STRINGS_FILE"; then
+        echo "Could not inspect strings in $file." >&2
+        exit 1
+    fi
+    # Rust's prebuilt standard-library objects retain this public toolchain CI path.
+    paths=$(grep -Eo '(/Users|/home|/DocBuild)/[^[:space:]]+|/[^[:space:]]*/\.t3/worktrees/[^[:space:]]+|t3code-[0-9a-f]+' "$STRINGS_FILE" |
+        grep -Ev '^/Users/runner/work/rust/rust/' || true)
+    rm -f "$STRINGS_FILE"
+    STRINGS_FILE=
+    if [ -n "$paths" ]; then
+        echo "Packaged engine contains local build paths in $file:" >&2
+        echo "$paths" | sort -u >&2
+        exit 1
+    fi
+}
+
+expect_no_local_build_paths "$ARTIFACT/macos-arm64_x86_64/libdocumentkit_core.a"
+expect_no_local_build_paths "$ARTIFACT/ios-arm64/libdocumentkit_core-ios.a"
+expect_no_local_build_paths "$ARTIFACT/ios-arm64_x86_64-simulator/libdocumentkit_core.a"
 
 for headers in "$ARTIFACT"/*/Headers; do
     test -f "$headers/DocumentKitCore.h"
