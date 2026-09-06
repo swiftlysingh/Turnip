@@ -1446,10 +1446,10 @@ index 4300f51..4dbc0f9 100644
  }
 diff --git a/src/structured.rs b/src/structured.rs
 new file mode 100644
-index 0000000..5bcdaec
+index 0000000..44c6658
 --- /dev/null
 +++ b/src/structured.rs
-@@ -0,0 +1,1407 @@
+@@ -0,0 +1,1402 @@
 +//! Source-preserving structured extraction evidence and coordinate conversion.
 +//!
 +//! These types deliberately sit below application-specific interpretation.
@@ -1813,7 +1813,7 @@ index 0000000..5bcdaec
 +            // retained separately only where its text cannot be reconstructed
 +            // from those lines, rather than replacing the evidence with an
 +            // invented one-line location.
-+            let matched_lines = lines_matching_raw_cell(source_lines.clone(), raw_text);
++            let matched_lines = lines_matching_raw_cell(&source_lines, raw_text);
 +            let state = if raw_cell.is_none() {
 +                // A ragged detector matrix has no established grid evidence
 +                // for this public slot. It must not become a confirmed blank.
@@ -1824,15 +1824,15 @@ index 0000000..5bcdaec
 +                } else {
 +                    StructuredCellState::Unresolved
 +                }
-+            } else if association_reliable && matched_lines.is_some() {
++            } else if association_reliable && matched_lines {
 +                StructuredCellState::Extracted
 +            } else {
 +                StructuredCellState::Unresolved
 +            };
 +            let detected_text = (state == StructuredCellState::Unresolved
 +                && !raw_text.is_empty()
-+                && matched_lines.is_none())
-+            .then(|| raw_text.to_owned());
++                && !matched_lines)
++                .then(|| raw_text.to_owned());
 +            let lines = source_lines;
 +            let bounds = union_bounds(lines.iter().filter_map(|line| line.bounds));
 +            let role = cell_role(&items, struct_roles);
@@ -1915,20 +1915,14 @@ index 0000000..5bcdaec
 +        .collect()
 +}
 +
-+fn lines_matching_raw_cell(
-+    lines: Vec<StructuredTextLine>,
-+    raw_text: &str,
-+) -> Option<Vec<StructuredTextLine>> {
++fn lines_matching_raw_cell(lines: &[StructuredTextLine], raw_text: &str) -> bool {
 +    if raw_text.is_empty() {
-+        return lines.is_empty().then_some(lines);
++        return lines.is_empty();
 +    }
-+    let joined = lines
++    lines
 +        .iter()
 +        .flat_map(|line| line.text.split_whitespace())
-+        .collect::<Vec<_>>()
-+        .join(" ");
-+    let raw_text = raw_text.split_whitespace().collect::<Vec<_>>().join(" ");
-+    (joined == raw_text).then_some(lines)
++        .eq(raw_text.split_whitespace())
 +}
 +
 +fn assign_table_items(
@@ -2538,11 +2532,12 @@ index 0000000..5bcdaec
 +                bounds: None,
 +            },
 +        ];
-+        let matched = lines_matching_raw_cell(lines, "First\nline\tSecond line")
-+            .expect("normalized text should match");
-+        assert_eq!(matched.len(), 2);
-+        assert_eq!(matched[0].text, "First  line");
-+        assert_eq!(matched[1].text, "Second line");
++        assert!(lines_matching_raw_cell(&[], ""));
++        assert!(!lines_matching_raw_cell(&lines, ""));
++        assert!(lines_matching_raw_cell(&lines, "First\nline\tSecond line"));
++        assert_eq!(lines.len(), 2);
++        assert_eq!(lines[0].text, "First  line");
++        assert_eq!(lines[1].text, "Second line");
 +    }
 +
 +    #[test]

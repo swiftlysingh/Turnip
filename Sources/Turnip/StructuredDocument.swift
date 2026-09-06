@@ -69,35 +69,6 @@ public struct ExtractedDocument: Codable, Sendable, Hashable {
             )
         }
 
-        var pageIndexes = Set<Int>()
-        var blockIDs = Set<String>()
-        var previousPageIndex: Int?
-        for page in pages {
-            guard pageIndexes.insert(page.pageIndex).inserted else {
-                throw StructuredDocumentCodingError.invalidValue(
-                    "A structured document contains a duplicate page index"
-                )
-            }
-            guard previousPageIndex.map({ $0 < page.pageIndex }) ?? true else {
-                throw StructuredDocumentCodingError.invalidValue(
-                    "Structured document pages must be in ascending page order"
-                )
-            }
-            guard page.pageIndex < inspection.pageCount else {
-                throw StructuredDocumentCodingError.invalidValue(
-                    "A structured document page index is outside the source document"
-                )
-            }
-            previousPageIndex = page.pageIndex
-            for block in page.blocks {
-                guard blockIDs.insert(block.id).inserted else {
-                    throw StructuredDocumentCodingError.invalidValue(
-                        "A structured document contains a duplicate block ID"
-                    )
-                }
-            }
-        }
-
         self.schemaVersion = schemaVersion
         self.inspection = inspection
         self.pages = pages
@@ -371,16 +342,6 @@ public struct DocumentBlock: Codable, Sendable, Hashable {
         /// A page-local table fragment.
         case table(TableBlock)
 
-        /// Creates a text content value.
-        public init(text: TextBlock) {
-            self = .text(text)
-        }
-
-        /// Creates a table content value.
-        public init(table: TableBlock) {
-            self = .table(table)
-        }
-
         private enum CodingKeys: String, CodingKey {
             case type
             case lines
@@ -472,7 +433,7 @@ public struct TableBlock: Codable, Sendable, Hashable {
         self.cells = cells
     }
 
-    fileprivate init(validating rowCount: Int, columnCount: Int, cells: [TableCell]) throws {
+    init(validating rowCount: Int, columnCount: Int, cells: [TableCell]) throws {
         guard rowCount > 0, columnCount > 0,
             Self.isValid(cells: cells, rowCount: rowCount, columnCount: columnCount)
         else {
@@ -955,25 +916,6 @@ extension DocumentInspection: Codable {
         try container.encodeIfPresent(layout, forKey: .layout)
         try container.encodeIfPresent(hasEncodingIssues, forKey: .hasEncodingIssues)
         try container.encode(engineVersion, forKey: .engineVersion)
-    }
-}
-
-extension DocumentKind: Codable {
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        let rawValue = try container.decode(String.self)
-        guard let value = DocumentKind(rawValue: rawValue) else {
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Unknown document kind \"\(rawValue)\""
-            )
-        }
-        self = value
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(rawValue)
     }
 }
 

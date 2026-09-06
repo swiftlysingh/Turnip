@@ -338,7 +338,7 @@ public struct DocumentInspection: Sendable, Hashable {
 }
 
 /// The engine's classification of a PDF's content.
-public enum DocumentKind: String, Sendable, Hashable {
+public enum DocumentKind: String, Codable, Sendable, Hashable {
     /// The engine classified the PDF as text-based.
     case textBased = "text_based"
 
@@ -701,7 +701,7 @@ private struct Payload: Sendable {
 
         if operation == .document {
             guard let wireDocument = result.document else {
-                throw TurnipError.invalidEngineResponse(
+                throw TurnipError.engineFailure(
                     code: "missing_document",
                     message: "The PDF engine omitted the structured document."
                 )
@@ -714,7 +714,7 @@ private struct Payload: Sendable {
             guard pages.filter({ $0.status == .needsOCR }).map(\.pageIndex)
                 == result.pagesNeedingOcr
             else {
-                throw TurnipError.invalidEngineResponse(
+                throw TurnipError.engineFailure(
                     code: "inconsistent_page_status",
                     message: "The PDF engine returned inconsistent OCR page coverage."
                 )
@@ -726,19 +726,13 @@ private struct Payload: Sendable {
             )
         } else {
             guard result.document == nil else {
-                throw TurnipError.invalidEngineResponse(
+                throw TurnipError.engineFailure(
                     code: "unexpected_document",
                     message: "The PDF engine returned structured data for the wrong operation."
                 )
             }
             document = nil
         }
-    }
-}
-
-private extension TurnipError {
-    static func invalidEngineResponse(code: String, message: String) -> TurnipError {
-        .engineFailure(code: code, message: message)
     }
 }
 
@@ -804,7 +798,7 @@ private struct WireDocument: Decodable {
         sourcePageCount: Int
     ) throws -> [DocumentPage] {
         guard pages.map(\.pageIndex) == expectedPageIndexes else {
-            throw TurnipError.invalidEngineResponse(
+            throw TurnipError.engineFailure(
                 code: "invalid_page_coverage",
                 message: "The PDF engine did not return every requested page in source order."
             )
@@ -832,19 +826,19 @@ private struct WireDocumentPage: Decodable {
 
     func publicPage(sourcePageCount: Int, blockIDs: inout Set<String>) throws -> DocumentPage {
         guard (0..<sourcePageCount).contains(pageIndex) else {
-            throw TurnipError.invalidEngineResponse(
+            throw TurnipError.engineFailure(
                 code: "invalid_page_index",
                 message: "The PDF engine returned an out-of-range structured page index."
             )
         }
         guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else {
-            throw TurnipError.invalidEngineResponse(
+            throw TurnipError.engineFailure(
                 code: "invalid_page_size",
                 message: "The PDF engine returned an invalid page size."
             )
         }
         guard let pageStatus = DocumentPageStatus(wireValue: status) else {
-            throw TurnipError.invalidEngineResponse(
+            throw TurnipError.engineFailure(
                 code: "unknown_page_status",
                 message: "The PDF engine returned an unknown page status."
             )
@@ -853,7 +847,7 @@ private struct WireDocumentPage: Decodable {
         let publicBlocks = try blocks.enumerated().map { index, block in
             let expectedID = "p\(pageIndex)-b\(index)"
             guard block.id == expectedID, blockIDs.insert(block.id).inserted else {
-                throw TurnipError.invalidEngineResponse(
+                throw TurnipError.engineFailure(
                     code: "invalid_block_id",
                     message: "The PDF engine returned an invalid or duplicate block ID."
                 )
@@ -885,75 +879,20 @@ private struct WireDocumentBlock: Decodable {
         case let .text(lines):
             publicContent = .text(TextBlock(lines: try lines.map { try $0.publicLine() }))
         case let .table(rowCount, columnCount, cells):
-            try Self.validateTable(rowCount: rowCount, columnCount: columnCount, cells: cells)
-            publicContent = .table(
-                TableBlock(
-                    rowCount: rowCount,
-                    columnCount: columnCount,
-                    cells: try cells.map { try $0.publicCell() }
+            let publicCells = try cells.map { try $0.publicCell() }
+            guard let table = try? TableBlock(
+                validating: rowCount,
+                columnCount: columnCount,
+                cells: publicCells
+            ) else {
+                throw TurnipError.engineFailure(
+                    code: "invalid_table_grid",
+                    message: "The PDF engine returned an invalid table grid."
                 )
-            )
+            }
+            publicContent = .table(table)
         }
         return DocumentBlock(id: id, bounds: try bounds?.publicBounds(), content: publicContent)
-    }
-
-    private static func validateTable(
-        rowCount: Int,
-        columnCount: Int,
-        cells: [WireTableCell]
-    ) throws {
-        guard rowCount > 0, columnCount > 0 else {
-            throw TurnipError.invalidEngineResponse(
-                code: "invalid_table_grid",
-                message: "The PDF engine returned invalid table dimensions."
-            )
-        }
-        guard zip(cells, cells.dropFirst()).allSatisfy({ previous, next in
-            previous.row < next.row
-                || (previous.row == next.row && previous.column < next.column)
-        }) else {
-            throw TurnipError.invalidEngineResponse(
-                code: "invalid_table_cell_order",
-                message: "The PDF engine returned table cells outside source order."
-            )
-        }
-
-        let slotCount = rowCount.multipliedReportingOverflow(by: columnCount)
-        guard !slotCount.overflow else {
-            throw TurnipError.invalidEngineResponse(
-                code: "invalid_table_grid",
-                message: "The PDF engine returned table dimensions that are too large."
-            )
-        }
-        var occupied = Set<Int>()
-        for cell in cells {
-            guard cell.row >= 0, cell.column >= 0,
-                cell.rowSpan > 0, cell.columnSpan > 0,
-                cell.row <= rowCount - cell.rowSpan,
-                cell.column <= columnCount - cell.columnSpan
-            else {
-                throw TurnipError.invalidEngineResponse(
-                    code: "invalid_table_cell",
-                    message: "The PDF engine returned a table cell outside its grid."
-                )
-            }
-            for row in cell.row..<(cell.row + cell.rowSpan) {
-                for column in cell.column..<(cell.column + cell.columnSpan) {
-                    guard occupied.insert(row * columnCount + column).inserted else {
-                        throw TurnipError.invalidEngineResponse(
-                            code: "overlapping_table_cells",
-                            message: "The PDF engine returned overlapping table cells."
-                        )
-                    }
-                }
-            }
-        }
-        guard occupied.count == slotCount.partialValue else {
-            throw TurnipError.invalidEngineResponse(
-                code: "incomplete_table_grid",
-                message: "The PDF engine returned an incomplete table grid."
-            )
-        }
     }
 }
 
@@ -1015,7 +954,7 @@ private struct WireTableCell: Decodable {
 
     func publicCell() throws -> TableCell {
         guard row >= 0, column >= 0, rowSpan > 0, columnSpan > 0 else {
-            throw TurnipError.invalidEngineResponse(
+            throw TurnipError.engineFailure(
                 code: "invalid_table_cell",
                 message: "The PDF engine returned an invalid table cell."
             )
@@ -1023,7 +962,7 @@ private struct WireTableCell: Decodable {
         guard let publicRole = TableCellRole(rawValue: role),
             let publicState = TableCellState(rawValue: state)
         else {
-            throw TurnipError.invalidEngineResponse(
+            throw TurnipError.engineFailure(
                 code: "unknown_table_cell_value",
                 message: "The PDF engine returned an unknown table cell role or state."
             )
@@ -1032,7 +971,7 @@ private struct WireTableCell: Decodable {
             publicState != .extracted || (!lines.isEmpty && detectedText == nil),
             publicState != .empty || (lines.isEmpty && detectedText == nil)
         else {
-            throw TurnipError.invalidEngineResponse(
+            throw TurnipError.engineFailure(
                 code: "inconsistent_table_cell_state",
                 message: "The PDF engine returned a table cell whose state contradicts its lines."
             )
@@ -1073,7 +1012,7 @@ private struct WireBounds: Decodable {
             x <= 1, y <= 1, width <= 1, height <= 1,
             x + width <= 1 + epsilon, y + height <= 1 + epsilon
         else {
-            throw TurnipError.invalidEngineResponse(
+            throw TurnipError.engineFailure(
                 code: "invalid_bounds",
                 message: "The PDF engine returned invalid normalized bounds."
             )
@@ -1081,7 +1020,7 @@ private struct WireBounds: Decodable {
         let clippedWidth = min(width, 1 - x)
         let clippedHeight = min(height, 1 - y)
         guard clippedWidth > 0, clippedHeight > 0 else {
-            throw TurnipError.invalidEngineResponse(
+            throw TurnipError.engineFailure(
                 code: "invalid_bounds",
                 message: "The PDF engine returned empty normalized bounds."
             )
