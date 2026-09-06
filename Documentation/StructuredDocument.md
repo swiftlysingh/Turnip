@@ -74,6 +74,11 @@ preserved when encoded again. Unknown object fields are ignored within schema
 v1; a change that alters the meaning of existing fields requires a new root
 schema version.
 
+Warning `pageIndexes` contain only pages for which the engine supplied
+page-local evidence. An empty list means the warning applies to the document
+but could not be localized. Consumers must not interpret an empty list as every
+requested page.
+
 Pages are strictly ascending by their original zero-based PDF index. Blocks
 remain in inferred reading order. Cells are ordered by zero-based row and then
 column. JSON array order is meaningful and round-tripping preserves it.

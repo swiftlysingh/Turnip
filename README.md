@@ -166,7 +166,8 @@ Neither `extract` nor `extractDocument` is implemented as `inspect` followed by
 another parse. Each makes one full engine call over one loaded PDF and returns
 the richer inspection data collected by that pass. Apps that need Markdown
 should keep calling `extract`; apps that need source structure should call
-`extractDocument`.
+`extractDocument`. Structured extraction shares the detector and reading-order
+pipeline, then stops before Markdown presentation rendering.
 
 Page selection limits the requested output and OCR-routing results. It does not
 promise proportional speedups because some engine checks may still examine
@@ -174,6 +175,9 @@ document-wide metadata. Benchmark the documents that matter to your app.
 
 All public page indexes are zero-based. OCR confidence and extraction
 confidence are engine signals, not guarantees that text is correct.
+Warning page indexes identify only pages with page-local evidence. An empty
+warning page list means the engine could not localize that document-level
+warning; it does not mean every selected page.
 
 ### Errors
 

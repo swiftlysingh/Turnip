@@ -36,8 +36,9 @@ classification and extraction inside `pdf-inspector`; Turnip does not call
 inspection, and warnings.
 
 `Turnip.extractDocument` also uses one loaded PDF and the same table detection
-and reading-order work as Markdown extraction. The engine captures page-local
-text and table evidence before Markdown presentation cleanup. This matters
+and reading-order work as Markdown extraction. It runs that shared pipeline in
+analyze mode, captures page-local text and table evidence, and stops before the
+Markdown presentation renderer. This matters
 because Markdown formatting can merge continuation rows, extract footnotes,
 remove empty rows, add a syntactic header separator, and join table fragments
 across pages. Structured v1 keeps the earlier rows, lines, blank slots, repeated
@@ -82,9 +83,10 @@ index as an engine failure.
 
 `DocumentInspection.pageCount` is always the source document's total page
 count. For a selected operation, Markdown, structured pages, OCR page lists,
-OCR reasons, layout page lists, encoding warnings, and warnings are filtered to
-the selection. Selected output stays in source-document order and structured
-pages keep their original indexes.
+OCR reasons, layout page lists, and warning page indexes are filtered to the
+selection. Selected output stays in source-document order and structured pages
+keep their original indexes. An empty warning page list means the engine could
+not localize that document-level warning; it never means every selected page.
 
 The bridge converts selected pages back to the engine's one-based convention.
 The tracked engine patch also makes sparse-text and undecodable-font quality

@@ -58,7 +58,9 @@ correct. Preserve ``ExtractedDocument/warnings``, page statuses, source lines,
 and the ``DocumentInspection``. In particular,
 ``DocumentWarning/Kind/ocrRequired`` means the engine recommends OCR for one or
 more pages, and ``DocumentWarning/Kind/encodingIssues`` means the engine found
-decoding issues.
+decoding issues. Warning page indexes contain only page-local evidence. An
+empty list means the engine could not localize a document-level warning, not
+that every requested page is affected.
 
 ```swift
 let source = DocumentSourceReference(

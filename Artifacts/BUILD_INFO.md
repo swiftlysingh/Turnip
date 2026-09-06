@@ -11,13 +11,10 @@ The artifact includes indirect Form resource decoding and first-transaction-row
 deduplication from the pinned fork. It was built with CMaps embedded, the Apple
 single-threaded lopdf configuration, selection-aware sparse-text/font quality
 heuristics, and source-preserving structured capture before Markdown presentation
-cleanup from the tracked patch. Rebuilds must update this file and pass
+cleanup from the tracked patch. Build paths were remapped to `/DocumentKit`,
+`/Cargo`, and `/BuildUser`. Rebuilds must update this file and pass
 `Scripts/verify-artifact.sh` plus Swift runtime and parity tests. Artifact
 runtime checks confirm the version and upstream source revision in every
 packaged library slice. `Turnip.engineRevision` reports that upstream
 source revision, not the patch state. Compile-time verification requires the
 exact `HEAD` plus tracked-patch tree.
-
-These slices were produced before path remapping landed on `main`. A rebuild
-with `Scripts/build-xcframework.sh` is required so packaged libraries remap
-Turnip sources beneath `/DocumentKit` and Cargo sources beneath `/Cargo`.

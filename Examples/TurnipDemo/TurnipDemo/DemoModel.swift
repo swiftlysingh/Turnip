@@ -37,6 +37,13 @@ final class DemoModel: ObservableObject {
             do {
                 let readTask = Task.detached(priority: .userInitiated) {
                     try Task.checkCancellation()
+                    let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+                    if values.isRegularFile == true,
+                       let fileSize = values.fileSize,
+                       fileSize > Turnip.maximumInputSize
+                    {
+                        throw TurnipError.inputTooLarge(maximumBytes: Turnip.maximumInputSize)
+                    }
                     return try Data(contentsOf: url, options: [.mappedIfSafe])
                 }
                 let data = try await readTask.value

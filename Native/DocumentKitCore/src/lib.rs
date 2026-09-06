@@ -1,5 +1,5 @@
 use pdf_inspector::{
-    DetectionConfig, PdfError, PdfOptions, PdfProcessResult, PdfType, ScanStrategy,
+    DetectionConfig, PdfError, PdfOptions, PdfProcessResult, PdfType, ProcessMode, ScanStrategy,
     StructuredBlockContent, StructuredBounds, StructuredCellState, StructuredDocument,
     StructuredPageStatus,
 };
@@ -361,7 +361,9 @@ unsafe fn process(
         let mut options = match operation {
             Operation::Inspect => PdfOptions::detect_only(),
             Operation::Extract => PdfOptions::new(),
-            Operation::ExtractDocument => PdfOptions::new().capture_structured_output(),
+            Operation::ExtractDocument => PdfOptions::new()
+                .mode(ProcessMode::Analyze)
+                .capture_structured_output(),
         };
         if let Some(pages) = selected_pages.as_ref() {
             options.page_filter = Some(pages.iter().copied().collect());

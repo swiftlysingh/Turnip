@@ -393,8 +393,22 @@ public struct DocumentWarning: Sendable, Hashable {
     /// The warning category.
     public let kind: Kind
 
-    /// Zero-based pages associated with the warning or its routing context.
+    /// Zero-based pages with page-local warning evidence.
+    ///
+    /// An empty list means the engine could not localize a document-level
+    /// warning. It does not mean every requested page.
     public let pageIndexes: [Int]
+}
+
+/// Returns the pages whose OCR metadata explicitly identifies garbled text.
+///
+/// Encoding warnings do not have a native page list of their own. Keep the
+/// association empty when the engine only reports a document-level encoding
+/// problem rather than attributing it to a page-local OCR reason.
+internal func encodingIssuePageIndexes(from reasonsByPage: [PageOCRReasons]) -> [Int] {
+    reasonsByPage
+        .filter { $0.reasons.contains("suspected_garbled_text") }
+        .map(\.pageIndex)
 }
 
 /// Errors returned by PDF inspection and extraction.
@@ -686,13 +700,15 @@ private struct Payload: Sendable {
             )
         }
         if hasExtractionMetadata && result.hasEncodingIssues {
-            let pages = Array(Set(result.ocrReasonsByPage.map(\.page))).sorted()
+            let pages = encodingIssuePageIndexes(
+                from: result.ocrReasonsByPage.map {
+                    PageOCRReasons(pageIndex: $0.page, reasons: $0.reasons)
+                }
+            )
             warnings.append(
                 DocumentWarning(
                     kind: .encodingIssues,
-                    pageIndexes: pages.isEmpty
-                        ? selectedPageIndexes ?? Array(0..<result.pageCount)
-                        : pages
+                    pageIndexes: pages
                 )
             )
         }

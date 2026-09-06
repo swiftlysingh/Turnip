@@ -147,6 +147,44 @@ import Testing
     #expect(extractedText.contains("Last selected page"))
 }
 
+@Test func structuredDocumentValidatesEveryPageSelectionError() async {
+    let pdf = textOnlyPDF()
+
+    await #expect(throws: TurnipError.invalidPageSelection(.empty)) {
+        try await Turnip.extractDocument(pdf, options: DocumentOptions(pageIndexes: []))
+    }
+    await #expect(throws: TurnipError.invalidPageSelection(.negative(pageIndex: -1))) {
+        try await Turnip.extractDocument(pdf, options: DocumentOptions(pageIndexes: [-1]))
+    }
+    await #expect(throws: TurnipError.invalidPageSelection(.duplicate(pageIndex: 0))) {
+        try await Turnip.extractDocument(pdf, options: DocumentOptions(pageIndexes: [0, 0]))
+    }
+    await #expect(
+        throws: TurnipError.invalidPageSelection(
+            .exceedsEngineLimit(pageIndex: Int(UInt32.max))
+        )
+    ) {
+        try await Turnip.extractDocument(
+            pdf,
+            options: DocumentOptions(pageIndexes: [Int(UInt32.max)])
+        )
+    }
+}
+
+@Test func encodingWarningAttributionRequiresTheGarbledTextReason() {
+    let reasons = [
+        PageOCRReasons(pageIndex: 0, reasons: ["scanned"]),
+        PageOCRReasons(pageIndex: 1, reasons: ["suspected_garbled_text"]),
+        PageOCRReasons(
+            pageIndex: 2,
+            reasons: ["suspected_garbled_text", "vector_text"]
+        ),
+    ]
+
+    #expect(encodingIssuePageIndexes(from: reasons) == [1, 2])
+    #expect(encodingIssuePageIndexes(from: []) == [])
+}
+
 @Test func retroBudgetConsumerCanValidateAnInterpretedValueAgainstItsSourceCell() async throws {
     let document = try await Turnip.extractDocument(inventedStatementPDF())
     let page = try #require(document.page(at: 0))
@@ -237,6 +275,20 @@ import Testing
     })
 }
 
+@Test func structuredDocumentRetainsSparseTextOCRRoutingWithoutRenderingMarkdown() async throws {
+    let document = try await Turnip.extractDocument(
+        makeTextAndGridPDF([textContent("Short")])
+    )
+
+    let page = try #require(document.pages.first)
+    #expect(page.status == .needsOCR)
+    #expect(page.blocks.map(\.contentText).joined().contains("Short"))
+    #expect(document.inspection.pagesNeedingOCR == [0])
+    #expect(document.warnings.contains { warning in
+        warning.kind == .ocrRequired && warning.pageIndexes == [0]
+    })
+}
+
 @Test func structuredDocumentHandlesPasswordProtectedInput() async throws {
     let document = try await Turnip.extractDocument(
         encryptedFixture(),
@@ -248,6 +300,20 @@ import Testing
 
     #expect(document.pages.map(\.pageIndex) == [0])
     #expect(document.pages.flatMap(\.blocks).map(\.contentText).joined().contains("DocumentKit Fixture"))
+}
+
+@Test func structuredDocumentTreatsAnEmptyPasswordAsSupplied() async throws {
+    let encrypted = try encryptedFixture()
+
+    await #expect(throws: TurnipError.encryptedPDF) {
+        try await Turnip.extractDocument(
+            encrypted,
+            options: DocumentOptions(password: "")
+        )
+    }
+
+    #expect(!String(describing: DocumentOptions()).contains("REDACTED"))
+    #expect(String(describing: DocumentOptions(password: "")).contains("REDACTED"))
 }
 
 @Test func structuredDocumentPreservesTypedFatalErrors() async throws {
@@ -365,6 +431,42 @@ import Testing
     }
     let warningData = try JSONEncoder().encode(warning)
     #expect(try JSONDecoder().decode(DocumentWarning.self, from: warningData) == warning)
+}
+
+@Test func extractionFailedPageStatusIsPubliclyCodable() throws {
+    let inspection = DocumentInspection(
+        kind: .textBased,
+        pageCount: 1,
+        title: nil,
+        confidence: 1,
+        processingTime: .zero,
+        pagesNeedingOCR: [],
+        ocrReasonsByPage: [],
+        layout: nil,
+        hasEncodingIssues: false,
+        engineVersion: "test"
+    )
+    let document = ExtractedDocument(
+        inspection: inspection,
+        pages: [DocumentPage(
+            pageIndex: 0,
+            size: PageSize(width: 1, height: 1),
+            status: .extractionFailed,
+            blocks: []
+        )],
+        warnings: []
+    )
+
+    let encoded = try JSONEncoder().encode(document)
+    let decoded = try JSONDecoder().decode(ExtractedDocument.self, from: encoded)
+    #expect(decoded == document)
+    let object = try #require(
+        JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    let pages = try #require(object["pages"] as? [[String: Any]])
+    #expect(
+        pages.first?["status"] as? String == "extractionFailed"
+    )
 }
 
 @Test func structuredDocumentResultsAreSemanticallyDeterministic() async throws {

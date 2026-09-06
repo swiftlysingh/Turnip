@@ -175,7 +175,7 @@ index c2c7b00..60d3f56 100644
  }
  
 diff --git a/src/lib.rs b/src/lib.rs
-index 7ebc8c9..aa739af 100644
+index 7ebc8c9..6bcd852 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -38,6 +38,7 @@ pub mod glyph_names;
@@ -338,7 +338,7 @@ index 7ebc8c9..aa739af 100644
          extracted.ok()
      } else {
          Some(extracted?)
-@@ -4003,13 +4061,19 @@ fn process_document(
+@@ -4003,13 +4061,21 @@ fn process_document(
  
      let (
          markdown,
@@ -348,6 +348,8 @@ index 7ebc8c9..aa739af 100644
          gid_pages,
          text_quality_pages,
          text_quality_reasons_by_page,
++        structured_text_length,
++        structured_text_is_garbage,
      ) = match extracted {
 -        Some(((items, rects, lines), page_thresholds, gid_encoded_pages)) => {
 +        Some((
@@ -359,7 +361,7 @@ index 7ebc8c9..aa739af 100644
              let mut ocr_reasons_by_page = BTreeMap::new();
  
              // For TextBased PDFs with pages flagged for OCR (Identity-H or
-@@ -4092,6 +4156,20 @@ fn process_document(
+@@ -4092,6 +4158,20 @@ fn process_document(
                  .into_iter()
                  .filter(|page| selected_page(*page))
                  .collect();
@@ -380,7 +382,26 @@ index 7ebc8c9..aa739af 100644
              let FolioFilteredItems {
                  items,
                  layout_items,
-@@ -4114,24 +4192,37 @@ fn process_document(
+@@ -4105,6 +4185,18 @@ fn process_document(
+ 
+             let text_quality = analyze_text_quality(&items);
+             merge_ocr_reasons(&mut ocr_reasons_by_page, text_quality.reasons_by_page);
++            let structured_text = (options.mode == ProcessMode::Analyze
++                && options.capture_structured_output)
++                .then(|| {
++                    items
++                        .iter()
++                        .filter(|item| !matches!(item.item_type, types::ItemType::Image))
++                        .map(|item| item.text.as_str())
++                        .collect::<String>()
++                });
++            let structured_text_length = structured_text.as_ref().map(String::len);
++            let structured_text_is_garbage =
++                structured_text.as_deref().is_some_and(is_garbage_text);
+             let chart_regions = markdown::chart_regions_by_page(&items, &rects, &lines);
+             let layout = compute_layout_complexity_with_chart_regions(
+                 &items,
+@@ -4114,24 +4206,38 @@ fn process_document(
                  &chart_regions,
              );
  
@@ -422,6 +443,7 @@ index 7ebc8c9..aa739af 100644
 +                            precomputed_chart_regions: Some(&chart_regions),
 +                        },
 +                        page_geometries.as_ref(),
++                        options.mode != ProcessMode::Analyze,
 +                    ),
 +                )
 +                };
@@ -436,7 +458,7 @@ index 7ebc8c9..aa739af 100644
              };
  
              let enc = !ocr_reasons_by_page.is_empty()
-@@ -4139,6 +4230,7 @@ fn process_document(
+@@ -4139,28 +4245,38 @@ fn process_document(
                  || md.as_ref().is_some_and(|m| detect_encoding_issues(m));
              (
                  md,
@@ -444,7 +466,10 @@ index 7ebc8c9..aa739af 100644
                  layout,
                  enc,
                  gid_encoded_pages,
-@@ -4147,6 +4239,7 @@ fn process_document(
+                 text_quality.pages_needing_ocr,
+                 ocr_reasons_by_page,
++                structured_text_length,
++                structured_text_is_garbage,
              )
          }
          None => (
@@ -452,14 +477,51 @@ index 7ebc8c9..aa739af 100644
              None,
              LayoutComplexity::default(),
              false,
-@@ -4178,12 +4271,16 @@ fn process_document(
-         (markdown, has_encoding_issues, false)
+             std::collections::HashSet::new(),
+             Vec::new(),
+             BTreeMap::new(),
++            None,
++            false,
+         ),
      };
  
++    let extracted_text_is_garbage = markdown
++        .as_deref()
++        .map_or(structured_text_is_garbage, is_garbage_text);
++
+     // If the extracted text is predominantly garbage (non-alphanumeric) and
+     // the PDF is image-backed (Mixed/template), upgrade to Scanned — the text
+     // layer comes from a bad OCR pass, and callers should use proper OCR.
+     let (pdf_type, markdown, confidence) =
+-        if pdf_type == PdfType::Mixed && markdown.as_ref().is_some_and(|m| is_garbage_text(m)) {
++        if pdf_type == PdfType::Mixed && extracted_text_is_garbage {
+             (PdfType::Scanned, None, 0.95)
+         } else {
+             (pdf_type, markdown, confidence)
+@@ -4169,21 +4285,24 @@ fn process_document(
+     // If a TextBased PDF produces garbage text, the fonts are undecodable
+     // (e.g. Identity-H without ToUnicode for non-Latin scripts like Cyrillic).
+     // Drop the useless markdown and flag all pages for OCR.
+-    let (markdown, has_encoding_issues, force_ocr_all) = if pdf_type == PdfType::TextBased
+-        && markdown.as_ref().is_some_and(|m| is_garbage_text(m))
+-    {
+-        log::debug!("TextBased PDF has garbage text — flagging all pages for OCR");
+-        (None, true, true)
+-    } else {
+-        (markdown, has_encoding_issues, false)
+-    };
++    let (markdown, has_encoding_issues, force_ocr_all) =
++        if pdf_type == PdfType::TextBased && extracted_text_is_garbage {
++            log::debug!("TextBased PDF has garbage text — flagging all pages for OCR");
++            (None, true, true)
++        } else {
++            (markdown, has_encoding_issues, false)
++        };
++
 +    // Page-filtered requests make quality decisions over the selected pages.
 +    // Keep page_count as the source document total for API compatibility.
 +    let processed_page_count = processed_pages.len() as u32;
-+
+ 
      // Add pages with gid-encoded fonts (unresolvable encoding) to OCR list.
 -    // When ALL pages have gid-encoded fonts, suppress unreliable markdown.
 -    let all_gid = !gid_pages.is_empty() && gid_pages.len() as u32 >= page_count;
@@ -472,19 +534,28 @@ index 7ebc8c9..aa739af 100644
      }
      if !gid_pages.is_empty() {
          log::debug!("pages with gid-encoded fonts (need OCR): {:?}", gid_pages);
-@@ -4213,32 +4310,45 @@ fn process_document(
+@@ -4211,34 +4330,50 @@ fn process_document(
+     // Detect sparse extraction: when a TEXT-BASED PDF produces very few
+     // characters per page, the text is likely embedded in images/forms
      // that need OCR.  Flag all pages for OCR in this case.
-     // Only check when markdown was actually generated (not in Analyze mode).
+-    // Only check when markdown was actually generated (not in Analyze mode).
++    let extracted_text_length = markdown
++        .as_ref()
++        .map(String::len)
++        .or(structured_text_length);
      if pdf_type == PdfType::TextBased
 -        && page_count > 0
 +        && processed_page_count > 0
          && pages_needing_ocr.is_empty()
-         && markdown.is_some()
+-        && markdown.is_some()
++        && extracted_text_length.is_some()
      {
-         let md_len = markdown.as_ref().map_or(0, |m| m.len());
+-        let md_len = markdown.as_ref().map_or(0, |m| m.len());
 -        let chars_per_page = md_len as f32 / page_count as f32;
-+        let chars_per_page = md_len as f32 / processed_page_count as f32;
-         if chars_per_page < 50.0 && md_len < 500 {
+-        if chars_per_page < 50.0 && md_len < 500 {
++        let text_length = extracted_text_length.unwrap_or_default();
++        let chars_per_page = text_length as f32 / processed_page_count as f32;
++        if chars_per_page < 50.0 && text_length < 500 {
              log::debug!(
                  "sparse extraction: {:.0} chars/page — recommending OCR for all {} pages",
                  chars_per_page,
@@ -523,7 +594,7 @@ index 7ebc8c9..aa739af 100644
      Ok(PdfProcessResult {
          pdf_type,
          markdown,
-@@ -4256,6 +4366,7 @@ fn process_document(
+@@ -4256,6 +4391,7 @@ fn process_document(
          confidence,
          layout,
          has_encoding_issues,
@@ -531,7 +602,7 @@ index 7ebc8c9..aa739af 100644
      })
  }
  
-@@ -4263,6 +4374,26 @@ fn process_document(
+@@ -4263,6 +4399,26 @@ fn process_document(
  // Internal helpers
  // =========================================================================
  
@@ -558,7 +629,7 @@ index 7ebc8c9..aa739af 100644
  fn suspected_garbled_reason() -> String {
      OCR_REASON_SUSPECTED_GARBLED_TEXT.to_string()
  }
-@@ -6085,6 +6216,8 @@ pub enum PdfError {
+@@ -6085,6 +6241,8 @@ pub enum PdfError {
      InvalidStructure,
      #[error("Not a PDF: {0}")]
      NotAPdf(String),
@@ -567,6 +638,45 @@ index 7ebc8c9..aa739af 100644
  }
  
  impl From<lopdf::Error> for PdfError {
+@@ -6270,6 +6428,38 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn analyze_structured_capture_skips_markdown() {
++        let pdf = std::fs::read("tests/fixtures/nexo-price-en.pdf").unwrap();
++        let result = process_pdf_mem_with_options(
++            &pdf,
++            PdfOptions::new()
++                .mode(ProcessMode::Analyze)
++                .pages([1])
++                .capture_structured_output(),
++        )
++        .unwrap();
++
++        assert!(result.markdown.is_none());
++        assert!(result
++            .structured_document
++            .is_some_and(|document| document.pages.iter().any(|page| !page.blocks.is_empty())));
++    }
++
++    #[test]
++    fn full_structured_capture_preserves_markdown() {
++        let pdf = std::fs::read("tests/fixtures/nexo-price-en.pdf").unwrap();
++        let plain = process_pdf_mem_with_options(&pdf, PdfOptions::new().pages([1])).unwrap();
++        let captured = process_pdf_mem_with_options(
++            &pdf,
++            PdfOptions::new().pages([1]).capture_structured_output(),
++        )
++        .unwrap();
++
++        assert_eq!(captured.markdown, plain.markdown);
++        assert!(captured.structured_document.is_some());
++    }
++
+     #[test]
+     fn removed_sparse_folios_leave_no_layout_evidence() {
+         let items = vec![
 diff --git a/src/markdown/convert.rs b/src/markdown/convert.rs
 index 5e436c5..9936c73 100644
 --- a/src/markdown/convert.rs
@@ -665,7 +775,7 @@ index 5e436c5..9936c73 100644
  /// so many lines that they clearly represent body text, not real headings.
  /// Returns the set of heading levels (1–6) that should be suppressed.
 diff --git a/src/markdown/mod.rs b/src/markdown/mod.rs
-index 4300f51..4dbc0f9 100644
+index 4300f51..8321d95 100644
 --- a/src/markdown/mod.rs
 +++ b/src/markdown/mod.rs
 @@ -15,15 +15,16 @@ mod preprocess;
@@ -689,20 +799,27 @@ index 4300f51..4dbc0f9 100644
  };
  
  const CHART_REGION_PAD: f32 = 20.0;
-@@ -565,13 +566,34 @@ fn is_parallel_prose_table(table: &crate::tables::Table) -> bool {
+@@ -565,13 +566,42 @@ fn is_parallel_prose_table(table: &crate::tables::Table) -> bool {
  
  fn positioned_table(
      table: &crate::tables::Table,
 +    source_items: &[TextItem],
      chart_order: Option<ChartProseOrder>,
++    render_markdown: bool,
 +    capture_structured_output: bool,
  ) -> PositionedMarkdown {
 -    PositionedMarkdown::new(
++    let markdown = if render_markdown {
++        crate::tables::table_to_markdown(table)
++    } else {
++        String::new()
++    };
 +    PositionedMarkdown::table(
          table.rows.first().copied().unwrap_or(0.0),
          table.columns.first().copied().unwrap_or(0.0),
-         crate::tables::table_to_markdown(table),
-         chart_order,
+-        crate::tables::table_to_markdown(table),
++        markdown,
++        chart_order,
 +        table,
 +        source_items,
 +        capture_structured_output,
@@ -715,17 +832,19 @@ index 4300f51..4dbc0f9 100644
 +    table: &crate::tables::Table,
 +    chart_free_items: &[TextItem],
 +    chart_order: Option<ChartProseOrder>,
++    render_markdown: bool,
 +    capture_structured_output: bool,
 +) -> PositionedMarkdown {
 +    positioned_table(
 +        table,
 +        chart_free_items,
-+        chart_order,
+         chart_order,
++        render_markdown,
 +        capture_structured_output,
      )
  }
  
-@@ -1102,6 +1124,13 @@ pub(crate) struct MarkdownDocumentContext<'a> {
+@@ -1102,6 +1132,13 @@ pub(crate) struct MarkdownDocumentContext<'a> {
      pub(crate) precomputed_chart_regions: Option<&'a PageChartRegions>,
  }
  
@@ -739,12 +858,12 @@ index 4300f51..4dbc0f9 100644
  /// Convert positioned text items to markdown, using rectangles and line segments for table detection.
  ///
  /// Line-based detection runs first (strongest structural evidence), then rect-based,
-@@ -1113,6 +1142,23 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1113,6 +1150,24 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
      pdf_lines: &[crate::types::PdfLine],
      context: MarkdownDocumentContext<'_>,
  ) -> String {
 +    to_markdown_from_items_with_rects_and_lines_with_structured_capture(
-+        items, options, rects, pdf_lines, context, None,
++        items, options, rects, pdf_lines, context, None, true,
 +    )
 +    .markdown
 +}
@@ -759,11 +878,12 @@ index 4300f51..4dbc0f9 100644
 +    pdf_lines: &[crate::types::PdfLine],
 +    context: MarkdownDocumentContext<'_>,
 +    page_geometries: Option<&BTreeMap<u32, PageGeometry>>,
++    render_markdown: bool,
 +) -> MarkdownConversionResult {
      use crate::tables::{
          content_width, detect_tables_from_lines, detect_tables_from_rects,
          detect_tables_from_struct_tree, detect_tables_with_page_width, try_build_rect_guided_table,
-@@ -1130,9 +1176,14 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1130,9 +1185,14 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
      } = context;
  
      if items.is_empty() {
@@ -779,7 +899,7 @@ index 4300f51..4dbc0f9 100644
      // Table detection must retain the original collection because short
      // numeric table cells can be indistinguishable from folios until
      // structural context is available. A precomputed mask carries the
-@@ -1396,10 +1447,12 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1396,10 +1456,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                              }
                          }
                      }
@@ -791,12 +911,13 @@ index 4300f51..4dbc0f9 100644
 +                        table,
 +                        band_items,
 +                        chart_prose_order,
++                        render_markdown,
 +                        capture_structured_output,
 +                    ));
                  }
              }
  
-@@ -1423,10 +1476,12 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1423,10 +1486,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                          }
                      }
                  }
@@ -808,12 +929,13 @@ index 4300f51..4dbc0f9 100644
 +                    table,
 +                    band_items,
 +                    chart_prose_order,
++                    render_markdown,
 +                    capture_structured_output,
 +                ));
              }
  
              // 2. Line-based detection on unclaimed items (when rects didn't find tables)
-@@ -1441,10 +1496,12 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1441,10 +1507,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                              }
                          }
                      }
@@ -825,12 +947,13 @@ index 4300f51..4dbc0f9 100644
 +                        table,
 +                        band_items,
 +                        chart_prose_order,
++                        render_markdown,
 +                        capture_structured_output,
 +                    ));
                  }
              }
  
-@@ -1480,10 +1537,12 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1480,10 +1549,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                                  }
                              }
                          }
@@ -842,12 +965,13 @@ index 4300f51..4dbc0f9 100644
 +                            &table,
 +                            &inside_items,
 +                            chart_prose_order,
++                            render_markdown,
 +                            capture_structured_output,
 +                        ));
                          for &band_idx in &inside_map {
                              rect_claimed.insert(band_idx);
                          }
-@@ -1526,10 +1585,12 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1526,10 +1598,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                                  }
                              }
                          }
@@ -859,12 +983,13 @@ index 4300f51..4dbc0f9 100644
 +                            &table,
 +                            subset_items,
 +                            chart_prose_order,
++                            render_markdown,
 +                            capture_structured_output,
 +                        ));
                      }
                  };
  
-@@ -1591,10 +1652,12 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1591,10 +1666,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                              }
                          }
                      }
@@ -876,12 +1001,13 @@ index 4300f51..4dbc0f9 100644
 +                        &table,
 +                        band_items,
 +                        chart_prose_order,
++                        render_markdown,
 +                        capture_structured_output,
 +                    ));
                  }
              }
          }
-@@ -1653,10 +1716,12 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1653,10 +1731,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                              table_items.insert(global_idx);
                          }
                      }
@@ -893,12 +1019,13 @@ index 4300f51..4dbc0f9 100644
 +                        table,
 +                        &page_text,
 +                        chart_prose_order,
++                        render_markdown,
 +                        capture_structured_output,
 +                    ));
                  }
              }
          }
-@@ -1716,7 +1781,12 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1716,31 +1797,42 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                  page_tables
                      .entry(page)
                      .or_default()
@@ -907,16 +1034,83 @@ index 4300f51..4dbc0f9 100644
 +                        table,
 +                        &chart_free,
 +                        chart_prose_order,
++                        render_markdown,
 +                        capture_structured_output,
 +                    ));
              }
          }
      }
-@@ -1798,7 +1868,30 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
-             .collect()
-     };
  
+     // Images are also removed before line grouping, so give them the same
+     // logical chart-page position as tables before reinsertion.
+-    let mut page_images: HashMap<u32, Vec<PositionedMarkdown>> = HashMap::new();
+-    for img in &images {
+-        let img_name = img
+-            .text
+-            .strip_prefix("[Image: ")
+-            .and_then(|s| s.strip_suffix(']'))
+-            .unwrap_or(&img.text);
+-        let img_md = format!("![Image: {}](image)\n", img_name);
++    let page_images = if render_markdown {
++        let mut page_images: HashMap<u32, Vec<PositionedMarkdown>> = HashMap::new();
++        for img in &images {
++            let img_name = img
++                .text
++                .strip_prefix("[Image: ")
++                .and_then(|s| s.strip_suffix(']'))
++                .unwrap_or(&img.text);
++            let img_md = format!("![Image: {}](image)\n", img_name);
++            page_images
++                .entry(img.page)
++                .or_default()
++                .push(PositionedMarkdown::new(
++                    img.y,
++                    img.x,
++                    img_md,
++                    page_chart_prose_orders.get(&img.page).copied(),
++                ));
++        }
+         page_images
+-            .entry(img.page)
+-            .or_default()
+-            .push(PositionedMarkdown::new(
+-                img.y,
+-                img.x,
+-                img_md,
+-                page_chart_prose_orders.get(&img.page).copied(),
+-            ));
+-    }
++    } else {
++        HashMap::new()
++    };
+ 
+     // Check structure tree coverage on ALL text items (before table filtering)
+     // to decide whether to use structure-aware markdown generation.
+@@ -1783,210 +1875,310 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+         .filter(|(idx, _)| !table_items.contains(idx))
+         .collect();
+ 
+-    // Find pages that are table-only (no remaining non-table text)
+-    let table_only_pages: HashSet<u32> = {
+-        let mut pages_with_text: HashSet<u32> =
+-            non_table_items.iter().map(|(_, item)| item.page).collect();
+-        // Preserve the pre-filter continuation classification: a page that
+-        // originally also contained a folio does not become table-only merely
+-        // because an upstream document-level pass removed it.
+-        pages_with_text.extend(removed_page_number_pages);
+-        page_tables
+-            .keys()
+-            .filter(|p| !pages_with_text.contains(p))
+-            .copied()
+-            .collect()
+-    };
+-
 -    // Merge continuation tables across page breaks, but only for table-only pages
+-    merge_continuation_tables(&mut page_tables, &table_only_pages);
+-
+-    // Collect pages that have detected tables — used to suppress relative valley
+-    // column detection on pages where table column gaps would be misidentified.
+-    let table_page_set: HashSet<u32> = page_tables.keys().copied().collect();
 +    // Structured capture deliberately sees page-local raw tables before the
 +    // Markdown-only continuation merge removes repeated headers and later-page
 +    // fragments. Its non-table lines use the same reading-order helper as the
@@ -937,50 +1131,106 @@ index 4300f51..4dbc0f9 100644
 +        );
 +        capture_structured_blocks(&source_lines, &page_tables, geometries, struct_roles)
 +    });
-+
-+    // Merge continuation tables across page breaks, but only for table-only pages.
-+    // This remains a Markdown presentation concern; it cannot affect the raw
-+    // structured capture above.
-     merge_continuation_tables(&mut page_tables, &table_only_pages);
  
-     // Collect pages that have detected tables — used to suppress relative valley
-@@ -1819,174 +1912,255 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
-         .0
-     };
+-    let non_table_items = if has_precomputed_page_number_mask {
+-        non_table_items
+-            .into_iter()
+-            .filter(|(index, _)| !text_item_page_number_mask[*index])
+-            .map(|(_, item)| item)
+-            .collect()
+-    } else {
+-        crate::extractor::filter_markdown_page_numbers_with_removed_pages(
+-            non_table_items.into_iter().map(|(_, item)| item).collect(),
+-            document_page_count,
+-        )
+-        .0
+-    };
++    let markdown = if render_markdown {
++        // Merge continuation tables across page breaks, but only for table-only pages.
++        // This remains a Markdown presentation concern; it cannot affect the raw
++        // structured capture above.
++        let table_only_pages: HashSet<u32> = {
++            let mut pages_with_text: HashSet<u32> =
++                non_table_items.iter().map(|(_, item)| item.page).collect();
++            // Preserve the pre-filter continuation classification: a page that
++            // originally also contained a folio does not become table-only merely
++            // because an upstream document-level pass removed it.
++            pages_with_text.extend(removed_page_number_pages);
++            page_tables
++                .keys()
++                .filter(|p| !pages_with_text.contains(p))
++                .copied()
++                .collect()
++        };
++        merge_continuation_tables(&mut page_tables, &table_only_pages);
  
 -    // Split non-table items by band boundaries before line grouping so that
 -    // items from different side-by-side zones (e.g. left/right month columns
 -    // in a calendar) don't merge into the same line.
 -    let lines = if page_band_splits.is_empty() && page_chart_prose_splits.is_empty() {
-+    let lines = group_non_table_items_in_reading_order(
-+        non_table_items,
-+        &page_band_splits,
-+        &page_chart_prose_splits,
-+        &table_page_set,
-+        page_thresholds,
-+        &page_chart_map,
-+        &page_image_regions,
-+    );
-+
-+    // Strip repeated headers/footers before conversion
-+    let lines = if options.strip_headers_footers {
-+        preprocess::strip_repeated_lines(lines, document_page_count)
-+    } else {
-+        lines
+-        crate::extractor::group_prefiltered_items_into_lines_with_thresholds_and_regions(
++        // Collect pages that have detected tables — used to suppress relative valley
++        // column detection on pages where table column gaps would be misidentified.
++        let table_page_set: HashSet<u32> = page_tables.keys().copied().collect();
++        let non_table_items = if has_precomputed_page_number_mask {
++            non_table_items
++                .into_iter()
++                .filter(|(index, _)| !text_item_page_number_mask[*index])
++                .map(|(_, item)| item)
++                .collect()
++        } else {
++            crate::extractor::filter_markdown_page_numbers_with_removed_pages(
++                non_table_items.into_iter().map(|(_, item)| item).collect(),
++                document_page_count,
++            )
++            .0
++        };
++        let lines = group_non_table_items_in_reading_order(
+             non_table_items,
+-            page_thresholds,
++            &page_band_splits,
++            &page_chart_prose_splits,
+             &table_page_set,
++            page_thresholds,
+             &page_chart_map,
+             &page_image_regions,
++        );
++        let lines = if options.strip_headers_footers {
++            preprocess::strip_repeated_lines(lines, document_page_count)
++        } else {
++            lines
++        };
++        let mut band_split_page_set: HashSet<u32> = page_band_splits.keys().copied().collect();
++        band_split_page_set.extend(page_chart_prose_splits.keys().copied());
++        to_markdown_from_lines_with_tables_and_images(
++            lines,
++            options,
++            page_tables,
++            page_images,
++            &page_chart_map,
++            &band_split_page_set,
++            effective_struct_roles,
+         )
+     } else {
+-        // Separate items into physical-band pages, chart/prose pages, and
+-        // ordinary pages. Chart/prose pages need a different reading order:
+-        // each chart is a full-width separator, while prose above and below
+-        // it reads down the left column and then down the right column.
+-        let mut split_page_items: HashMap<u32, Vec<TextItem>> = HashMap::new();
+-        let mut chart_prose_page_items: HashMap<u32, Vec<TextItem>> = HashMap::new();
+-        let mut unsplit_items: Vec<TextItem> = Vec::new();
+-        for item in non_table_items {
+-            if page_chart_prose_splits.contains_key(&item.page) {
+-                chart_prose_page_items
+-                    .entry(item.page)
+-                    .or_default()
+-                    .push(item);
+-            } else if page_band_splits.contains_key(&item.page) {
+-                split_page_items.entry(item.page).or_default().push(item);
+-            } else {
+-                unsplit_items.push(item);
++        String::new()
 +    };
-+
-+    // Convert to markdown, inserting tables and images at appropriate positions
-+    let mut band_split_page_set: HashSet<u32> = page_band_splits.keys().copied().collect();
-+    band_split_page_set.extend(page_chart_prose_splits.keys().copied());
-+    let markdown = to_markdown_from_lines_with_tables_and_images(
-+        lines,
-+        options,
-+        page_tables,
-+        page_images,
-+        &page_chart_map,
-+        &band_split_page_set,
-+        effective_struct_roles,
-+    );
 +    MarkdownConversionResult {
 +        markdown,
 +        blocks_by_page: structured_blocks,
@@ -1028,32 +1278,9 @@ index 4300f51..4dbc0f9 100644
 +        }
 +    }
 +    let mut all_lines =
-         crate::extractor::group_prefiltered_items_into_lines_with_thresholds_and_regions(
--            non_table_items,
++        crate::extractor::group_prefiltered_items_into_lines_with_thresholds_and_regions(
 +            unsplit_items,
-             page_thresholds,
--            &table_page_set,
--            &page_chart_map,
--            &page_image_regions,
--        )
--    } else {
--        // Separate items into physical-band pages, chart/prose pages, and
--        // ordinary pages. Chart/prose pages need a different reading order:
--        // each chart is a full-width separator, while prose above and below
--        // it reads down the left column and then down the right column.
--        let mut split_page_items: HashMap<u32, Vec<TextItem>> = HashMap::new();
--        let mut chart_prose_page_items: HashMap<u32, Vec<TextItem>> = HashMap::new();
--        let mut unsplit_items: Vec<TextItem> = Vec::new();
--        for item in non_table_items {
--            if page_chart_prose_splits.contains_key(&item.page) {
--                chart_prose_page_items
--                    .entry(item.page)
--                    .or_default()
--                    .push(item);
--            } else if page_band_splits.contains_key(&item.page) {
--                split_page_items.entry(item.page).or_default().push(item);
--            } else {
--                unsplit_items.push(item);
++            page_thresholds,
 +            table_page_set,
 +            page_chart_map,
 +            page_image_regions,
@@ -1347,7 +1574,7 @@ index 4300f51..4dbc0f9 100644
  }
  
  #[cfg(test)]
-@@ -2636,4 +2810,96 @@ mod tests {
+@@ -2636,4 +2828,96 @@ mod tests {
              "label+number table should not be split side-by-side"
          );
      }
@@ -1422,7 +1649,7 @@ index 4300f51..4dbc0f9 100644
 +        // A merged retry removes the chart item before detection. The table's
 +        // local index zero must therefore resolve to `Statement cell`, not the
 +        // first item in the unfiltered band.
-+        let _unfiltered_band = vec![chart_item, table_item.clone()];
++        let _unfiltered_band = [chart_item, table_item.clone()];
 +        let chart_free = vec![table_item];
 +        let table = crate::tables::Table::new(
 +            vec![50.0],
@@ -1430,7 +1657,7 @@ index 4300f51..4dbc0f9 100644
 +            vec![vec!["Statement cell".into()]],
 +            vec![0],
 +        );
-+        let positioned = positioned_merged_retry_table(&table, &chart_free, None, true);
++        let positioned = positioned_merged_retry_table(&table, &chart_free, None, true, true);
 +        let capture = positioned.captured_table.expect("structured capture");
 +        let block = crate::structured::table_block(
 +            &capture.table,
