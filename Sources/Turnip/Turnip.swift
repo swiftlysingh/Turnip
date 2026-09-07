@@ -895,20 +895,81 @@ private struct WireDocumentBlock: Decodable {
         case let .text(lines):
             publicContent = .text(TextBlock(lines: try lines.map { try $0.publicLine() }))
         case let .table(rowCount, columnCount, cells):
-            let publicCells = try cells.map { try $0.publicCell() }
-            guard let table = try? TableBlock(
-                validating: rowCount,
-                columnCount: columnCount,
-                cells: publicCells
-            ) else {
-                throw TurnipError.engineFailure(
-                    code: "invalid_table_grid",
-                    message: "The PDF engine returned an invalid table grid."
-                )
-            }
-            publicContent = .table(table)
+            publicContent = .table(
+                try publicTable(rows: rowCount, columns: columnCount, wireCells: cells)
+            )
         }
         return DocumentBlock(id: id, bounds: try bounds?.publicBounds(), content: publicContent)
+    }
+}
+
+private func publicTable(
+    rows rowCount: Int,
+    columns columnCount: Int,
+    wireCells: [WireTableCell]
+) throws -> TableBlock {
+    guard rowCount > 0, columnCount > 0,
+        !rowCount.multipliedReportingOverflow(by: columnCount).overflow
+    else {
+        throw TurnipError.engineFailure(
+            code: "invalid_table_grid",
+            message: "The PDF engine returned invalid table dimensions."
+        )
+    }
+
+    let slotCount = rowCount * columnCount
+    var slots = Array<TableCell?>(repeating: nil, count: slotCount)
+    for wireCell in wireCells {
+        guard wireCell.row >= 0, wireCell.column >= 0,
+            wireCell.row < rowCount, wireCell.column < columnCount,
+            wireCell.rowSpan > 0, wireCell.columnSpan > 0,
+            wireCell.rowSpan <= rowCount - wireCell.row,
+            wireCell.columnSpan <= columnCount - wireCell.column
+        else {
+            throw TurnipError.engineFailure(
+                code: "invalid_table_grid",
+                message: "The PDF engine returned a cell outside its table grid."
+            )
+        }
+
+        let anchor = TableCellAddress(row: wireCell.row, column: wireCell.column)
+        let publicCell = try wireCell.publicCell()
+        for row in wireCell.row..<(wireCell.row + wireCell.rowSpan) {
+            for column in wireCell.column..<(wireCell.column + wireCell.columnSpan) {
+                let index = row * columnCount + column
+                guard slots[index] == nil else {
+                    throw TurnipError.engineFailure(
+                        code: "invalid_table_grid",
+                        message: "The PDF engine returned overlapping table cells."
+                    )
+                }
+                slots[index] = if row == wireCell.row && column == wireCell.column {
+                    publicCell
+                } else {
+                    TableCell(content: .covered(by: anchor))
+                }
+            }
+        }
+    }
+
+    guard !slots.contains(where: { $0 == nil }) else {
+        throw TurnipError.engineFailure(
+            code: "invalid_table_grid",
+            message: "The PDF engine did not cover every table slot."
+        )
+    }
+    let tableRows = (0..<rowCount).map { row in
+        TableRow(cells: (0..<columnCount).map { column in
+            slots[row * columnCount + column]!
+        })
+    }
+    do {
+        return try TableBlock(validating: tableRows)
+    } catch {
+        throw TurnipError.engineFailure(
+            code: "invalid_table_grid",
+            message: "The PDF engine returned an invalid table grid."
+        )
     }
 }
 
@@ -975,32 +1036,61 @@ private struct WireTableCell: Decodable {
                 message: "The PDF engine returned an invalid table cell."
             )
         }
-        guard let publicRole = TableCellRole(rawValue: role),
-            let publicState = TableCellState(rawValue: state)
-        else {
+        let publicRole: TableCellRole?
+        switch role {
+        case "header":
+            publicRole = .header
+        case "body":
+            publicRole = .body
+        case "unknown":
+            publicRole = nil
+        default:
             throw TurnipError.engineFailure(
                 code: "unknown_table_cell_value",
-                message: "The PDF engine returned an unknown table cell role or state."
+                message: "The PDF engine returned an unknown table cell role."
             )
         }
-        guard detectedText.map({ !$0.isEmpty }) ?? true,
-            publicState != .extracted || (!lines.isEmpty && detectedText == nil),
-            publicState != .empty || (lines.isEmpty && detectedText == nil)
-        else {
+
+        let publicLines = try lines.map { try $0.publicLine() }
+        let content: TableCell.Content
+        switch state {
+        case "extracted":
+            guard !publicLines.isEmpty, detectedText == nil else {
+                throw TurnipError.engineFailure(
+                    code: "inconsistent_table_cell_state",
+                    message: "The PDF engine returned invalid extracted cell evidence."
+                )
+            }
+            content = .text(publicLines)
+        case "empty":
+            guard publicLines.isEmpty, detectedText == nil else {
+                throw TurnipError.engineFailure(
+                    code: "inconsistent_table_cell_state",
+                    message: "The PDF engine returned invalid empty cell evidence."
+                )
+            }
+            content = .empty
+        case "unresolved":
+            guard detectedText.map({ !$0.isEmpty }) ?? true else {
+                throw TurnipError.engineFailure(
+                    code: "inconsistent_table_cell_state",
+                    message: "The PDF engine returned invalid unresolved cell evidence."
+                )
+            }
+            content = .unresolved(lines: publicLines, candidateText: detectedText)
+        default:
             throw TurnipError.engineFailure(
-                code: "inconsistent_table_cell_state",
-                message: "The PDF engine returned a table cell whose state contradicts its lines."
+                code: "unknown_table_cell_value",
+                message: "The PDF engine returned an unknown table cell state."
             )
         }
+
         return TableCell(
-            row: row,
-            column: column,
-            rowSpan: rowSpan,
-            columnSpan: columnSpan,
+            content: content,
             role: publicRole,
-            state: publicState,
-            detectedText: detectedText,
-            lines: try lines.map { try $0.publicLine() },
+            span: rowSpan > 1 || columnSpan > 1
+                ? TableCellSpan(rows: rowSpan, columns: columnSpan)
+                : nil,
             bounds: try bounds?.publicBounds()
         )
     }

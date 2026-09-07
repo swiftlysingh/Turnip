@@ -1,1152 +1,995 @@
 {
-  "inspection" : {
-    "confidence" : 1,
-    "engineVersion" : "1.14.2@2322bcce4cd9458d24399bf8fee42f1aa201c8c1",
-    "hasEncodingIssues" : false,
-    "kind" : "text_based",
-    "layout" : {
-      "isComplex" : true,
-      "pagesWithColumns" : [
-        0
-      ],
-      "pagesWithTables" : [
+  "warnings": [],
+  "schemaVersion": 2,
+  "inspection": {
+    "kind": "text_based",
+    "processingTimeMilliseconds": 0,
+    "engineVersion": "1.14.2@2322bcce4cd9458d24399bf8fee42f1aa201c8c1",
+    "hasEncodingIssues": false,
+    "layout": {
+      "pagesWithTables": [
         0,
         1
+      ],
+      "isComplex": true,
+      "pagesWithColumns": [
+        0
       ]
     },
-    "ocrReasonsByPage" : [
-
-    ],
-    "pageCount" : 2,
-    "pagesNeedingOCR" : [
-
-    ],
-    "processingTimeMilliseconds" : 0
+    "pagesNeedingOCR": [],
+    "ocrReasonsByPage": [],
+    "confidence": 1,
+    "pageCount": 2
   },
-  "pages" : [
+  "pages": [
     {
-      "blocks" : [
+      "size": {
+        "width": 612,
+        "height": 792
+      },
+      "blocks": [
         {
-          "bounds" : {
-            "height" : 0.079545459999999998,
-            "width" : 0.22152942,
-            "x" : 0.065359479999999998,
-            "y" : 0.029040403999999999
+          "bounds": {
+            "height": 0.07954546,
+            "width": 0.22152942,
+            "x": 0.06535948,
+            "y": 0.029040404
           },
-          "content" : {
-            "lines" : [
+          "id": "p0-b0",
+          "content": {
+            "lines": [
               {
-                "bounds" : {
-                  "height" : 0.011363636999999999,
-                  "width" : 0.21325000999999999,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.029040403999999999
+                "bounds": {
+                  "y": 0.029040404,
+                  "height": 0.011363637,
+                  "width": 0.21325001,
+                  "x": 0.06535948
                 },
-                "text" : "INVENTED COMMUNITY BANK"
+                "text": "INVENTED COMMUNITY BANK"
               },
               {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.22152942,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.051767676999999998
+                "bounds": {
+                  "y": 0.051767677,
+                  "height": 0.01136364,
+                  "width": 0.22152942,
+                  "x": 0.06535948
                 },
-                "text" : "Statement period: 01 Jan - 31 Jan"
+                "text": "Statement period: 01 Jan - 31 Jan"
               },
               {
-                "bounds" : {
-                  "height" : 0.011363633,
-                  "width" : 0.098867650000000001,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.074494950000000004
+                "bounds": {
+                  "y": 0.07449495,
+                  "height": 0.011363633,
+                  "width": 0.09886765,
+                  "x": 0.06535948
                 },
-                "text" : "Currency: USD"
+                "text": "Currency: USD"
               },
               {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.13816178000000001,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.097222223999999996
+                "bounds": {
+                  "y": 0.097222224,
+                  "height": 0.01136364,
+                  "width": 0.13816178,
+                  "x": 0.06535948
                 },
-                "text" : "Account ending 4242"
+                "text": "Account ending 4242"
               }
             ],
-            "type" : "text"
-          },
-          "id" : "p0-b0"
+            "type": "text"
+          }
         },
         {
-          "bounds" : {
-            "height" : 0.2512626,
-            "width" : 0.71489703999999998,
-            "x" : 0.081699350000000004,
-            "y" : 0.13762626
-          },
-          "content" : {
-            "cells" : [
+          "content": {
+            "rows": [
               {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.031058817999999998,
-                  "x" : 0.081699350000000004,
-                  "y" : 0.13762626
-                },
-                "column" : 0,
-                "columnSpan" : 1,
-                "lines" : [
+                "cells": [
                   {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.031058817999999998,
-                      "x" : 0.081699350000000004,
-                      "y" : 0.13762626
-                    },
-                    "text" : "Date"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 0,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.073544129999999999,
-                  "x" : 0.2124183,
-                  "y" : 0.13762626
-                },
-                "column" : 1,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.073544129999999999,
-                      "x" : 0.2124183,
-                      "y" : 0.13762626
-                    },
-                    "text" : "Description"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 0,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.050676464999999997,
-                  "x" : 0.60457516,
-                  "y" : 0.13762626
-                },
-                "column" : 2,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.050676464999999997,
-                      "x" : 0.60457516,
-                      "y" : 0.13762626
-                    },
-                    "text" : "Amount"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 0,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.053132354999999999,
-                  "x" : 0.74346405000000004,
-                  "y" : 0.13762626
-                },
-                "column" : 3,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.053132354999999999,
-                      "x" : 0.74346405000000004,
-                      "y" : 0.13762626
-                    },
-                    "text" : "Balance"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 0,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.044147066999999998,
-                  "x" : 0.081699350000000004,
-                  "y" : 0.18181818999999999
-                },
-                "column" : 0,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.044147066999999998,
-                      "x" : 0.081699350000000004,
-                      "y" : 0.18181818999999999
-                    },
-                    "text" : "03 Jan"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 1,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.11602943,
-                  "x" : 0.2124183,
-                  "y" : 0.18181818999999999
-                },
-                "column" : 1,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.11602943,
-                      "x" : 0.2124183,
-                      "y" : 0.18181818999999999
-                    },
-                    "text" : "COFFEE HOUSE"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 1,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.036794126000000003,
-                  "x" : 0.60457516,
-                  "y" : 0.18181818999999999
-                },
-                "column" : 2,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.036794126000000003,
-                      "x" : 0.60457516,
-                      "y" : 0.18181818999999999
-                    },
-                    "text" : "12.34"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 1,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.044970572,
-                  "x" : 0.74346405000000004,
-                  "y" : 0.18181818999999999
-                },
-                "column" : 3,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.044970572,
-                      "x" : 0.74346405000000004,
-                      "y" : 0.18181818999999999
-                    },
-                    "text" : "987.66"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 1,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.044147066999999998,
-                  "x" : 0.081699350000000004,
-                  "y" : 0.22601009999999999
-                },
-                "column" : 0,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.044147066999999998,
-                      "x" : 0.081699350000000004,
-                      "y" : 0.22601009999999999
-                    },
-                    "text" : "04 Jan"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 2,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.10702945,
-                  "x" : 0.2124183,
-                  "y" : 0.22601009999999999
-                },
-                "column" : 1,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.10702945,
-                      "x" : 0.2124183,
-                      "y" : 0.22601009999999999
-                    },
-                    "text" : "REFUND SHOP"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 2,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.05394119,
-                  "x" : 0.60457516,
-                  "y" : 0.22601009999999999
-                },
-                "column" : 2,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.05394119,
-                      "x" : 0.60457516,
-                      "y" : 0.22601009999999999
-                    },
-                    "text" : "5.00 CR"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 2,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "column" : 3,
-                "columnSpan" : 1,
-                "lines" : [
-
-                ],
-                "role" : "unknown",
-                "row" : 2,
-                "rowSpan" : 1,
-                "state" : "empty"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.044147066999999998,
-                  "x" : 0.081699350000000004,
-                  "y" : 0.270202
-                },
-                "column" : 0,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.044147066999999998,
-                      "x" : 0.081699350000000004,
-                      "y" : 0.270202
-                    },
-                    "text" : "05 Jan"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 3,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.09316178,
-                  "x" : 0.2124183,
-                  "y" : 0.270202
-                },
-                "column" : 1,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.09316178,
-                      "x" : 0.2124183,
-                      "y" : 0.270202
-                    },
-                    "text" : "BOOKSTORE"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 3,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.036794126000000003,
-                  "x" : 0.60457516,
-                  "y" : 0.270202
-                },
-                "column" : 2,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.036794126000000003,
-                      "x" : 0.60457516,
-                      "y" : 0.270202
-                    },
-                    "text" : "20.00"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 3,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.044970572,
-                  "x" : 0.74346405000000004,
-                  "y" : 0.270202
-                },
-                "column" : 3,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.044970572,
-                      "x" : 0.74346405000000004,
-                      "y" : 0.270202
-                    },
-                    "text" : "972.66"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 3,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.044147066999999998,
-                  "x" : 0.081699350000000004,
-                  "y" : 0.31439393999999998
-                },
-                "column" : 0,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.044147066999999998,
-                      "x" : 0.081699350000000004,
-                      "y" : 0.31439393999999998
-                    },
-                    "text" : "05 Jan"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 4,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.09316178,
-                  "x" : 0.2124183,
-                  "y" : 0.31439393999999998
-                },
-                "column" : 1,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.09316178,
-                      "x" : 0.2124183,
-                      "y" : 0.31439393999999998
-                    },
-                    "text" : "BOOKSTORE"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 4,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.036794126000000003,
-                  "x" : 0.60457516,
-                  "y" : 0.31439393999999998
-                },
-                "column" : 2,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.036794126000000003,
-                      "x" : 0.60457516,
-                      "y" : 0.31439393999999998
-                    },
-                    "text" : "20.00"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 4,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.044970572,
-                  "x" : 0.74346405000000004,
-                  "y" : 0.31439393999999998
-                },
-                "column" : 3,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.044970572,
-                      "x" : 0.74346405000000004,
-                      "y" : 0.31439393999999998
-                    },
-                    "text" : "952.66"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 4,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.044147066999999998,
-                  "x" : 0.081699350000000004,
-                  "y" : 0.35858585999999998
-                },
-                "column" : 0,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.044147066999999998,
-                      "x" : 0.081699350000000004,
-                      "y" : 0.35858585999999998
-                    },
-                    "text" : "06 Jan"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 5,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.030303001,
-                  "width" : 0.19991179000000001,
-                  "x" : 0.2124183,
-                  "y" : 0.35858585999999998
-                },
-                "column" : 1,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.12908823999999999,
-                      "x" : 0.2124183,
-                      "y" : 0.35858585999999998
-                    },
-                    "text" : "LONG MERCHANT"
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "Date",
+                        "bounds": {
+                          "y": 0.13762626,
+                          "x": 0.08169935,
+                          "height": 0.01136364,
+                          "width": 0.031058818
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.01136364,
+                      "y": 0.13762626,
+                      "x": 0.08169935,
+                      "width": 0.031058818
+                    }
                   },
                   {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.19991179000000001,
-                      "x" : 0.2124183,
-                      "y" : 0.37752523999999998
-                    },
-                    "text" : "DESCRIPTION | CONTINUED"
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "Description",
+                        "bounds": {
+                          "y": 0.13762626,
+                          "x": 0.2124183,
+                          "height": 0.01136364,
+                          "width": 0.07354413
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.01136364,
+                      "y": 0.13762626,
+                      "x": 0.2124183,
+                      "width": 0.07354413
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "Amount",
+                        "bounds": {
+                          "y": 0.13762626,
+                          "x": 0.60457516,
+                          "height": 0.01136364,
+                          "width": 0.050676465
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.01136364,
+                      "y": 0.13762626,
+                      "x": 0.60457516,
+                      "width": 0.050676465
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "Balance",
+                        "bounds": {
+                          "y": 0.13762626,
+                          "x": 0.74346405,
+                          "height": 0.01136364,
+                          "width": 0.053132355
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.01136364,
+                      "y": 0.13762626,
+                      "x": 0.74346405,
+                      "width": 0.053132355
+                    }
                   }
-                ],
-                "role" : "unknown",
-                "row" : 5,
-                "rowSpan" : 1,
-                "state" : "extracted"
+                ]
               },
               {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.036794126000000003,
-                  "x" : 0.60457516,
-                  "y" : 0.35858585999999998
-                },
-                "column" : 2,
-                "columnSpan" : 1,
-                "lines" : [
+                "cells": [
                   {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.036794126000000003,
-                      "x" : 0.60457516,
-                      "y" : 0.35858585999999998
-                    },
-                    "text" : "10.00"
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "03 Jan",
+                        "bounds": {
+                          "y": 0.18181819,
+                          "x": 0.08169935,
+                          "height": 0.01136364,
+                          "width": 0.044147067
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.01136364,
+                      "y": 0.18181819,
+                      "x": 0.08169935,
+                      "width": 0.044147067
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "COFFEE HOUSE",
+                        "bounds": {
+                          "y": 0.18181819,
+                          "x": 0.2124183,
+                          "height": 0.01136364,
+                          "width": 0.11602943
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.01136364,
+                      "y": 0.18181819,
+                      "x": 0.2124183,
+                      "width": 0.11602943
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "12.34",
+                        "bounds": {
+                          "y": 0.18181819,
+                          "x": 0.60457516,
+                          "height": 0.01136364,
+                          "width": 0.036794126
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.01136364,
+                      "y": 0.18181819,
+                      "x": 0.60457516,
+                      "width": 0.036794126
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "987.66",
+                        "bounds": {
+                          "y": 0.18181819,
+                          "x": 0.74346405,
+                          "height": 0.01136364,
+                          "width": 0.044970572
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.01136364,
+                      "y": 0.18181819,
+                      "x": 0.74346405,
+                      "width": 0.044970572
+                    }
                   }
-                ],
-                "role" : "unknown",
-                "row" : 5,
-                "rowSpan" : 1,
-                "state" : "extracted"
+                ]
               },
               {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.044970572,
-                  "x" : 0.74346405000000004,
-                  "y" : 0.35858585999999998
-                },
-                "column" : 3,
-                "columnSpan" : 1,
-                "lines" : [
+                "cells": [
                   {
-                    "bounds" : {
-                      "height" : 0.0113636255,
-                      "width" : 0.044970572,
-                      "x" : 0.74346405000000004,
-                      "y" : 0.35858585999999998
-                    },
-                    "text" : "942.66"
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "04 Jan",
+                        "bounds": {
+                          "y": 0.2260101,
+                          "x": 0.08169935,
+                          "height": 0.01136364,
+                          "width": 0.044147067
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.01136364,
+                      "y": 0.2260101,
+                      "x": 0.08169935,
+                      "width": 0.044147067
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "REFUND SHOP",
+                        "bounds": {
+                          "y": 0.2260101,
+                          "x": 0.2124183,
+                          "height": 0.01136364,
+                          "width": 0.10702945
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.01136364,
+                      "y": 0.2260101,
+                      "x": 0.2124183,
+                      "width": 0.10702945
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "5.00 CR",
+                        "bounds": {
+                          "y": 0.2260101,
+                          "x": 0.60457516,
+                          "height": 0.01136364,
+                          "width": 0.05394119
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.01136364,
+                      "y": 0.2260101,
+                      "x": 0.60457516,
+                      "width": 0.05394119
+                    }
+                  },
+                  {
+                    "state": "empty"
                   }
-                ],
-                "role" : "unknown",
-                "row" : 5,
-                "rowSpan" : 1,
-                "state" : "extracted"
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "05 Jan",
+                        "bounds": {
+                          "y": 0.270202,
+                          "x": 0.08169935,
+                          "height": 0.0113636255,
+                          "width": 0.044147067
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.0113636255,
+                      "y": 0.270202,
+                      "x": 0.08169935,
+                      "width": 0.044147067
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "BOOKSTORE",
+                        "bounds": {
+                          "y": 0.270202,
+                          "x": 0.2124183,
+                          "height": 0.0113636255,
+                          "width": 0.09316178
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.0113636255,
+                      "y": 0.270202,
+                      "x": 0.2124183,
+                      "width": 0.09316178
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "20.00",
+                        "bounds": {
+                          "y": 0.270202,
+                          "x": 0.60457516,
+                          "height": 0.0113636255,
+                          "width": 0.036794126
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.0113636255,
+                      "y": 0.270202,
+                      "x": 0.60457516,
+                      "width": 0.036794126
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "972.66",
+                        "bounds": {
+                          "y": 0.270202,
+                          "x": 0.74346405,
+                          "height": 0.0113636255,
+                          "width": 0.044970572
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.0113636255,
+                      "y": 0.270202,
+                      "x": 0.74346405,
+                      "width": 0.044970572
+                    }
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "05 Jan",
+                        "bounds": {
+                          "y": 0.31439394,
+                          "x": 0.08169935,
+                          "height": 0.0113636255,
+                          "width": 0.044147067
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.0113636255,
+                      "y": 0.31439394,
+                      "x": 0.08169935,
+                      "width": 0.044147067
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "BOOKSTORE",
+                        "bounds": {
+                          "y": 0.31439394,
+                          "x": 0.2124183,
+                          "height": 0.0113636255,
+                          "width": 0.09316178
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.0113636255,
+                      "y": 0.31439394,
+                      "x": 0.2124183,
+                      "width": 0.09316178
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "20.00",
+                        "bounds": {
+                          "y": 0.31439394,
+                          "x": 0.60457516,
+                          "height": 0.0113636255,
+                          "width": 0.036794126
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.0113636255,
+                      "y": 0.31439394,
+                      "x": 0.60457516,
+                      "width": 0.036794126
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "952.66",
+                        "bounds": {
+                          "y": 0.31439394,
+                          "x": 0.74346405,
+                          "height": 0.0113636255,
+                          "width": 0.044970572
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.0113636255,
+                      "y": 0.31439394,
+                      "x": 0.74346405,
+                      "width": 0.044970572
+                    }
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "06 Jan",
+                        "bounds": {
+                          "y": 0.35858586,
+                          "x": 0.08169935,
+                          "height": 0.0113636255,
+                          "width": 0.044147067
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.0113636255,
+                      "y": 0.35858586,
+                      "x": 0.08169935,
+                      "width": 0.044147067
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "LONG MERCHANT",
+                        "bounds": {
+                          "y": 0.35858586,
+                          "x": 0.2124183,
+                          "height": 0.0113636255,
+                          "width": 0.12908824
+                        }
+                      },
+                      {
+                        "text": "DESCRIPTION | CONTINUED",
+                        "bounds": {
+                          "y": 0.37752524,
+                          "x": 0.2124183,
+                          "height": 0.0113636255,
+                          "width": 0.19991179
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.030303001,
+                      "y": 0.35858586,
+                      "x": 0.2124183,
+                      "width": 0.19991179
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "10.00",
+                        "bounds": {
+                          "y": 0.35858586,
+                          "x": 0.60457516,
+                          "height": 0.0113636255,
+                          "width": 0.036794126
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.0113636255,
+                      "y": 0.35858586,
+                      "x": 0.60457516,
+                      "width": 0.036794126
+                    }
+                  },
+                  {
+                    "state": "text",
+                    "lines": [
+                      {
+                        "text": "942.66",
+                        "bounds": {
+                          "y": 0.35858586,
+                          "x": 0.74346405,
+                          "height": 0.0113636255,
+                          "width": 0.044970572
+                        }
+                      }
+                    ],
+                    "bounds": {
+                      "height": 0.0113636255,
+                      "y": 0.35858586,
+                      "x": 0.74346405,
+                      "width": 0.044970572
+                    }
+                  }
+                ]
               }
             ],
-            "columnCount" : 4,
-            "rowCount" : 6,
-            "type" : "table"
+            "type": "table"
           },
-          "id" : "p0-b1"
+          "bounds": {
+            "height": 0.2512626,
+            "width": 0.71489704,
+            "x": 0.08169935,
+            "y": 0.13762626
+          },
+          "id": "p0-b1"
         },
         {
-          "bounds" : {
-            "height" : 0.056818186999999999,
-            "width" : 0.13157352999999999,
-            "x" : 0.065359479999999998,
-            "y" : 0.52146464999999997
-          },
-          "content" : {
-            "lines" : [
+          "content": {
+            "type": "text",
+            "lines": [
               {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.13157352999999999,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.52146464999999997
-                },
-                "text" : "Statement summary"
+                "text": "Statement summary",
+                "bounds": {
+                  "y": 0.52146465,
+                  "x": 0.06535948,
+                  "width": 0.13157353,
+                  "height": 0.0113636255
+                }
               },
               {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.085823529999999995,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.54419189999999995
-                },
-                "text" : "Purchases: 4"
+                "text": "Purchases: 4",
+                "bounds": {
+                  "y": 0.5441919,
+                  "x": 0.06535948,
+                  "width": 0.08582353,
+                  "height": 0.0113636255
+                }
               },
               {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.062926464000000001,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.56691919999999996
-                },
-                "text" : "Credits: 1"
+                "text": "Credits: 1",
+                "bounds": {
+                  "y": 0.5669192,
+                  "x": 0.06535948,
+                  "width": 0.062926464,
+                  "height": 0.0113636255
+                }
               }
-            ],
-            "type" : "text"
+            ]
           },
-          "id" : "p0-b2"
+          "bounds": {
+            "height": 0.056818187,
+            "width": 0.13157353,
+            "x": 0.06535948,
+            "y": 0.52146465
+          },
+          "id": "p0-b2"
         }
       ],
-      "pageIndex" : 0,
-      "size" : {
-        "height" : 792,
-        "width" : 612
-      },
-      "status" : "extracted"
+      "status": "extracted",
+      "pageIndex": 0
     },
     {
-      "blocks" : [
+      "blocks": [
         {
-          "bounds" : {
-            "height" : 0.034090914,
-            "width" : 0.21325000999999999,
-            "x" : 0.065359479999999998,
-            "y" : 0.029040403999999999
-          },
-          "content" : {
-            "lines" : [
+          "id": "p1-b0",
+          "content": {
+            "type": "text",
+            "lines": [
               {
-                "bounds" : {
-                  "height" : 0.011363636999999999,
-                  "width" : 0.21325000999999999,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.029040403999999999
-                },
-                "text" : "INVENTED COMMUNITY BANK"
+                "text": "INVENTED COMMUNITY BANK",
+                "bounds": {
+                  "height": 0.011363637,
+                  "y": 0.029040404,
+                  "x": 0.06535948,
+                  "width": 0.21325001
+                }
               },
               {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.17901470999999999,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.051767676999999998
-                },
-                "text" : "Statement period continues"
+                "text": "Statement period continues",
+                "bounds": {
+                  "height": 0.01136364,
+                  "y": 0.051767677,
+                  "x": 0.06535948,
+                  "width": 0.17901471
+                }
               }
-            ],
-            "type" : "text"
+            ]
           },
-          "id" : "p1-b0"
+          "bounds": {
+            "y": 0.029040404,
+            "height": 0.034090914,
+            "width": 0.21325001,
+            "x": 0.06535948
+          }
         },
         {
-          "bounds" : {
-            "height" : 0.099747479999999999,
-            "width" : 0.71489703999999998,
-            "x" : 0.081699350000000004,
-            "y" : 0.13762626
-          },
-          "content" : {
-            "cells" : [
+          "id": "p1-b1",
+          "content": {
+            "type": "table",
+            "rows": [
               {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.031058817999999998,
-                  "x" : 0.081699350000000004,
-                  "y" : 0.13762626
-                },
-                "column" : 0,
-                "columnSpan" : 1,
-                "lines" : [
+                "cells": [
                   {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.031058817999999998,
-                      "x" : 0.081699350000000004,
-                      "y" : 0.13762626
+                    "bounds": {
+                      "y": 0.13762626,
+                      "x": 0.08169935,
+                      "height": 0.01136364,
+                      "width": 0.031058818
                     },
-                    "text" : "Date"
+                    "lines": [
+                      {
+                        "text": "Date",
+                        "bounds": {
+                          "y": 0.13762626,
+                          "x": 0.08169935,
+                          "height": 0.01136364,
+                          "width": 0.031058818
+                        }
+                      }
+                    ],
+                    "state": "text"
+                  },
+                  {
+                    "bounds": {
+                      "y": 0.13762626,
+                      "x": 0.2124183,
+                      "height": 0.01136364,
+                      "width": 0.07354413
+                    },
+                    "lines": [
+                      {
+                        "text": "Description",
+                        "bounds": {
+                          "y": 0.13762626,
+                          "x": 0.2124183,
+                          "height": 0.01136364,
+                          "width": 0.07354413
+                        }
+                      }
+                    ],
+                    "state": "text"
+                  },
+                  {
+                    "bounds": {
+                      "y": 0.13762626,
+                      "x": 0.60457516,
+                      "height": 0.01136364,
+                      "width": 0.050676465
+                    },
+                    "lines": [
+                      {
+                        "text": "Amount",
+                        "bounds": {
+                          "y": 0.13762626,
+                          "x": 0.60457516,
+                          "height": 0.01136364,
+                          "width": 0.050676465
+                        }
+                      }
+                    ],
+                    "state": "text"
+                  },
+                  {
+                    "bounds": {
+                      "y": 0.13762626,
+                      "x": 0.74346405,
+                      "height": 0.01136364,
+                      "width": 0.053132355
+                    },
+                    "lines": [
+                      {
+                        "text": "Balance",
+                        "bounds": {
+                          "y": 0.13762626,
+                          "x": 0.74346405,
+                          "height": 0.01136364,
+                          "width": 0.053132355
+                        }
+                      }
+                    ],
+                    "state": "text"
                   }
-                ],
-                "role" : "unknown",
-                "row" : 0,
-                "rowSpan" : 1,
-                "state" : "extracted"
+                ]
               },
               {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.073544129999999999,
-                  "x" : 0.2124183,
-                  "y" : 0.13762626
-                },
-                "column" : 1,
-                "columnSpan" : 1,
-                "lines" : [
+                "cells": [
                   {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.073544129999999999,
-                      "x" : 0.2124183,
-                      "y" : 0.13762626
+                    "bounds": {
+                      "y": 0.18181819,
+                      "x": 0.08169935,
+                      "height": 0.01136364,
+                      "width": 0.044147067
                     },
-                    "text" : "Description"
+                    "lines": [
+                      {
+                        "text": "08 Jan",
+                        "bounds": {
+                          "y": 0.18181819,
+                          "x": 0.08169935,
+                          "height": 0.01136364,
+                          "width": 0.044147067
+                        }
+                      }
+                    ],
+                    "state": "text"
+                  },
+                  {
+                    "bounds": {
+                      "y": 0.18181819,
+                      "x": 0.2124183,
+                      "height": 0.01136364,
+                      "width": 0.06454413
+                    },
+                    "lines": [
+                      {
+                        "text": "GROCER",
+                        "bounds": {
+                          "y": 0.18181819,
+                          "x": 0.2124183,
+                          "height": 0.01136364,
+                          "width": 0.06454413
+                        }
+                      }
+                    ],
+                    "state": "text"
+                  },
+                  {
+                    "bounds": {
+                      "y": 0.18181819,
+                      "x": 0.60457516,
+                      "height": 0.01136364,
+                      "width": 0.036794126
+                    },
+                    "lines": [
+                      {
+                        "text": "10.00",
+                        "bounds": {
+                          "y": 0.18181819,
+                          "x": 0.60457516,
+                          "height": 0.01136364,
+                          "width": 0.036794126
+                        }
+                      }
+                    ],
+                    "state": "text"
+                  },
+                  {
+                    "bounds": {
+                      "y": 0.18181819,
+                      "x": 0.74346405,
+                      "height": 0.01136364,
+                      "width": 0.044970572
+                    },
+                    "lines": [
+                      {
+                        "text": "932.66",
+                        "bounds": {
+                          "y": 0.18181819,
+                          "x": 0.74346405,
+                          "height": 0.01136364,
+                          "width": 0.044970572
+                        }
+                      }
+                    ],
+                    "state": "text"
                   }
-                ],
-                "role" : "unknown",
-                "row" : 0,
-                "rowSpan" : 1,
-                "state" : "extracted"
+                ]
               },
               {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.050676464999999997,
-                  "x" : 0.60457516,
-                  "y" : 0.13762626
-                },
-                "column" : 2,
-                "columnSpan" : 1,
-                "lines" : [
+                "cells": [
                   {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.050676464999999997,
-                      "x" : 0.60457516,
-                      "y" : 0.13762626
+                    "bounds": {
+                      "y": 0.2260101,
+                      "x": 0.08169935,
+                      "height": 0.01136364,
+                      "width": 0.044147067
                     },
-                    "text" : "Amount"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 0,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.053132354999999999,
-                  "x" : 0.74346405000000004,
-                  "y" : 0.13762626
-                },
-                "column" : 3,
-                "columnSpan" : 1,
-                "lines" : [
+                    "lines": [
+                      {
+                        "text": "09 Jan",
+                        "bounds": {
+                          "y": 0.2260101,
+                          "x": 0.08169935,
+                          "height": 0.01136364,
+                          "width": 0.044147067
+                        }
+                      }
+                    ],
+                    "state": "text"
+                  },
                   {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.053132354999999999,
-                      "x" : 0.74346405000000004,
-                      "y" : 0.13762626
+                    "bounds": {
+                      "y": 0.2260101,
+                      "x": 0.2124183,
+                      "height": 0.01136364,
+                      "width": 0.07924999
                     },
-                    "text" : "Balance"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 0,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.044147066999999998,
-                  "x" : 0.081699350000000004,
-                  "y" : 0.18181818999999999
-                },
-                "column" : 0,
-                "columnSpan" : 1,
-                "lines" : [
+                    "lines": [
+                      {
+                        "text": "TRANSFER",
+                        "bounds": {
+                          "y": 0.2260101,
+                          "x": 0.2124183,
+                          "height": 0.01136364,
+                          "width": 0.07924999
+                        }
+                      }
+                    ],
+                    "state": "text"
+                  },
                   {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.044147066999999998,
-                      "x" : 0.081699350000000004,
-                      "y" : 0.18181818999999999
+                    "bounds": {
+                      "y": 0.2260101,
+                      "x": 0.60457516,
+                      "height": 0.01136364,
+                      "width": 0.062117636
                     },
-                    "text" : "08 Jan"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 1,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.064544130000000005,
-                  "x" : 0.2124183,
-                  "y" : 0.18181818999999999
-                },
-                "column" : 1,
-                "columnSpan" : 1,
-                "lines" : [
+                    "lines": [
+                      {
+                        "text": "15.00 CR",
+                        "bounds": {
+                          "y": 0.2260101,
+                          "x": 0.60457516,
+                          "height": 0.01136364,
+                          "width": 0.062117636
+                        }
+                      }
+                    ],
+                    "state": "text"
+                  },
                   {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.064544130000000005,
-                      "x" : 0.2124183,
-                      "y" : 0.18181818999999999
+                    "bounds": {
+                      "y": 0.2260101,
+                      "x": 0.74346405,
+                      "height": 0.01136364,
+                      "width": 0.044970572
                     },
-                    "text" : "GROCER"
+                    "lines": [
+                      {
+                        "text": "947.66",
+                        "bounds": {
+                          "y": 0.2260101,
+                          "x": 0.74346405,
+                          "height": 0.01136364,
+                          "width": 0.044970572
+                        }
+                      }
+                    ],
+                    "state": "text"
                   }
-                ],
-                "role" : "unknown",
-                "row" : 1,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.036794126000000003,
-                  "x" : 0.60457516,
-                  "y" : 0.18181818999999999
-                },
-                "column" : 2,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.036794126000000003,
-                      "x" : 0.60457516,
-                      "y" : 0.18181818999999999
-                    },
-                    "text" : "10.00"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 1,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.044970572,
-                  "x" : 0.74346405000000004,
-                  "y" : 0.18181818999999999
-                },
-                "column" : 3,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.044970572,
-                      "x" : 0.74346405000000004,
-                      "y" : 0.18181818999999999
-                    },
-                    "text" : "932.66"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 1,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.044147066999999998,
-                  "x" : 0.081699350000000004,
-                  "y" : 0.22601009999999999
-                },
-                "column" : 0,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.044147066999999998,
-                      "x" : 0.081699350000000004,
-                      "y" : 0.22601009999999999
-                    },
-                    "text" : "09 Jan"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 2,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.079249990000000006,
-                  "x" : 0.2124183,
-                  "y" : 0.22601009999999999
-                },
-                "column" : 1,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.079249990000000006,
-                      "x" : 0.2124183,
-                      "y" : 0.22601009999999999
-                    },
-                    "text" : "TRANSFER"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 2,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.062117635999999997,
-                  "x" : 0.60457516,
-                  "y" : 0.22601009999999999
-                },
-                "column" : 2,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.062117635999999997,
-                      "x" : 0.60457516,
-                      "y" : 0.22601009999999999
-                    },
-                    "text" : "15.00 CR"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 2,
-                "rowSpan" : 1,
-                "state" : "extracted"
-              },
-              {
-                "bounds" : {
-                  "height" : 0.01136364,
-                  "width" : 0.044970572,
-                  "x" : 0.74346405000000004,
-                  "y" : 0.22601009999999999
-                },
-                "column" : 3,
-                "columnSpan" : 1,
-                "lines" : [
-                  {
-                    "bounds" : {
-                      "height" : 0.01136364,
-                      "width" : 0.044970572,
-                      "x" : 0.74346405000000004,
-                      "y" : 0.22601009999999999
-                    },
-                    "text" : "947.66"
-                  }
-                ],
-                "role" : "unknown",
-                "row" : 2,
-                "rowSpan" : 1,
-                "state" : "extracted"
+                ]
               }
-            ],
-            "columnCount" : 4,
-            "rowCount" : 3,
-            "type" : "table"
+            ]
           },
-          "id" : "p1-b1"
+          "bounds": {
+            "y": 0.13762626,
+            "height": 0.09974748,
+            "width": 0.71489704,
+            "x": 0.08169935
+          }
         },
         {
-          "bounds" : {
-            "height" : 0.079545439999999995,
-            "width" : 0.16348531999999999,
-            "x" : 0.065359479999999998,
-            "y" : 0.38257574999999999
-          },
-          "content" : {
-            "lines" : [
+          "id": "p1-b2",
+          "content": {
+            "type": "text",
+            "lines": [
               {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.12585294,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.38257574999999999
-                },
-                "text" : "Page two summary"
+                "text": "Page two summary",
+                "bounds": {
+                  "height": 0.0113636255,
+                  "y": 0.38257575,
+                  "x": 0.06535948,
+                  "width": 0.12585294
+                }
               },
               {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.16348531999999999,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.40530303000000001
-                },
-                "text" : "Printed purchases: 72.34"
+                "text": "Printed purchases: 72.34",
+                "bounds": {
+                  "height": 0.0113636255,
+                  "y": 0.40530303,
+                  "x": 0.06535948,
+                  "width": 0.16348532
+                }
               },
               {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.13895589,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.42803029999999997
-                },
-                "text" : "Printed credits: 20.00"
+                "text": "Printed credits: 20.00",
+                "bounds": {
+                  "height": 0.0113636255,
+                  "y": 0.4280303,
+                  "x": 0.06535948,
+                  "width": 0.13895589
+                }
               },
               {
-                "bounds" : {
-                  "height" : 0.0113636255,
-                  "width" : 0.15776470000000001,
-                  "x" : 0.065359479999999998,
-                  "y" : 0.45075756
-                },
-                "text" : "Closing balance: 947.66"
+                "text": "Closing balance: 947.66",
+                "bounds": {
+                  "height": 0.0113636255,
+                  "y": 0.45075756,
+                  "x": 0.06535948,
+                  "width": 0.1577647
+                }
               }
-            ],
-            "type" : "text"
+            ]
           },
-          "id" : "p1-b2"
+          "bounds": {
+            "y": 0.38257575,
+            "height": 0.07954544,
+            "width": 0.16348532,
+            "x": 0.06535948
+          }
         }
       ],
-      "pageIndex" : 1,
-      "size" : {
-        "height" : 792,
-        "width" : 612
+      "pageIndex": 1,
+      "size": {
+        "height": 792,
+        "width": 612
       },
-      "status" : "extracted"
+      "status": "extracted"
     }
-  ],
-  "schemaVersion" : 1,
-  "warnings" : [
-
   ]
 }

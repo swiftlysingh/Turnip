@@ -4,9 +4,9 @@
 - pdf-inspector repository: `swiftlysingh/pdf-inspector`
 - pdf-inspector upstream source revision: `2322bcce4cd9458d24399bf8fee42f1aa201c8c1`
 - Turnip patch: `Patches/pdf-inspector-embed-apple-cmaps.patch`
-- Turnip patch SHA-256: `c154bb2d0fbf4302afe898a356800782e088b63c4bf3fe2c9eb13d9e9081f140`
+- Turnip patch SHA-256: `54cde11dd5034b35a5f57a27f45972ef6d12d56614ad984227e63920628b65c7`
 - Rust toolchain: `1.96.0`
-- Xcode: `26.3 (17C529)`
+- Xcode: `27.0 (27A5194q)`
 
 The artifact includes indirect Form resource decoding and first-transaction-row
 deduplication from the pinned fork. It was built with CMaps embedded, the Apple
