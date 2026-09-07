@@ -33,6 +33,130 @@ index b79abfd..7954d3b 100644
  include_dir = "0.7"
  
  [dev-dependencies]
+diff --git a/src/extractor/fonts.rs b/src/extractor/fonts.rs
+index dd5f374..cfba79c 100644
+--- a/src/extractor/fonts.rs
++++ b/src/extractor/fonts.rs
+@@ -1767,6 +1767,51 @@ mod tests {
+     use super::*;
+     use lopdf::dictionary;
+ 
++    fn sparse_single_byte_cmap_document() -> (Document, lopdf::ObjectId, lopdf::ObjectId) {
++        let mut doc = Document::new();
++        let cmap_id = doc.add_object(lopdf::Stream::new(
++            lopdf::Dictionary::new(),
++            b"1 begincodespacerange\n<00><FF>\nendcodespacerange\n\
++              3 beginbfchar\n<02><2605>\n<03><2606>\n<74><25C6>\nendbfchar\n"
++                .to_vec(),
++        ));
++        let cid_system_info_id = doc.add_object(lopdf::dictionary! {
++            "Registry" => Object::string_literal("Adobe"),
++            "Ordering" => Object::string_literal("Korea1"),
++            "Supplement" => 2,
++        });
++        let descendant_id = doc.add_object(lopdf::dictionary! {
++            "Type" => "Font",
++            "Subtype" => "CIDFontType2",
++            "CIDSystemInfo" => Object::Reference(cid_system_info_id),
++        });
++        let font_id = doc.add_object(lopdf::dictionary! {
++            "Type" => "Font",
++            "Subtype" => "Type0",
++            "Encoding" => "Identity-H",
++            "DescendantFonts" => vec![Object::Reference(descendant_id)],
++            "ToUnicode" => Object::Reference(cmap_id),
++        });
++        let page_id = doc.add_object(lopdf::dictionary! {
++            "Type" => "Page",
++            "Resources" => lopdf::dictionary! {
++                "Font" => lopdf::dictionary! { "F1" => Object::Reference(font_id) },
++            },
++            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
++        });
++        let pages_id = doc.add_object(lopdf::dictionary! {
++            "Type" => "Pages",
++            "Count" => 1,
++            "Kids" => vec![Object::Reference(page_id)],
++        });
++        let catalog_id = doc.add_object(lopdf::dictionary! {
++            "Type" => "Catalog",
++            "Pages" => Object::Reference(pages_id),
++        });
++        doc.trailer.set("Root", Object::Reference(catalog_id));
++        (doc, cmap_id, font_id)
++    }
++
+     fn make_font_info(widths: &[(u16, u16)], default_width: u16, is_cid: bool) -> FontWidthInfo {
+         FontWidthInfo {
+             widths: widths.iter().copied().collect(),
+@@ -2194,6 +2239,67 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn sparse_single_byte_cmap_preserves_primary_and_falls_back_per_byte() {
++        let (doc, cmap_id, _) = sparse_single_byte_cmap_document();
++
++        let cmaps = FontCMaps::from_doc(&doc);
++        let entry = cmaps
++            .get_by_obj(cmap_id.0)
++            .expect("sparse CMap should be collected");
++        assert_eq!(entry.primary.lookup(0x74), Some("◆".to_string()));
++        assert_eq!(entry.primary.code_byte_length, 1);
++        assert_eq!(
++            entry
++                .fallback
++                .as_ref()
++                .and_then(|fallback| fallback.lookup(0x22)),
++            Some("A".to_string())
++        );
++
++        let text = extract_text_from_operand(
++            &Object::String(vec![0x74, 0x22], lopdf::StringFormat::Hexadecimal),
++            "F1",
++            None,
++            &cmaps,
++            &HashMap::from([("F1".to_string(), cmap_id.0)]),
++            &HashMap::new(),
++            &HashMap::new(),
++            &HashMap::new(),
++            &mut CMapDecisionCache::new(),
++            &HashMap::new(),
++        );
++        assert_eq!(text.as_deref(), Some("◆A"));
++    }
++
++    #[test]
++    fn inline_sparse_single_byte_cmap_preserves_primary_and_fallback() {
++        let (doc, cmap_id, font_id) = sparse_single_byte_cmap_document();
++        let cmap_data = doc
++            .get_object(cmap_id)
++            .and_then(Object::as_stream)
++            .expect("CMap stream")
++            .decompressed_content()
++            .expect("CMap data");
++        let entry = crate::tounicode::build_cmap_entry_from_stream(
++            &cmap_data,
++            doc.get_dictionary(font_id).expect("font dictionary"),
++            &doc,
++            cmap_id.0,
++        )
++        .expect("inline CMap should be collected");
++
++        assert_eq!(entry.primary.lookup(0x74), Some("◆".to_string()));
++        assert_eq!(entry.primary.code_byte_length, 1);
++        assert_eq!(
++            entry
++                .fallback
++                .as_ref()
++                .and_then(|fallback| fallback.lookup(0x22)),
++            Some("A".to_string())
++        );
++    }
++
+     #[test]
+     fn simple_font_single_byte_fallback_maps_cp1252_punctuation() {
+         let bytes = vec![b'l', 0x92_u8, b'a', b'c', b'a', b'd'];
 diff --git a/src/extractor/mod.rs b/src/extractor/mod.rs
 index c2c7b00..60d3f56 100644
 --- a/src/extractor/mod.rs
@@ -3378,7 +3502,7 @@ index d856cb8..6991ee8 100644
          };
  
 diff --git a/src/tounicode.rs b/src/tounicode.rs
-index f2fe7d0..b093419 100644
+index f2fe7d0..5f2493e 100644
 --- a/src/tounicode.rs
 +++ b/src/tounicode.rs
 @@ -6,12 +6,12 @@ use log::{debug, warn};
@@ -3396,7 +3520,17 @@ index f2fe7d0..b093419 100644
  static BUILTIN_CMAPS: include_dir::Dir<'_> =
      include_dir::include_dir!("$CARGO_MANIFEST_DIR/external/bcmaps");
  
-@@ -1212,7 +1212,7 @@ fn build_cmap_from_builtin_cmap(ordering: &str) -> Option<ToUnicodeCMap> {
+@@ -42,7 +42,8 @@ pub(crate) fn build_cmap_entry_from_stream(
+             .or_else(|| build_fallback_cmap_for_simple(font_dict, doc));
+ 
+         let primary_entries = primary.char_map.len() + primary.ranges.len();
+-        if primary_entries < 10 {
++        // Single-byte decoding falls back per unmapped byte, so explicit mappings keep priority.
++        if primary_entries < 10 && primary.code_byte_length != 1 {
+             if let Some(fb) = fallback.take() {
+                 debug!(
+                     "ToUnicode CMap obj={} too sparse ({} entries); using fallback",
+@@ -1212,7 +1213,7 @@ fn build_cmap_from_builtin_cmap(ordering: &str) -> Option<ToUnicodeCMap> {
      Some(cmap)
  }
  
@@ -3405,7 +3539,7 @@ index f2fe7d0..b093419 100644
  fn find_bcmaps_dir() -> Option<PathBuf> {
      if let Ok(dir) = std::env::var("PDF_INSPECTOR_BCMAPS_DIR") {
          let p = PathBuf::from(dir);
-@@ -1229,13 +1229,13 @@ fn find_bcmaps_dir() -> Option<PathBuf> {
+@@ -1229,13 +1230,13 @@ fn find_bcmaps_dir() -> Option<PathBuf> {
      None
  }
  
@@ -3421,6 +3555,16 @@ index f2fe7d0..b093419 100644
  fn read_builtin_cmap_file(name: &str) -> Option<Cow<'static, [u8]>> {
      let file = BUILTIN_CMAPS.get_file(name)?;
      Some(Cow::Borrowed(file.contents()))
+@@ -2158,7 +2159,8 @@ impl FontCMaps {
+                     build_fallback_tounicode_from_encoding(font_dict, doc)
+                 };
+ 
+-                if primary_entries < 10 {
++                // Single-byte decoding falls back per unmapped byte, so explicit mappings keep priority.
++                if primary_entries < 10 && primary.code_byte_length != 1 {
+                     if let Some(fb) = fallback.take() {
+                         debug!(
+                             "ToUnicode CMap obj={} too sparse ({} entries); using fallback",
 diff --git a/tests/integration_tests.rs b/tests/integration_tests.rs
 index 1491330..802c7e1 100644
 --- a/tests/integration_tests.rs
