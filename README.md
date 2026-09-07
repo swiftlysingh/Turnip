@@ -1,23 +1,24 @@
 # Turnip
 
-Turnip extracts Markdown from PDFs locally in native Swift apps. It wraps
-a pinned build of the Rust
+Turnip extracts typed document structure and Markdown from PDFs locally in
+native Swift apps. It wraps a pinned build of the Rust
 [`pdf-inspector`](https://github.com/swiftlysingh/pdf-inspector) engine behind a
 small Swift API and ships the engine as a prebuilt XCFramework for iOS and
 macOS.
 
 ```swift
-let extraction = try await Turnip.extract(pdfData)
+let document = try await Turnip.extractDocument(pdfData)
 
-print(extraction.markdown)
-print(extraction.inspection.kind)
-print(extraction.warnings)
+for page in document.pages {
+    print(page.pageIndex, page.status, page.blocks.count)
+}
+
+let json = try JSONEncoder().encode(document)
 ```
 
-Turnip is pre-release. The current scope is deliberately narrow: **PDF
-input to Markdown output**. It does not generate
-PDFs, convert Office documents, perform OCR, use an LLM, upload files, or expose
-plain-text and structured-JSON output yet.
+Turnip is pre-release. The current scope is deliberately narrow: local PDF
+inspection and extraction. It does not generate PDFs, convert Office documents,
+perform OCR, use an LLM, upload files, or interpret financial values.
 
 ## Why it exists
 
@@ -30,7 +31,8 @@ adding:
 - a stable, ownership-safe C bridge hidden from client apps;
 - Apple device, simulator, and macOS slices in one local XCFramework;
 - zero-based page indexes everywhere in the Swift API;
-- a native PDF-versus-Markdown sample app;
+- versioned `Codable` and `Sendable` document, page, text, and table models;
+- a native PDF-versus-structured-JSON sample app;
 - a reproducible AMEX transaction-integrity benchmark harness.
 
 Processing is local and synchronous inside Rust. The Swift API moves the work
@@ -66,6 +68,52 @@ import Turnip
 ```
 
 ## API
+
+### Extract a structured document
+
+```swift
+let document = try await Turnip.extractDocument(pdfData)
+
+let selectedDocument = try await Turnip.extractDocument(
+    pdfData,
+    options: DocumentOptions(
+        pageIndexes: [0, 2],
+        password: suppliedPassword
+    )
+)
+
+let fileDocument = try await Turnip.extractDocument(contentsOf: pdfURL)
+let json = try JSONEncoder().encode(document)
+```
+
+`ExtractedDocument` contains the public schema version, full inspection data,
+every requested page, and extraction warnings. Each page has its original
+zero-based PDF index, upright visible size, processing status, and text or
+table blocks in inferred reading order. Tables preserve explicit grid indexes,
+blank and unresolved cells, supported spans, repeated headers, duplicate rows,
+source lines, and available geometry.
+
+Source references identify a page, block, optional table cell, and optional
+line. A consumer can resolve them without matching text:
+
+```swift
+let source = DocumentSourceReference(
+    pageIndex: 0,
+    blockID: "p0-b1",
+    row: 2,
+    column: 2
+)
+
+guard let sourceCell = document.cell(for: source) else { return }
+guard let sourceText = sourceCell.joinedText else { return }
+print(sourceText)
+```
+
+Turnip leaves values such as `5.00 CR`, `(12.34)`, and `1.234,56` as strings.
+Statement layouts, dates, money, credit and debit conventions, merchants,
+categories, reconciliation, and import decisions belong to the consuming app.
+See [StructuredDocument.md](Documentation/StructuredDocument.md) for the JSON
+contract, coordinates, partial extraction semantics, and a complete example.
 
 ### Extract Markdown
 
@@ -114,10 +162,12 @@ identifies pages that likely need OCR, but does not build Markdown. Because it
 uses the engine's detect-only mode, `inspection.layout` and
 `inspection.hasEncodingIssues` are `nil`.
 
-`extract` is not implemented as `inspect` followed by another parse. It makes
-one full engine call and returns both Markdown and the richer inspection data,
-including layout and encoding analysis. Apps that need Markdown should call
-`extract` directly.
+Neither `extract` nor `extractDocument` is implemented as `inspect` followed by
+another parse. Each makes one full engine call over one loaded PDF and returns
+the richer inspection data collected by that pass. Apps that need Markdown
+should keep calling `extract`; apps that need source structure should call
+`extractDocument`. Structured extraction shares the detector and reading-order
+pipeline, then stops before Markdown presentation rendering.
 
 Page selection limits the requested output and OCR-routing results. It does not
 promise proportional speedups because some engine checks may still examine
@@ -125,6 +175,9 @@ document-wide metadata. Benchmark the documents that matter to your app.
 
 All public page indexes are zero-based. OCR confidence and extraction
 confidence are engine signals, not guarantees that text is correct.
+Warning page indexes identify only pages with page-local evidence. An empty
+warning page list means the engine could not localize that document-level
+warning; it does not mean every selected page.
 
 ### Errors
 
@@ -135,8 +188,11 @@ with no extractable text, and internal engine failures.
 The existing `inspect` and `extract` calls remain unchanged. v0.2 adds
 `invalidPageSelection` and `pageOutOfRange`, so clients with exhaustive switches
 over the pre-1.0 error enum must handle those cases when updating.
-A scanned or image-only PDF commonly produces `noExtractableText` with its
-inspection attached. Turnip reports the OCR need but does not perform OCR.
+A scanned or image-only PDF commonly makes the Markdown API throw
+`noExtractableText` with its inspection attached. Structured extraction instead
+returns the requested pages with `needsOCR` status and warnings, so a caller can
+account for incomplete coverage. Turnip reports the OCR need but does not
+perform OCR.
 
 ## API documentation
 
@@ -152,10 +208,12 @@ The archive is built for the repository's current `/Turnip` hosting path.
 ## Sample app
 
 [`Examples/TurnipDemo`](Examples/TurnipDemo) is a native iOS and
-macOS SwiftUI app. Both versions open a PDF and show selectable raw Markdown;
+macOS SwiftUI app. Both versions open a PDF and show structured page and block
+coverage alongside the encoded public JSON;
 the macOS layout also renders the source with PDFKit and accepts file drops.
-The app exercises page selection and password-protected PDFs. Raw Markdown is
-intentional. It makes reading-order, table, and encoding problems easy to see.
+The app exercises page selection and password-protected PDFs. The macOS view
+keeps the source PDF beside its structured output so source regions and reading
+order can be inspected together.
 
 ```sh
 xcodebuild \
@@ -201,14 +259,16 @@ pin. The current pre-release pin uses
 `swiftlysingh/pdf-inspector` while the indirect Form resource and
 transaction-row fixes are prepared for upstream.
 
-The patch makes three narrow changes to the pinned engine:
+The patch makes four narrow changes to the pinned engine:
 
 - embeds Adobe CMaps so CID text extraction never depends on a build-machine
   filesystem path;
 - uses lopdf's single-threaded parser on Apple targets to keep the binary and
   build footprint bounded;
 - evaluates sparse-text and undecodable-font quality heuristics against the
-  selected pages when a page filter is supplied.
+  selected pages when a page filter is supplied;
+- captures page-local text and table structure before Markdown-only cleanup,
+  while reusing the established table detection and reading-order pipeline.
 
 To rebuild all five Rust slices and replace the local artifact:
 
@@ -222,11 +282,11 @@ then verifies the XCFramework architecture and header layout.
 ## Project layout
 
 ```text
-Sources/Turnip/                Public Swift API, DocC catalog, and private wire decoder
+Sources/Turnip/                Public Swift APIs and models, DocC, and private wire decoder
 Native/DocumentKitCore/        Rust static-library bridge and C header
 Artifacts/                     Prebuilt local XCFramework
 Patches/                       Minimal patch applied to pinned pdf-inspector
-Examples/TurnipDemo/           Native PDF-versus-Markdown sample app
+Examples/TurnipDemo/           Native PDF-versus-structured-JSON sample app
 Benchmarks/                    Corpus manifest, runner, and methodology
 Scripts/                       Reproducible engine, artifact, and DocC build checks
 Tests/                         Swift API and real-PDF bridge tests
@@ -235,13 +295,6 @@ Documentation/                 Architecture and benchmark contracts
 
 The detailed data flow and ownership rules live in
 [`Documentation/Architecture.md`](Documentation/Architecture.md).
-
-## Roadmap
-
-The likely next output is plain text, followed by a typed structured document
-model that can be encoded as JSON. Those should be additional renderers over a
-stable internal result, not a generic `convert` method. OCR is a separate
-provider boundary and remains out of the current SDK scope.
 
 ## Security and limitations
 
@@ -252,8 +305,10 @@ sandbox. It cannot catch process aborts or out-of-memory failures. Read
 
 The extraction quality is inherited from the pinned engine. Known hard cases
 include malformed fonts, right-to-left text, unusual reading order, and complex
-tables. Always preserve warnings and provenance instead of treating a Markdown
-string as proof of correctness.
+tables. Positioned text height can be estimated from font size, so bounds are
+not pixel-perfect highlights. Always preserve warnings, page status, source
+lines, and provenance. Structured output is evidence for validation, not proof
+that extraction matches the visible PDF.
 
 ## License
 

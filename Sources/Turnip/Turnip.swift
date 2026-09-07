@@ -1,11 +1,12 @@
 import DocumentKitCore
 import Foundation
 
-/// Inspects local PDFs and extracts their embedded text as Markdown.
+/// Inspects local PDFs and extracts their embedded text as Markdown or a
+/// structured document.
 ///
 /// Turnip does not upload documents or perform OCR. Use ``inspect(_:)``
 /// to decide how to route a PDF, or ``extract(_:)`` when the app needs
-/// Markdown.
+/// Markdown, or ``extractDocument(_:)`` when the app needs source structure.
 public enum Turnip {
     /// The largest PDF input accepted by the public API, in bytes.
     ///
@@ -133,6 +134,71 @@ public enum Turnip {
         try await extract(load(url), options: options)
     }
 
+    /// Extracts a typed, versioned document from PDF data.
+    ///
+    /// The result preserves every requested page, text and table blocks in
+    /// inferred reading order, source lines and available geometry. Pages that
+    /// need OCR remain present with an explicit status; Turnip does not perform
+    /// OCR.
+    ///
+    /// - Parameter data: The complete PDF data to extract.
+    /// - Returns: A structured document together with inspection data and warnings.
+    /// - Throws: A ``TurnipError`` when the input or document is invalid.
+    public static func extractDocument(_ data: Data) async throws -> ExtractedDocument {
+        try await extractDocument(data, options: DocumentOptions())
+    }
+
+    /// Extracts a typed, versioned document from selected pages of PDF data.
+    ///
+    /// - Parameters:
+    ///   - data: The complete PDF data to extract.
+    ///   - options: Page-selection and password options.
+    /// - Returns: A structured document whose pages retain their original
+    ///   zero-based PDF indexes.
+    /// - Throws: A ``TurnipError`` when the input or options are invalid.
+    public static func extractDocument(
+        _ data: Data,
+        options: DocumentOptions
+    ) async throws -> ExtractedDocument {
+        let payload = try await Engine.run(.document, data: data, options: options)
+        guard let document = payload.document else {
+            throw TurnipError.engineFailure(
+                code: "invalid_response",
+                message: "The PDF engine returned no structured document."
+            )
+        }
+        return document
+    }
+
+    /// Extracts a typed, versioned document from a PDF at a file URL.
+    ///
+    /// Turnip checks available file-size metadata before reading and enforces
+    /// the input limit after loading.
+    ///
+    /// - Parameter url: The URL of a local PDF file.
+    /// - Returns: A structured document together with inspection data and warnings.
+    /// - Throws: A ``TurnipError`` for validation or extraction failures,
+    ///   file or resource-loading errors, or `CancellationError` if the task is cancelled.
+    public static func extractDocument(contentsOf url: URL) async throws -> ExtractedDocument {
+        try await extractDocument(load(url))
+    }
+
+    /// Extracts a typed, versioned document from selected pages of a PDF at a file URL.
+    ///
+    /// - Parameters:
+    ///   - url: The URL of a local PDF file.
+    ///   - options: Page-selection and password options.
+    /// - Returns: A structured document whose pages retain their original
+    ///   zero-based PDF indexes.
+    /// - Throws: A ``TurnipError`` for validation or extraction failures,
+    ///   file or resource-loading errors, or `CancellationError` if the task is cancelled.
+    public static func extractDocument(
+        contentsOf url: URL,
+        options: DocumentOptions
+    ) async throws -> ExtractedDocument {
+        try await extractDocument(load(url), options: options)
+    }
+
     private static func load(_ url: URL) async throws -> Data {
         let task = Task.detached(priority: nil) {
             try Task.checkCancellation()
@@ -151,7 +217,7 @@ public enum Turnip {
     }
 }
 
-/// Options shared by PDF inspection and Markdown extraction.
+/// Options shared by PDF inspection, Markdown extraction, and structured extraction.
 ///
 /// `pageIndexes` are zero-based, strictly ascending, unique, and nonempty.
 /// `nil` processes the entire PDF; selected pages are emitted in document order.
@@ -164,7 +230,7 @@ public struct DocumentOptions: Sendable, CustomStringConvertible, CustomDebugStr
     public let pageIndexes: [Int]?
     private let passwordStorage: String?
 
-    /// Creates options for inspection or extraction.
+    /// Creates options for inspection or either extraction API.
     ///
     /// - Parameters:
     ///   - pageIndexes: Zero-based, unique, nonempty indexes in strictly
@@ -238,7 +304,7 @@ public struct DocumentExtraction: Sendable, Hashable {
 /// Classification, routing, and quality information reported for a PDF.
 ///
 /// ``Turnip/inspect(_:)`` returns the detect-only subset. Its ``layout``
-/// and ``hasEncodingIssues`` values are `nil` because Markdown is not built.
+/// and ``hasEncodingIssues`` values are `nil` because full extraction is not run.
 public struct DocumentInspection: Sendable, Hashable {
     /// The engine's classification of the source PDF.
     public let kind: DocumentKind
@@ -261,7 +327,7 @@ public struct DocumentInspection: Sendable, Hashable {
     /// The zero-based pages and signals that led the engine to recommend OCR.
     public let ocrReasonsByPage: [PageOCRReasons]
 
-    /// Layout analysis from extraction, or `nil` for a detect-only inspection.
+    /// Layout analysis from a full extraction, or `nil` for detect-only inspection.
     public let layout: DocumentLayout?
 
     /// Whether extraction found encoding issues, or `nil` for a detect-only inspection.
@@ -272,7 +338,7 @@ public struct DocumentInspection: Sendable, Hashable {
 }
 
 /// The engine's classification of a PDF's content.
-public enum DocumentKind: String, Sendable, Hashable {
+public enum DocumentKind: String, Codable, Sendable, Hashable {
     /// The engine classified the PDF as text-based.
     case textBased = "text_based"
 
@@ -286,7 +352,7 @@ public enum DocumentKind: String, Sendable, Hashable {
     case mixed
 }
 
-/// Layout information found while extracting Markdown.
+/// Layout information found during a full extraction pass.
 public struct DocumentLayout: Sendable, Hashable {
     /// Whether the engine identified a complex layout.
     public let isComplex: Bool
@@ -307,25 +373,45 @@ public struct PageOCRReasons: Sendable, Hashable {
     public let reasons: [String]
 }
 
-/// A quality warning returned with a Markdown extraction.
+/// A quality warning returned with an extraction.
 public struct DocumentWarning: Sendable, Hashable {
     /// The category of extraction-quality warning.
-    public enum Kind: Sendable, Hashable {
+    public enum Kind: Codable, Sendable, Hashable {
         /// The engine recommends OCR for one or more pages.
         case ocrRequired
 
         /// The engine found text-encoding issues during extraction.
         case encodingIssues
+
+        /// A warning code added by a newer encoder.
+        ///
+        /// Unknown codes remain available during JSON round-tripping so a
+        /// consumer does not silently discard advisory extraction evidence.
+        case unknown(String)
     }
 
     /// The warning category.
     public let kind: Kind
 
-    /// Zero-based pages associated with the warning or its routing context.
+    /// Zero-based pages with page-local warning evidence.
+    ///
+    /// An empty list means the engine could not localize a document-level
+    /// warning. It does not mean every requested page.
     public let pageIndexes: [Int]
 }
 
-/// Errors returned by PDF inspection and Markdown extraction.
+/// Returns the pages whose OCR metadata explicitly identifies garbled text.
+///
+/// Encoding warnings do not have a native page list of their own. Keep the
+/// association empty when the engine only reports a document-level encoding
+/// problem rather than attributing it to a page-local OCR reason.
+internal func encodingIssuePageIndexes(from reasonsByPage: [PageOCRReasons]) -> [Int] {
+    reasonsByPage
+        .filter { $0.reasons.contains("suspected_garbled_text") }
+        .map(\.pageIndex)
+}
+
+/// Errors returned by PDF inspection and extraction.
 public enum TurnipError: Error, Sendable, Hashable {
     /// The input data is empty.
     case emptyInput
@@ -412,6 +498,7 @@ public enum PageSelectionError: Sendable, Hashable {
 private enum EngineOperation: Sendable, Equatable {
     case inspect
     case extract
+    case document
 }
 
 private enum Engine {
@@ -482,6 +569,17 @@ private enum Engine {
                             passwordBuffer.count,
                             password == nil ? 0 : 1
                         )
+                    case .document:
+                        documentkit_extract_document_with_options(
+                            bytes.baseAddress,
+                            bytes.count,
+                            pageBuffer.baseAddress,
+                            pageBuffer.count,
+                            pageIndexes == nil ? 0 : 1,
+                            passwordBuffer.baseAddress,
+                            passwordBuffer.count,
+                            password == nil ? 0 : 1
+                        )
                     }
                 }
             }
@@ -509,6 +607,7 @@ private enum Engine {
 
 private struct Payload: Sendable {
     let markdown: String?
+    let document: ExtractedDocument?
     let inspection: DocumentInspection
     let warnings: [DocumentWarning]
 
@@ -517,13 +616,13 @@ private struct Payload: Sendable {
         operation: EngineOperation,
         selectedPageIndexes: [Int]?
     ) throws {
-        guard response.schemaVersion == 1 else {
+        guard response.schemaVersion == 2 else {
             throw TurnipError.engineFailure(
                 code: "unsupported_schema",
                 message: "The PDF engine returned an unsupported response."
             )
         }
-        guard response.ok, let result = response.result else {
+        guard response.ok, response.error == nil, let result = response.result else {
             throw response.error?.turnipError
                 ?? TurnipError.engineFailure(
                     code: "invalid_response",
@@ -555,9 +654,22 @@ private struct Payload: Sendable {
                 message: "The PDF engine returned an out-of-range page index."
             )
         }
+        let selectedPages = Set(selectedPageIndexes ?? Array(pageRange))
+        guard pageCollections.allSatisfy({ pages in
+            zip(pages, pages.dropFirst()).allSatisfy { $0.0 < $0.1 }
+                && pages.allSatisfy(selectedPages.contains)
+        }), result.confidence.isFinite, result.processingTimeMs >= 0,
+            !result.engineVersion.isEmpty
+        else {
+            throw TurnipError.engineFailure(
+                code: "invalid_metadata",
+                message: "The PDF engine returned invalid or unordered extraction metadata."
+            )
+        }
 
         markdown = result.markdown
-        inspection = DocumentInspection(
+        let hasExtractionMetadata = operation != .inspect
+        let inspection = DocumentInspection(
             kind: kind,
             pageCount: result.pageCount,
             title: result.title,
@@ -567,14 +679,14 @@ private struct Payload: Sendable {
             ocrReasonsByPage: result.ocrReasonsByPage.map {
                 PageOCRReasons(pageIndex: $0.page, reasons: $0.reasons)
             },
-            layout: operation == .extract
+            layout: hasExtractionMetadata
                 ? DocumentLayout(
                     isComplex: result.isComplex,
                     pagesWithTables: result.pagesWithTables,
                     pagesWithColumns: result.pagesWithColumns
                 )
                 : nil,
-            hasEncodingIssues: operation == .extract ? result.hasEncodingIssues : nil,
+            hasEncodingIssues: hasExtractionMetadata ? result.hasEncodingIssues : nil,
             engineVersion: "\(result.engineVersion)@\(Turnip.engineRevision)"
         )
 
@@ -587,18 +699,56 @@ private struct Payload: Sendable {
                 )
             )
         }
-        if operation == .extract && result.hasEncodingIssues {
-            let pages = Array(Set(result.ocrReasonsByPage.map(\.page))).sorted()
+        if hasExtractionMetadata && result.hasEncodingIssues {
+            let pages = encodingIssuePageIndexes(
+                from: result.ocrReasonsByPage.map {
+                    PageOCRReasons(pageIndex: $0.page, reasons: $0.reasons)
+                }
+            )
             warnings.append(
                 DocumentWarning(
                     kind: .encodingIssues,
-                    pageIndexes: pages.isEmpty
-                        ? selectedPageIndexes ?? Array(0..<result.pageCount)
-                        : pages
+                    pageIndexes: pages
                 )
             )
         }
+        self.inspection = inspection
         self.warnings = warnings
+
+        if operation == .document {
+            guard let wireDocument = result.document else {
+                throw TurnipError.engineFailure(
+                    code: "missing_document",
+                    message: "The PDF engine omitted the structured document."
+                )
+            }
+            let expectedPages = selectedPageIndexes ?? Array(pageRange)
+            let pages = try wireDocument.publicPages(
+                expectedPageIndexes: expectedPages,
+                sourcePageCount: result.pageCount
+            )
+            guard pages.filter({ $0.status == .needsOCR }).map(\.pageIndex)
+                == result.pagesNeedingOcr
+            else {
+                throw TurnipError.engineFailure(
+                    code: "inconsistent_page_status",
+                    message: "The PDF engine returned inconsistent OCR page coverage."
+                )
+            }
+            document = ExtractedDocument(
+                inspection: inspection,
+                pages: pages,
+                warnings: warnings
+            )
+        } else {
+            guard result.document == nil else {
+                throw TurnipError.engineFailure(
+                    code: "unexpected_document",
+                    message: "The PDF engine returned structured data for the wrong operation."
+                )
+            }
+            document = nil
+        }
     }
 }
 
@@ -636,6 +786,7 @@ private struct WireResult: Decodable {
     let pagesWithTables: [Int]
     let pagesWithColumns: [Int]
     let hasEncodingIssues: Bool
+    let document: WireDocument?
 
     enum CodingKeys: String, CodingKey {
         case engineVersion = "engine_version"
@@ -651,6 +802,262 @@ private struct WireResult: Decodable {
         case pagesWithTables = "pages_with_tables"
         case pagesWithColumns = "pages_with_columns"
         case hasEncodingIssues = "has_encoding_issues"
+        case document
+    }
+}
+
+private struct WireDocument: Decodable {
+    let pages: [WireDocumentPage]
+
+    func publicPages(
+        expectedPageIndexes: [Int],
+        sourcePageCount: Int
+    ) throws -> [DocumentPage] {
+        guard pages.map(\.pageIndex) == expectedPageIndexes else {
+            throw TurnipError.engineFailure(
+                code: "invalid_page_coverage",
+                message: "The PDF engine did not return every requested page in source order."
+            )
+        }
+
+        var blockIDs = Set<String>()
+        return try pages.map { page in
+            try page.publicPage(sourcePageCount: sourcePageCount, blockIDs: &blockIDs)
+        }
+    }
+}
+
+private struct WireDocumentPage: Decodable {
+    let pageIndex: Int
+    let size: WirePageSize
+    let status: String
+    let blocks: [WireDocumentBlock]
+
+    enum CodingKeys: String, CodingKey {
+        case pageIndex = "page_index"
+        case size
+        case status
+        case blocks
+    }
+
+    func publicPage(sourcePageCount: Int, blockIDs: inout Set<String>) throws -> DocumentPage {
+        guard (0..<sourcePageCount).contains(pageIndex) else {
+            throw TurnipError.engineFailure(
+                code: "invalid_page_index",
+                message: "The PDF engine returned an out-of-range structured page index."
+            )
+        }
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else {
+            throw TurnipError.engineFailure(
+                code: "invalid_page_size",
+                message: "The PDF engine returned an invalid page size."
+            )
+        }
+        guard let pageStatus = DocumentPageStatus(wireValue: status) else {
+            throw TurnipError.engineFailure(
+                code: "unknown_page_status",
+                message: "The PDF engine returned an unknown page status."
+            )
+        }
+
+        let publicBlocks = try blocks.enumerated().map { index, block in
+            let expectedID = "p\(pageIndex)-b\(index)"
+            guard block.id == expectedID, blockIDs.insert(block.id).inserted else {
+                throw TurnipError.engineFailure(
+                    code: "invalid_block_id",
+                    message: "The PDF engine returned an invalid or duplicate block ID."
+                )
+            }
+            return try block.publicBlock()
+        }
+        return DocumentPage(
+            pageIndex: pageIndex,
+            size: PageSize(width: size.width, height: size.height),
+            status: pageStatus,
+            blocks: publicBlocks
+        )
+    }
+}
+
+private struct WirePageSize: Decodable {
+    let width: Double
+    let height: Double
+}
+
+private struct WireDocumentBlock: Decodable {
+    let id: String
+    let bounds: WireBounds?
+    let content: WireBlockContent
+
+    func publicBlock() throws -> DocumentBlock {
+        let publicContent: DocumentBlock.Content
+        switch content {
+        case let .text(lines):
+            publicContent = .text(TextBlock(lines: try lines.map { try $0.publicLine() }))
+        case let .table(rowCount, columnCount, cells):
+            let publicCells = try cells.map { try $0.publicCell() }
+            guard let table = try? TableBlock(
+                validating: rowCount,
+                columnCount: columnCount,
+                cells: publicCells
+            ) else {
+                throw TurnipError.engineFailure(
+                    code: "invalid_table_grid",
+                    message: "The PDF engine returned an invalid table grid."
+                )
+            }
+            publicContent = .table(table)
+        }
+        return DocumentBlock(id: id, bounds: try bounds?.publicBounds(), content: publicContent)
+    }
+}
+
+private enum WireBlockContent: Decodable {
+    case text(lines: [WireTextLine])
+    case table(rowCount: Int, columnCount: Int, cells: [WireTableCell])
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case lines
+        case rowCount = "row_count"
+        case columnCount = "column_count"
+        case cells
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(String.self, forKey: .type) {
+        case "text":
+            self = .text(lines: try container.decode([WireTextLine].self, forKey: .lines))
+        case "table":
+            self = .table(
+                rowCount: try container.decode(Int.self, forKey: .rowCount),
+                columnCount: try container.decode(Int.self, forKey: .columnCount),
+                cells: try container.decode([WireTableCell].self, forKey: .cells)
+            )
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .type,
+                in: container,
+                debugDescription: "Unknown structured block type"
+            )
+        }
+    }
+}
+
+private struct WireTableCell: Decodable {
+    let row: Int
+    let column: Int
+    let rowSpan: Int
+    let columnSpan: Int
+    let role: String
+    let state: String
+    let detectedText: String?
+    let lines: [WireTextLine]
+    let bounds: WireBounds?
+
+    enum CodingKeys: String, CodingKey {
+        case row
+        case column
+        case rowSpan = "row_span"
+        case columnSpan = "column_span"
+        case role
+        case state
+        case detectedText = "detected_text"
+        case lines
+        case bounds
+    }
+
+    func publicCell() throws -> TableCell {
+        guard row >= 0, column >= 0, rowSpan > 0, columnSpan > 0 else {
+            throw TurnipError.engineFailure(
+                code: "invalid_table_cell",
+                message: "The PDF engine returned an invalid table cell."
+            )
+        }
+        guard let publicRole = TableCellRole(rawValue: role),
+            let publicState = TableCellState(rawValue: state)
+        else {
+            throw TurnipError.engineFailure(
+                code: "unknown_table_cell_value",
+                message: "The PDF engine returned an unknown table cell role or state."
+            )
+        }
+        guard detectedText.map({ !$0.isEmpty }) ?? true,
+            publicState != .extracted || (!lines.isEmpty && detectedText == nil),
+            publicState != .empty || (lines.isEmpty && detectedText == nil)
+        else {
+            throw TurnipError.engineFailure(
+                code: "inconsistent_table_cell_state",
+                message: "The PDF engine returned a table cell whose state contradicts its lines."
+            )
+        }
+        return TableCell(
+            row: row,
+            column: column,
+            rowSpan: rowSpan,
+            columnSpan: columnSpan,
+            role: publicRole,
+            state: publicState,
+            detectedText: detectedText,
+            lines: try lines.map { try $0.publicLine() },
+            bounds: try bounds?.publicBounds()
+        )
+    }
+}
+
+private struct WireTextLine: Decodable {
+    let text: String
+    let bounds: WireBounds?
+
+    func publicLine() throws -> TextLine {
+        TextLine(text: text, bounds: try bounds?.publicBounds())
+    }
+}
+
+private struct WireBounds: Decodable {
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+
+    func publicBounds() throws -> DocumentBounds {
+        let epsilon = 0.000_001
+        guard x.isFinite, y.isFinite, width.isFinite, height.isFinite,
+            x >= 0, y >= 0, width > 0, height > 0,
+            x <= 1, y <= 1, width <= 1, height <= 1,
+            x + width <= 1 + epsilon, y + height <= 1 + epsilon
+        else {
+            throw TurnipError.engineFailure(
+                code: "invalid_bounds",
+                message: "The PDF engine returned invalid normalized bounds."
+            )
+        }
+        let clippedWidth = min(width, 1 - x)
+        let clippedHeight = min(height, 1 - y)
+        guard clippedWidth > 0, clippedHeight > 0 else {
+            throw TurnipError.engineFailure(
+                code: "invalid_bounds",
+                message: "The PDF engine returned empty normalized bounds."
+            )
+        }
+        return DocumentBounds(
+            x: x,
+            y: y,
+            width: clippedWidth,
+            height: clippedHeight
+        )
+    }
+}
+
+private extension DocumentPageStatus {
+    init?(wireValue: String) {
+        switch wireValue {
+        case "extracted": self = .extracted
+        case "needs_ocr": self = .needsOCR
+        case "extraction_failed": self = .extractionFailed
+        default: return nil
+        }
     }
 }
 

@@ -52,6 +52,25 @@ DocumentKitBuffer documentkit_extract_with_options(
     int32_t has_password
 );
 
+/// Extracts a structured, source-preserving document using the same local PDF
+/// pipeline as `documentkit_extract`. The JSON response has bridge schema 2
+/// and carries a `document` payload with page-local blocks, lines, and tables.
+DocumentKitBuffer documentkit_extract_document(const uint8_t *bytes, size_t length);
+
+/// Like `documentkit_extract_document`, with an optional zero-based page
+/// selection and UTF-8 password. The option buffers are borrowed only for this
+/// call. Requested pages remain in original document order in the result.
+DocumentKitBuffer documentkit_extract_document_with_options(
+    const uint8_t *bytes,
+    size_t length,
+    const uint32_t *page_indexes,
+    size_t page_count,
+    int32_t has_page_selection,
+    const uint8_t *password,
+    size_t password_length,
+    int32_t has_password
+);
+
 /// Releases a buffer returned by DocumentKitCore. Accepts an empty buffer.
 void documentkit_buffer_free(DocumentKitBuffer buffer);
 

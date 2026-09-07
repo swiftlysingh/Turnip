@@ -88,6 +88,8 @@ expect_symbols() {
             _documentkit_extract \
             _documentkit_inspect_with_options \
             _documentkit_extract_with_options \
+            _documentkit_extract_document \
+            _documentkit_extract_document_with_options \
             _documentkit_buffer_free \
             _documentkit_engine_version \
             _documentkit_engine_revision; do
@@ -105,6 +107,8 @@ expect_symbols() {
                 _documentkit_extract \
                 _documentkit_inspect_with_options \
                 _documentkit_extract_with_options \
+                _documentkit_extract_document \
+                _documentkit_extract_document_with_options \
                 _documentkit_buffer_free \
                 _documentkit_engine_version \
                 _documentkit_engine_revision; do

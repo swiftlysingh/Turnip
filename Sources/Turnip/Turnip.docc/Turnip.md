@@ -1,31 +1,36 @@
 # ``Turnip``
 
-Extract Markdown from PDFs locally in iOS and macOS apps.
+Extract typed document structure and Markdown from PDFs locally in iOS and
+macOS apps.
 
 ## Overview
 
 Turnip wraps a pinned PDF engine behind a small Swift API. It reads PDF
-data in the app process, produces Markdown when embedded text is available, and
-reports classification, layout, encoding, and OCR-routing signals alongside the
-result. It does not upload PDFs, call an LLM, convert Office documents, or
-perform OCR.
+data in the app process, preserves source text and tables in a typed document,
+produces Markdown when requested, and reports classification, layout, encoding,
+and OCR-routing signals alongside the result. It does not upload PDFs, call an
+LLM, convert Office documents, perform OCR, or interpret financial values.
 
 ```swift
 import Turnip
 import Foundation
 
-let result = try await Turnip.extract(pdfData)
+let document = try await Turnip.extractDocument(pdfData)
 
-print(result.markdown)
-print(result.inspection.kind)
-print(result.warnings)
+for page in document.pages {
+    print(page.pageIndex, page.status)
+}
+
+let json = try JSONEncoder().encode(document)
 ```
 
-Use ``Turnip/extract(_:)`` when your app needs Markdown. Use
+Use ``Turnip/extractDocument(_:)`` when your app needs source pages, text,
+tables, lines, or geometry. Use ``Turnip/extract(_:)`` when it needs Markdown. Use
 ``Turnip/inspect(_:)`` when it only needs to classify a PDF and decide
 whether another OCR-capable path is needed. `inspect` does not first extract
 Markdown, so its layout and encoding fields are `nil`. File URLs use
-``Turnip/extract(contentsOf:)`` and ``Turnip/inspect(contentsOf:)``.
+``Turnip/extractDocument(contentsOf:)``, ``Turnip/extract(contentsOf:)``, and
+``Turnip/inspect(contentsOf:)``.
 
 ## Select pages and handle passwords
 
@@ -37,7 +42,7 @@ let options = DocumentOptions(
     pageIndexes: [0, 2, 3],
     password: suppliedPassword
 )
-let result = try await Turnip.extract(pdfData, options: options)
+let document = try await Turnip.extractDocument(pdfData, options: options)
 ```
 
 Turnip passes the supplied password to the engine and redacts it from
@@ -46,17 +51,38 @@ Turnip passes the supplied password to the engine and redacts it from
 so apps that accept hostile documents should apply their own concurrency and
 resource limits.
 
-## Interpret the result
+## Trace and interpret the result
 
-Markdown is an extraction result, not proof that every field is correct.
-Preserve ``DocumentExtraction/warnings`` and the ``DocumentInspection`` with
-the Markdown. In particular, ``DocumentWarning/Kind/ocrRequired`` means the
-engine recommends OCR for one or more pages, and
-``DocumentWarning/Kind/encodingIssues`` means the engine found decoding issues.
+Structured output is extraction evidence, not proof that every field is
+correct. Preserve ``ExtractedDocument/warnings``, page statuses, source lines,
+and the ``DocumentInspection``. In particular,
+``DocumentWarning/Kind/ocrRequired`` means the engine recommends OCR for one or
+more pages, and ``DocumentWarning/Kind/encodingIssues`` means the engine found
+decoding issues. Warning page indexes contain only page-local evidence. An
+empty list means the engine could not localize a document-level warning, not
+that every requested page is affected.
 
-For a scanned or image-only PDF, extraction throws
+```swift
+let source = DocumentSourceReference(
+    pageIndex: 0,
+    blockID: "p0-b1",
+    row: 2,
+    column: 2
+)
+
+let originalCell = document.cell(for: source)
+```
+
+Table cells remain strings. The consuming app owns statement recognition,
+dates, amounts, currency, merchant cleanup, reconciliation, and import
+decisions. It can store source references with interpreted values and resolve
+them against the same document before accepting an import.
+
+For a scanned or image-only PDF, Markdown extraction throws
 ``TurnipError/noExtractableText(_:)`` and includes the inspection that
-explains the routing decision.
+explains the routing decision. Structured extraction instead returns each
+requested page with ``DocumentPage/status`` set to
+``DocumentPageStatus/needsOCR`` and no invented text.
 
 ## Benchmark status
 
@@ -82,6 +108,10 @@ rules.
 - ``Turnip/extract(_:options:)``
 - ``Turnip/extract(contentsOf:)``
 - ``Turnip/extract(contentsOf:options:)``
+- ``Turnip/extractDocument(_:)``
+- ``Turnip/extractDocument(_:options:)``
+- ``Turnip/extractDocument(contentsOf:)``
+- ``Turnip/extractDocument(contentsOf:options:)``
 - ``Turnip/inspect(_:)``
 - ``Turnip/inspect(_:options:)``
 - ``Turnip/inspect(contentsOf:)``
@@ -92,6 +122,19 @@ rules.
 
 ### Results
 
+- ``ExtractedDocument``
+- ``DocumentPage``
+- ``DocumentPageStatus``
+- ``PageSize``
+- ``DocumentBounds``
+- ``DocumentBlock``
+- ``TextBlock``
+- ``TableBlock``
+- ``TableCell``
+- ``TableCellRole``
+- ``TableCellState``
+- ``TextLine``
+- ``DocumentSourceReference``
 - ``DocumentExtraction``
 - ``DocumentInspection``
 - ``DocumentKind``

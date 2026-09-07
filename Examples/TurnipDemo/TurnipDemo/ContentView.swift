@@ -22,13 +22,14 @@ struct ContentView: View {
 
             Divider()
 
-            if model.pdfDocument != nil || model.extraction != nil || model.isExtracting {
+            if model.pdfDocument != nil || model.document != nil || model.isExtracting {
                 HSplitView {
                     PDFPreview(document: model.pdfDocument)
                         .frame(minWidth: 360, idealWidth: 520)
 
-                    MarkdownPane(
-                        extraction: model.extraction,
+                    StructuredDocumentPane(
+                        document: model.document,
+                        json: model.documentJSON,
                         isExtracting: model.isExtracting
                     )
                     .frame(minWidth: 360)
@@ -40,7 +41,7 @@ struct ContentView: View {
             }
 
             InspectionBar(
-                extraction: model.extraction,
+                document: model.document,
                 isExtracting: model.isExtracting
             )
         }
@@ -60,14 +61,14 @@ struct ContentView: View {
                 }
                 .keyboardShortcut("o", modifiers: .command)
 
-                if model.extraction != nil {
-                    Button("Copy Markdown", systemImage: "doc.on.doc") {
-                        copyMarkdown()
+                if model.document != nil {
+                    Button("Copy JSON", systemImage: "doc.on.doc") {
+                        copyJSON()
                     }
                     .keyboardShortcut("c", modifiers: [.command, .shift])
 
-                    Button("Save Markdown", systemImage: "square.and.arrow.down") {
-                        saveMarkdown()
+                    Button("Save JSON", systemImage: "square.and.arrow.down") {
+                        saveJSON()
                     }
                 }
 
@@ -179,25 +180,25 @@ struct ContentView: View {
         password.isEmpty ? nil : password
     }
 
-    private func copyMarkdown() {
-        guard let markdown = model.extraction?.markdown else { return }
+    private func copyJSON() {
+        guard let json = model.documentJSON else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(markdown, forType: .string)
+        pasteboard.setString(json, forType: .string)
     }
 
-    private func saveMarkdown() {
-        guard let markdown = model.extraction?.markdown else { return }
+    private func saveJSON() {
+        guard let json = model.documentJSON else { return }
 
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = model.markdownFileName
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = model.jsonFileName
         panel.canCreateDirectories = true
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
 
             do {
-                try markdown.write(to: url, atomically: true, encoding: .utf8)
+                try json.write(to: url, atomically: true, encoding: .utf8)
             } catch {
                 let message = error.localizedDescription
                 Task { @MainActor in
@@ -280,7 +281,7 @@ private struct EmptyState: View {
             Text("Open a PDF")
                 .font(.title2.weight(.semibold))
 
-            Text("Choose a PDF or drop one anywhere in this window to inspect and extract it as Markdown.")
+            Text("Choose a PDF or drop one anywhere in this window to inspect its text and table structure.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
@@ -293,39 +294,65 @@ private struct EmptyState: View {
     }
 }
 
-private struct MarkdownPane: View {
-    let extraction: DocumentExtraction?
+private struct StructuredDocumentPane: View {
+    let document: ExtractedDocument?
+    let json: String?
     let isExtracting: Bool
 
     var body: some View {
         Group {
-            if let extraction {
+            if let document {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        InspectionSummary(inspection: extraction.inspection)
+                        InspectionSummary(inspection: document.inspection)
 
-                        if !extraction.warnings.isEmpty {
-                            WarningsView(warnings: extraction.warnings)
+                        if !document.warnings.isEmpty {
+                            WarningsView(warnings: document.warnings)
                         }
 
-                        Text(extraction.markdown)
+                        StructuredCoverage(document: document)
+
+                        Text(json ?? "Unable to encode structured JSON.")
                             .font(.system(.body, design: .monospaced))
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding()
                 }
-                .accessibilityLabel("Extracted Markdown")
+                .accessibilityLabel("Extracted structured document JSON")
             } else if isExtracting {
-                ProgressView("Extracting Markdown…")
+                ProgressView("Extracting document…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Text("Markdown will appear here.")
+                Text("Structured document JSON will appear here.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(.background)
+    }
+}
+
+private struct StructuredCoverage: View {
+    let document: ExtractedDocument
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Requested page coverage")
+                .font(.headline)
+
+            ForEach(document.pages, id: \.pageIndex) { page in
+                Label(
+                    "Page \(page.pageIndex + 1): \(page.blocks.count) blocks, \(page.status.displayName)",
+                    systemImage: page.status == .extracted
+                        ? "checkmark.circle"
+                        : "exclamationmark.triangle"
+                )
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -385,20 +412,20 @@ private struct WarningsView: View {
 }
 
 private struct InspectionBar: View {
-    let extraction: DocumentExtraction?
+    let document: ExtractedDocument?
     let isExtracting: Bool
 
     var body: some View {
         HStack(spacing: 14) {
-            if let extraction {
-                let inspection = extraction.inspection
+            if let document {
+                let inspection = document.inspection
                 Label("\(inspection.pageCount) pages", systemImage: "doc.on.doc")
                 Text(inspection.kind.displayName)
                 Text(inspection.processingTime.shortDescription)
 
-                if !extraction.warnings.isEmpty {
+                if !document.warnings.isEmpty {
                     Label(
-                        "\(extraction.warnings.count) warning\(extraction.warnings.count == 1 ? "" : "s")",
+                        "\(document.warnings.count) warning\(document.warnings.count == 1 ? "" : "s")",
                         systemImage: "exclamationmark.triangle"
                     )
                     .foregroundStyle(.orange)
@@ -428,8 +455,8 @@ private struct InspectionBar: View {
     }
 
     private var statusLabel: String {
-        guard let inspection = extraction?.inspection else {
-            return isExtracting ? "Extracting Markdown" : "Ready"
+        guard let inspection = document?.inspection else {
+            return isExtracting ? "Extracting document" : "Ready"
         }
         return "\(inspection.pageCount) pages, \(inspection.kind.displayName), processed in \(inspection.processingTime.shortDescription)"
     }
@@ -495,6 +522,18 @@ private extension DocumentWarning {
             return "OCR may be required\(pageDescription)."
         case .encodingIssues:
             return "Text encoding issues were detected\(pageDescription)."
+        case let .unknown(code):
+            return "\(code)\(pageDescription)."
+        }
+    }
+}
+
+private extension DocumentPageStatus {
+    var displayName: String {
+        switch self {
+        case .extracted: "extracted"
+        case .needsOCR: "needs OCR"
+        case .extractionFailed: "extraction failed"
         }
     }
 }
