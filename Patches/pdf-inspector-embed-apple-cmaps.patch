@@ -2582,10 +2582,10 @@ index 4300f51..cdf771f 100644
  }
 diff --git a/src/structured.rs b/src/structured.rs
 new file mode 100644
-index 0000000..b059b49
+index 0000000..7d26150
 --- /dev/null
 +++ b/src/structured.rs
-@@ -0,0 +1,1735 @@
+@@ -0,0 +1,2187 @@
 +//! Source-preserving structured extraction evidence and coordinate conversion.
 +//!
 +//! These types deliberately sit below application-specific interpretation.
@@ -3123,6 +3123,7 @@ index 0000000..b059b49
 +        column_axes[0],
 +    );
 +    let mut best_score = raw_cell_match_score(&best.0, &table.cells, geometry);
++    let mut selected_axes = (row_axes[0], column_axes[0]);
 +    for (row_index, rows) in row_axes.iter().copied().enumerate() {
 +        for (column_index, columns) in column_axes.iter().copied().enumerate() {
 +            if row_index == 0 && column_index == 0 {
@@ -3137,7 +3138,57 @@ index 0000000..b059b49
 +                {
 +                    best = candidate;
 +                    best_score = score;
++                    selected_axes = (rows, columns);
 +                }
++            }
++        }
++    }
++
++    // Heuristic detectors cluster and assign columns from each item's leading
++    // edge, while structured capture defaults to centers so ruled-grid and
++    // centered values retain their established geometry. A fully corroborated
++    // row can prove that a long label crossed an anchor midpoint; resolve only
++    // that row and leave unrelated raw-source gaps untouched.
++    if best.1 && matches!(selected_axes.1, TableAxis::Anchors(_)) {
++        let mut leading = assign_items_to_axes_with_column_anchor(
++            table,
++            source_items,
++            row_count,
++            column_count,
++            selected_axes.0,
++            selected_axes.1,
++            ColumnItemAnchor::Leading,
++        );
++        for row in 0..row_count {
++            if row_has_complete_leading_column_association(
++                table,
++                source_items,
++                row,
++                column_count,
++                selected_axes.0,
++                selected_axes.1,
++            ) && raw_row_is_fully_corroborated(
++                &leading.0[row],
++                table.cells.get(row),
++                column_count,
++                geometry,
++            ) && row_only_moves_from_confirmed_blank_origins(
++                &best.0[row],
++                &leading.0[row],
++                table.cells.get(row),
++                column_count,
++            ) && raw_row_match_score(
++                &leading.0[row],
++                table.cells.get(row),
++                column_count,
++                geometry,
++            ) > raw_row_match_score(
++                &best.0[row],
++                table.cells.get(row),
++                column_count,
++                geometry,
++            ) {
++                best.0[row] = std::mem::take(&mut leading.0[row]);
 +            }
 +        }
 +    }
@@ -3152,6 +3203,32 @@ index 0000000..b059b49
 +    rows: TableAxis<'_>,
 +    columns: TableAxis<'_>,
 +) -> (Vec<Vec<Vec<TextItem>>>, bool) {
++    assign_items_to_axes_with_column_anchor(
++        table,
++        source_items,
++        row_count,
++        column_count,
++        rows,
++        columns,
++        ColumnItemAnchor::Center,
++    )
++}
++
++#[derive(Clone, Copy, PartialEq, Eq)]
++enum ColumnItemAnchor {
++    Center,
++    Leading,
++}
++
++fn assign_items_to_axes_with_column_anchor(
++    table: &Table,
++    source_items: &[TextItem],
++    row_count: usize,
++    column_count: usize,
++    rows: TableAxis<'_>,
++    columns: TableAxis<'_>,
++    column_anchor: ColumnItemAnchor,
++) -> (Vec<Vec<Vec<TextItem>>>, bool) {
 +    let mut result = vec![vec![Vec::new(); column_count]; row_count];
 +    let mut reliable = true;
 +    for &index in &table.item_indices {
@@ -3160,7 +3237,11 @@ index 0000000..b059b49
 +            continue;
 +        };
 +        let row = axis_index(item.y, rows);
-+        let column = axis_index(item.x + item.width / 2.0, columns);
++        let column_x = match column_anchor {
++            ColumnItemAnchor::Center => item.x + item.width / 2.0,
++            ColumnItemAnchor::Leading => item.x,
++        };
++        let column = axis_index(column_x, columns);
 +        if let (Some(row), Some(column)) = (row, column) {
 +            if row < row_count && column < column_count {
 +                result[row][column].push(item.clone());
@@ -3197,6 +3278,135 @@ index 0000000..b059b49
 +            }
 +        })
 +    })
++}
++
++/// A row-local leading-edge interpretation is safe only when every claimed
++/// source item for that row still maps to a known column. Items whose row is
++/// unknown make the entire alternative unsafe rather than being guessed into
++/// a nearby cell.
++fn row_has_complete_leading_column_association(
++    table: &Table,
++    source_items: &[TextItem],
++    row: usize,
++    column_count: usize,
++    rows: TableAxis<'_>,
++    columns: TableAxis<'_>,
++) -> bool {
++    table.item_indices.iter().all(|&index| {
++        let Some(item) = source_items.get(index) else {
++            return false;
++        };
++        match axis_index(item.y, rows) {
++            Some(item_row) if item_row == row => {
++                axis_index(item.x, columns).is_some_and(|column| column < column_count)
++            }
++            Some(_) => true,
++            None => false,
++        }
++    })
++}
++
++/// A row alternative cannot rely on a raw source string that has no cell slot.
++/// Every logical column must be present, matched exactly when nonblank, and
++/// empty when the detector established it as blank.
++fn raw_row_is_fully_corroborated(
++    cell_items: &[Vec<TextItem>],
++    raw_cells: Option<&Vec<String>>,
++    column_count: usize,
++    geometry: PageGeometry,
++) -> bool {
++    let Some(raw_cells) = raw_cells else {
++        return false;
++    };
++    (0..column_count).all(|column| {
++        let Some(raw_text) = raw_cells.get(column) else {
++            return false;
++        };
++        let items = cell_items
++            .get(column)
++            .map(Vec::as_slice)
++            .unwrap_or_default();
++        if raw_text.trim().is_empty() {
++            items.is_empty()
++        } else {
++            lines_matching_raw_cell(&source_lines(items, geometry), raw_text)
++        }
++    })
++}
++
++fn raw_row_match_score(
++    cell_items: &[Vec<TextItem>],
++    raw_cells: Option<&Vec<String>>,
++    column_count: usize,
++    geometry: PageGeometry,
++) -> usize {
++    let Some(raw_cells) = raw_cells else {
++        return 0;
++    };
++    (0..column_count)
++        .filter(|&column| {
++            raw_cells.get(column).is_some_and(|raw_text| {
++                !raw_text.trim().is_empty()
++                    && cell_items.get(column).is_some_and(|items| {
++                        lines_matching_raw_cell(&source_lines(items, geometry), raw_text)
++                    })
++            })
++        })
++        .count()
++}
++
++/// An overflow reassociation may only move literal source evidence out of a
++/// detector-confirmed blank. A nonblank raw slot with existing source items is
++/// already an established association, even if another interpretation would
++/// score higher, so leave it unchanged.
++fn row_only_moves_from_confirmed_blank_origins(
++    centered_items: &[Vec<TextItem>],
++    leading_items: &[Vec<TextItem>],
++    raw_cells: Option<&Vec<String>>,
++    column_count: usize,
++) -> bool {
++    let Some(raw_cells) = raw_cells else {
++        return false;
++    };
++    let mut changed = false;
++    for column in 0..column_count {
++        let Some(raw_text) = raw_cells.get(column) else {
++            return false;
++        };
++        let centered = centered_items
++            .get(column)
++            .map(Vec::as_slice)
++            .unwrap_or_default();
++        let leading = leading_items
++            .get(column)
++            .map(Vec::as_slice)
++            .unwrap_or_default();
++        if same_source_items(centered, leading) {
++            continue;
++        }
++        changed = true;
++        if raw_text.trim().is_empty() {
++            if !leading.is_empty() {
++                return false;
++            }
++        } else if !centered.is_empty() {
++            return false;
++        }
++    }
++    changed
++}
++
++fn same_source_items(left: &[TextItem], right: &[TextItem]) -> bool {
++    left.len() == right.len()
++        && left.iter().zip(right).all(|(left, right)| {
++            left.text == right.text
++                && left.x.to_bits() == right.x.to_bits()
++                && left.y.to_bits() == right.y.to_bits()
++                && left.width.to_bits() == right.width.to_bits()
++                && left.height.to_bits() == right.height.to_bits()
++                && left.page == right.page
++                && left.mcid == right.mcid
++        })
 +}
 +
 +fn raw_cell_match_score(
@@ -3974,6 +4184,248 @@ index 0000000..b059b49
 +        assert!(
 +            selected[0][0].is_empty(),
 +            "the incompletely corroborated leading-edge candidate must not win"
++        );
++    }
++
++    #[test]
++    fn fully_corroborated_leading_column_anchor_recovers_long_label_overflow() {
++        // The heuristic detector clusters and assigns columns from `item.x`.
++        // A long first-column label can extend across the midpoint to its next
++        // anchor. An unrelated source-less header row remains unresolved, but
++        // the fully corroborated data row can still use that convention.
++        let mut long_label = item("Long label", 50.0, 500.0);
++        long_label.width = 120.0;
++        let items = vec![
++            long_label,
++            item("First value", 300.0, 500.0),
++            item("Second value", 400.0, 500.0),
++            item("Third value", 500.0, 500.0),
++            item("Short", 50.0, 480.0),
++            item("First other", 300.0, 480.0),
++            item("Second other", 400.0, 480.0),
++            item("Third other", 500.0, 480.0),
++        ];
++        let table = Table::new(
++            vec![50.0, 150.0, 300.0, 400.0, 500.0],
++            vec![520.0, 500.0, 480.0],
++            vec![
++                vec![
++                    "Heading first".into(),
++                    "Heading blank".into(),
++                    "Heading one".into(),
++                    "Heading two".into(),
++                    "Heading three".into(),
++                ],
++                vec![
++                    "Long label".into(),
++                    String::new(),
++                    "First value".into(),
++                    "Second value".into(),
++                    "Third value".into(),
++                ],
++                vec![
++                    "Short".into(),
++                    String::new(),
++                    "First other".into(),
++                    "Second other".into(),
++                    "Third other".into(),
++                ],
++            ],
++            (0..items.len()).collect(),
++        );
++        let row_axis = table_axis(&table.rows, 3).expect("row anchors");
++        let column_axis = table_axis(&table.columns, 5).expect("column anchors");
++        let centered = assign_items_to_axes(&table, &items, 3, 5, row_axis, column_axis);
++        let leading = assign_items_to_axes_with_column_anchor(
++            &table,
++            &items,
++            3,
++            5,
++            row_axis,
++            column_axis,
++            ColumnItemAnchor::Leading,
++        );
++        assert!(
++            raw_row_match_score(&leading.0[1], table.cells.get(1), 5, geometry(0))
++                > raw_row_match_score(&centered.0[1], table.cells.get(1), 5, geometry(0))
++        );
++        assert!(leading.1);
++        assert!(!raw_grid_is_fully_corroborated(
++            &leading.0,
++            &table.cells,
++            geometry(0)
++        ));
++        assert!(row_has_complete_leading_column_association(
++            &table,
++            &items,
++            1,
++            5,
++            row_axis,
++            column_axis,
++        ));
++        assert!(raw_row_is_fully_corroborated(
++            &leading.0[1],
++            table.cells.get(1),
++            5,
++            geometry(0)
++        ));
++        assert!(row_only_moves_from_confirmed_blank_origins(
++            &centered.0[1],
++            &leading.0[1],
++            table.cells.get(1),
++            5,
++        ));
++
++        let StructuredBlockContent::Table { cells, .. } =
++            table_block(&table, &items, geometry(0), None).content
++        else {
++            panic!("expected a table block");
++        };
++        let first_cell = cells
++            .iter()
++            .find(|cell| cell.row == 1 && cell.column == 0)
++            .expect("first source cell");
++        assert_eq!(first_cell.state, StructuredCellState::Extracted);
++        assert_eq!(
++            first_cell
++                .lines
++                .iter()
++                .map(|line| line.text.as_str())
++                .collect::<Vec<_>>(),
++            ["Long label"]
++        );
++        assert!(cells.iter().any(|cell| {
++            cell.row == 1
++                && cell.column == 1
++                && cell.state == StructuredCellState::Empty
++                && cell.lines.is_empty()
++        }));
++        assert!(cells.iter().any(|cell| {
++            cell.row == 0
++                && cell.column == 0
++                && cell.state == StructuredCellState::Unresolved
++                && cell.lines.is_empty()
++                && cell.detected_text.is_some()
++        }));
++    }
++
++    #[test]
++    fn incomplete_leading_column_candidate_keeps_the_default_association() {
++        // A leading-edge candidate can score higher by recovering the long
++        // label while still placing unrelated evidence in a known blank slot.
++        // It must not be promoted without complete raw-grid corroboration.
++        let mut long_label = item("DUP", 50.0, 500.0);
++        long_label.width = 120.0;
++        let items = vec![
++            long_label,
++            item("EXTRA", 150.0, 500.0),
++            item("NORMAL", 50.0, 480.0),
++            item("VALUE", 150.0, 480.0),
++        ];
++        let table = Table::new(
++            vec![50.0, 150.0],
++            vec![500.0, 480.0],
++            vec![
++                vec!["DUP".into(), String::new()],
++                vec!["NORMAL".into(), "VALUE".into()],
++            ],
++            (0..items.len()).collect(),
++        );
++        let row_axis = table_axis(&table.rows, 2).expect("row anchors");
++        let column_axis = table_axis(&table.columns, 2).expect("column anchors");
++        let centered = assign_items_to_axes(&table, &items, 2, 2, row_axis, column_axis);
++        let leading = assign_items_to_axes_with_column_anchor(
++            &table,
++            &items,
++            2,
++            2,
++            row_axis,
++            column_axis,
++            ColumnItemAnchor::Leading,
++        );
++        assert!(
++            raw_row_match_score(&leading.0[0], table.cells.first(), 2, geometry(0))
++                > raw_row_match_score(&centered.0[0], table.cells.first(), 2, geometry(0))
++        );
++        assert!(!raw_row_is_fully_corroborated(
++            &leading.0[0],
++            table.cells.first(),
++            2,
++            geometry(0)
++        ));
++        assert!(!row_only_moves_from_confirmed_blank_origins(
++            &centered.0[0],
++            &leading.0[0],
++            table.cells.first(),
++            2,
++        ));
++
++        let (selected, reliable) = assign_table_items(&table, &items, 2, 2, geometry(0));
++        assert!(reliable);
++        assert!(
++            selected[0][0].is_empty(),
++            "the incompletely corroborated leading-column candidate must not win"
++        );
++    }
++
++    #[test]
++    fn leading_column_candidate_keeps_established_nonblank_source_association() {
++        // The leading interpretation reconstructs the raw row, but it would
++        // also move text out of a nonblank raw slot that already has source
++        // evidence. That is not an overflow from a confirmed blank and must
++        // retain the center-based association.
++        let mut long_label = item("Long label", 50.0, 500.0);
++        long_label.width = 120.0;
++        let items = vec![
++            long_label,
++            item("Middle", 150.0, 500.0),
++            item("Right", 300.0, 500.0),
++            item("Short", 50.0, 480.0),
++            item("Value", 150.0, 480.0),
++        ];
++        let table = Table::new(
++            vec![50.0, 150.0, 300.0],
++            vec![500.0, 480.0],
++            vec![
++                vec!["Long label".into(), "Middle".into(), "Right".into()],
++                vec!["Short".into(), "Value".into(), String::new()],
++            ],
++            (0..items.len()).collect(),
++        );
++        let row_axis = table_axis(&table.rows, 2).expect("row anchors");
++        let column_axis = table_axis(&table.columns, 3).expect("column anchors");
++        let centered = assign_items_to_axes(&table, &items, 2, 3, row_axis, column_axis);
++        let leading = assign_items_to_axes_with_column_anchor(
++            &table,
++            &items,
++            2,
++            3,
++            row_axis,
++            column_axis,
++            ColumnItemAnchor::Leading,
++        );
++        assert!(raw_row_is_fully_corroborated(
++            &leading.0[0],
++            table.cells.first(),
++            3,
++            geometry(0)
++        ));
++        assert!(
++            raw_row_match_score(&leading.0[0], table.cells.first(), 3, geometry(0))
++                > raw_row_match_score(&centered.0[0], table.cells.first(), 3, geometry(0))
++        );
++        assert!(!row_only_moves_from_confirmed_blank_origins(
++            &centered.0[0],
++            &leading.0[0],
++            table.cells.first(),
++            3,
++        ));
++
++        let (selected, reliable) = assign_table_items(&table, &items, 2, 3, geometry(0));
++        assert!(reliable);
++        assert!(
++            selected[0][0].is_empty(),
++            "a leading candidate must not replace a nonblank source association"
 +        );
 +    }
 +
