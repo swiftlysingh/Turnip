@@ -4,14 +4,16 @@
 - pdf-inspector repository: `swiftlysingh/pdf-inspector`
 - pdf-inspector upstream source revision: `2322bcce4cd9458d24399bf8fee42f1aa201c8c1`
 - Turnip patch: `Patches/pdf-inspector-embed-apple-cmaps.patch`
+- Turnip patch SHA-256: `c154bb2d0fbf4302afe898a356800782e088b63c4bf3fe2c9eb13d9e9081f140`
 - Rust toolchain: `1.96.0`
 - Xcode: `26.3 (17C529)`
 
 The artifact includes indirect Form resource decoding and first-transaction-row
 deduplication from the pinned fork. It was built with CMaps embedded, the Apple
 single-threaded lopdf configuration, selection-aware sparse-text/font quality
-heuristics, and source-preserving structured capture before Markdown presentation
-cleanup from the tracked patch. Build paths were remapped to `/DocumentKit`,
+heuristics, explicit sparse single-byte ToUnicode mappings with per-byte fallback,
+and source-preserving structured capture before Markdown presentation cleanup from
+the tracked patch. Build paths were remapped to `/DocumentKit`,
 `/Cargo`, and `/BuildUser`. Rebuilds must update this file and pass
 `Scripts/verify-artifact.sh` plus Swift runtime and parity tests. Artifact
 runtime checks confirm the version and upstream source revision in every
