@@ -3,18 +3,11 @@ import Foundation
 /// A structured representation of a locally extracted PDF.
 public struct ExtractedDocument: Codable, Sendable, Hashable {
     /// The current structured-document schema version.
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
-    /// The schema version used for this document.
     public let schemaVersion: Int
-
-    /// Inspection information collected during extraction.
     public let inspection: DocumentInspection
-
-    /// Requested pages in their original document order.
     public let pages: [DocumentPage]
-
-    /// Quality warnings collected during extraction.
     public let warnings: [DocumentWarning]
 
     /// Zero-based pages the engine recommends routing through OCR.
@@ -22,7 +15,6 @@ public struct ExtractedDocument: Codable, Sendable, Hashable {
         inspection.pagesNeedingOCR
     }
 
-    /// Creates a structured document.
     public init(
         schemaVersion: Int = ExtractedDocument.currentSchemaVersion,
         inspection: DocumentInspection,
@@ -56,11 +48,9 @@ public struct ExtractedDocument: Codable, Sendable, Hashable {
                 "Unsupported structured-document schema version \(schemaVersion)"
             )
         }
-
         let inspection = try container.decode(DocumentInspection.self, forKey: .inspection)
         let pages = try container.decode([DocumentPage].self, forKey: .pages)
         let warnings = try container.decode([DocumentWarning].self, forKey: .warnings)
-
         guard !pages.isEmpty,
             isValidStructuredDocument(inspection: inspection, pages: pages, warnings: warnings)
         else {
@@ -68,7 +58,6 @@ public struct ExtractedDocument: Codable, Sendable, Hashable {
                 "Structured document metadata and page coverage are invalid"
             )
         }
-
         self.schemaVersion = schemaVersion
         self.inspection = inspection
         self.pages = pages
@@ -83,29 +72,88 @@ public struct ExtractedDocument: Codable, Sendable, Hashable {
         return page.blocks.first(where: { $0.id == reference.blockID })
     }
 
-    /// Finds a table cell identified by a source reference.
+    /// Finds the table addressed by a source reference.
+    public func table(for reference: DocumentSourceReference) -> TableBlock? {
+        guard let block = block(for: reference), case let .table(table) = block.content else {
+            return nil
+        }
+        return table
+    }
+
+    /// Finds the literal table slot addressed by a source reference.
+    ///
+    /// This never follows a covered slot to its span anchor. Use
+    /// resolvedCell(for:) only when that resolution is intentional.
     public func cell(for reference: DocumentSourceReference) -> TableCell? {
         guard let row = reference.row, let column = reference.column,
-            let block = block(for: reference),
-            case let .table(table) = block.content
+            let table = table(for: reference)
         else {
             return nil
         }
         return table.cell(row: row, column: column)
     }
 
-    /// Finds a text line identified by a source reference.
+    /// Resolves a covered table slot only when the caller explicitly asks.
+    ///
+    /// A reference with a line index must name a literal source line. It is not
+    /// redirected through a covered slot.
+    public func resolvedCell(for reference: DocumentSourceReference) -> TableCell? {
+        guard reference.lineIndex == nil || line(for: reference) != nil,
+            let resolved = resolvedSourceReference(for: reference)
+        else {
+            return nil
+        }
+        return cell(for: resolved)
+    }
+
+    /// Resolves a covered table slot to its anchor while keeping document identity.
+    ///
+    /// A line reference to a covered slot is invalid because that slot has no
+    /// independent source line. This method returns nil instead of inventing an
+    /// anchor-line reference.
+    public func resolvedSourceReference(
+        for reference: DocumentSourceReference
+    ) -> DocumentSourceReference? {
+        guard let row = reference.row, let column = reference.column,
+            let table = table(for: reference),
+            let literalCell = table.cell(row: row, column: column)
+        else {
+            return nil
+        }
+        if reference.lineIndex != nil, literalCell.state == .covered {
+            return nil
+        }
+        guard reference.lineIndex == nil || line(for: reference) != nil,
+            let address = table.resolvedCellAddress(row: row, column: column)
+        else {
+            return nil
+        }
+        return DocumentSourceReference(
+            pageIndex: reference.pageIndex,
+            blockID: reference.blockID,
+            row: address.row,
+            column: address.column,
+            lineIndex: reference.lineIndex
+        )
+    }
+
+    /// Finds a literal source line identified by a source reference.
+    ///
+    /// Unresolved cells can retain positioned source lines. This exposes those
+    /// lines without treating the cell as confirmed text.
     public func line(for reference: DocumentSourceReference) -> TextLine? {
         guard let lineIndex = reference.lineIndex, lineIndex >= 0,
             let block = block(for: reference)
         else {
             return nil
         }
-
         switch block.content {
         case let .text(text):
-            guard reference.row == nil, reference.column == nil else { return nil }
-            guard text.lines.indices.contains(lineIndex) else { return nil }
+            guard reference.row == nil, reference.column == nil,
+                text.lines.indices.contains(lineIndex)
+            else {
+                return nil
+            }
             return text.lines[lineIndex]
         case .table:
             guard let cell = cell(for: reference), cell.lines.indices.contains(lineIndex) else {
@@ -115,20 +163,30 @@ public struct ExtractedDocument: Codable, Sendable, Hashable {
         }
     }
 
-    /// Resolves a source reference to its extracted text.
+    /// Resolves a source reference to confirmed extracted text.
+    ///
+    /// Literal unresolved and covered table slots return nil. Read a cell's
+    /// lines or unresolvedCandidateText explicitly when unresolved evidence is
+    /// useful to the consuming application.
     public func text(for reference: DocumentSourceReference) -> String? {
         guard let block = block(for: reference) else { return nil }
-
-        if reference.lineIndex != nil {
-            return line(for: reference)?.text
-        }
-
         switch block.content {
         case let .text(text):
             guard reference.row == nil, reference.column == nil else { return nil }
+            if let lineIndex = reference.lineIndex {
+                guard text.lines.indices.contains(lineIndex) else { return nil }
+                return text.lines[lineIndex].text
+            }
             return text.joinedText
         case .table:
-            return cell(for: reference)?.joinedText
+            guard let cell = cell(for: reference), cell.state == .text || cell.state == .empty else {
+                return nil
+            }
+            if reference.lineIndex != nil {
+                guard cell.state == .text, let line = line(for: reference) else { return nil }
+                return line.text
+            }
+            return cell.joinedText
         }
     }
 
@@ -149,10 +207,9 @@ public struct DocumentPage: Codable, Sendable, Hashable {
     /// The extraction status for this page.
     public let status: DocumentPageStatus
 
-    /// Blocks in inferred reading order.
+    /// Text and table blocks in inferred reading order.
     public let blocks: [DocumentBlock]
 
-    /// Creates a structured page.
     public init(
         pageIndex: Int,
         size: PageSize,
@@ -190,13 +247,9 @@ public struct DocumentPage: Codable, Sendable, Hashable {
 
 /// The upright visible dimensions of a PDF page in points.
 public struct PageSize: Codable, Sendable, Hashable {
-    /// The page width in points.
     public let width: Double
-
-    /// The page height in points.
     public let height: Double
 
-    /// Creates a page size with positive finite dimensions.
     public init(width: Double, height: Double) {
         precondition(width.isFinite && height.isFinite, "Page dimensions must be finite")
         precondition(width > 0 && height > 0, "Page dimensions must be positive")
@@ -225,24 +278,11 @@ public struct PageSize: Codable, Sendable, Hashable {
 
 /// A normalized source rectangle in top-left page coordinates.
 public struct DocumentBounds: Codable, Sendable, Hashable {
-    /// The normalized distance from the left edge of the visible page.
     public let x: Double
-
-    /// The normalized distance from the top edge of the visible page.
     public let y: Double
-
-    /// The normalized rectangle width.
     public let width: Double
-
-    /// The normalized rectangle height.
     public let height: Double
 
-    /// Creates normalized bounds.
-    ///
-    /// Values are relative to the upright visible page after crop and
-    /// rotation. The native engine clips intersecting geometry to the visible
-    /// page and omits geometry with no visible intersection. Consumers should
-    /// treat `nil` as unavailable source location.
     public init(x: Double, y: Double, width: Double, height: Double) {
         precondition(
             x.isFinite && y.isFinite && width.isFinite && height.isFinite
@@ -300,16 +340,15 @@ public enum DocumentPageStatus: String, Codable, Sendable, Hashable {
 
 /// A reading-order block on a PDF page.
 public struct DocumentBlock: Codable, Sendable, Hashable {
-    /// The deterministic ID scoped to the extracted document.
+    /// An opaque, document-scoped identifier for source references.
     public let id: String
 
     /// The block's source bounds, when the engine reported them.
     public let bounds: DocumentBounds?
 
-    /// The block's tagged content.
+    /// The block's text or table content.
     public let content: Content
 
-    /// Creates a document block.
     public init(id: String, bounds: DocumentBounds? = nil, content: Content) {
         precondition(!id.isEmpty, "Block IDs cannot be empty")
         self.id = id
@@ -334,55 +373,40 @@ public struct DocumentBlock: Codable, Sendable, Hashable {
         self.content = try container.decode(Content.self, forKey: .content)
     }
 
-    /// The content variants supported by the structured-document schema.
+    /// Text and table variants supported by the structured-document schema.
     public enum Content: Codable, Sendable, Hashable {
-        /// A block of text outside detected tables.
         case text(TextBlock)
-
-        /// A page-local table fragment.
         case table(TableBlock)
 
         private enum CodingKeys: String, CodingKey {
             case type
             case lines
-            case rowCount
-            case columnCount
-            case cells
+            case rows
         }
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            let type = try container.decode(String.self, forKey: .type)
-            switch type {
+            switch try container.decode(String.self, forKey: .type) {
             case "text":
-                let lines = try container.decode([TextLine].self, forKey: .lines)
-                self = .text(TextBlock(lines: lines))
+                self = .text(TextBlock(lines: try container.decode([TextLine].self, forKey: .lines)))
             case "table":
-                let rowCount = try container.decode(Int.self, forKey: .rowCount)
-                let columnCount = try container.decode(Int.self, forKey: .columnCount)
-                let cells = try container.decode([TableCell].self, forKey: .cells)
                 self = .table(
-                    try TableBlock(validating: rowCount, columnCount: columnCount, cells: cells)
+                    try TableBlock(validating: container.decode([TableRow].self, forKey: .rows))
                 )
             default:
-                throw StructuredDocumentCodingError.invalidValue(
-                    "Unknown document block content type \"\(type)\""
-                )
+                throw StructuredDocumentCodingError.invalidValue("Unknown document block content type")
             }
         }
 
         public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
             switch self {
             case let .text(text):
-                var container = encoder.container(keyedBy: CodingKeys.self)
                 try container.encode("text", forKey: .type)
                 try container.encode(text.lines, forKey: .lines)
             case let .table(table):
-                var container = encoder.container(keyedBy: CodingKeys.self)
                 try container.encode("table", forKey: .type)
-                try container.encode(table.rowCount, forKey: .rowCount)
-                try container.encode(table.columnCount, forKey: .columnCount)
-                try container.encode(table.cells, forKey: .cells)
+                try container.encode(table.rows, forKey: .rows)
             }
         }
     }
@@ -390,10 +414,9 @@ public struct DocumentBlock: Codable, Sendable, Hashable {
 
 /// Text outside a detected table.
 public struct TextBlock: Codable, Sendable, Hashable {
-    /// Extracted lines in source reading order.
+    /// Extracted lines in inferred reading order.
     public let lines: [TextLine]
 
-    /// Creates a text block.
     public init(lines: [TextLine]) {
         self.lines = lines
     }
@@ -404,315 +427,486 @@ public struct TextBlock: Codable, Sendable, Hashable {
     }
 }
 
-/// A page-local table fragment.
+/// A page-local table fragment with directly indexable rows and cells.
 public struct TableBlock: Codable, Sendable, Hashable {
-    /// The number of logical rows in the table grid.
-    public let rowCount: Int
+    /// Rows in the detector's table order.
+    public let rows: [TableRow]
 
-    /// The number of logical columns in the table grid.
-    public let columnCount: Int
-
-    /// Explicit cells in source row and column order.
-    ///
-    /// A spanning cell appears once at its top-left anchor. Slots covered by
-    /// that span are represented by its `rowSpan` and `columnSpan`, not by
-    /// invented duplicate cells. Every other slot is represented explicitly;
-    /// use `.unresolved` when content evidence is uncertain and `.empty` only
-    /// when blankness is established.
-    public let cells: [TableCell]
-
-    /// Creates a table block.
-    public init(rowCount: Int, columnCount: Int, cells: [TableCell]) {
-        precondition(rowCount > 0 && columnCount > 0, "Table dimensions must be positive")
-        precondition(
-            Self.isValid(cells: cells, rowCount: rowCount, columnCount: columnCount),
-            "Table cells must fit inside the table grid"
-        )
-        self.rowCount = rowCount
-        self.columnCount = columnCount
-        self.cells = cells
+    /// The number of logical rows, derived from rows.
+    public var rowCount: Int {
+        rows.count
     }
 
-    init(validating rowCount: Int, columnCount: Int, cells: [TableCell]) throws {
-        guard rowCount > 0, columnCount > 0,
-            Self.isValid(cells: cells, rowCount: rowCount, columnCount: columnCount)
-        else {
+    /// The number of logical columns, derived from the rectangular rows.
+    public var columnCount: Int {
+        rows.first?.cells.count ?? 0
+    }
+
+    public init(rows: [TableRow]) {
+        precondition(Self.isValid(rows: rows), "Table rows must form a complete rectangular grid")
+        self.rows = rows
+    }
+
+    init(validating rows: [TableRow]) throws {
+        guard Self.isValid(rows: rows) else {
             throw StructuredDocumentCodingError.invalidValue(
-                "Table cells must cover a positive table grid without overlap"
+                "Table rows must form a complete rectangular grid"
             )
         }
-        self.rowCount = rowCount
-        self.columnCount = columnCount
-        self.cells = cells
+        self.rows = rows
     }
 
     private enum CodingKeys: String, CodingKey {
-        case rowCount
-        case columnCount
-        case cells
+        case rows
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let rowCount = try container.decode(Int.self, forKey: .rowCount)
-        let columnCount = try container.decode(Int.self, forKey: .columnCount)
-        let cells = try container.decode([TableCell].self, forKey: .cells)
-        try self.init(validating: rowCount, columnCount: columnCount, cells: cells)
+        try self.init(validating: try container.decode([TableRow].self, forKey: .rows))
     }
 
-    /// Returns the cell covering a zero-based grid slot, if one is present.
+    /// Returns the literal table slot at a zero-based row and column.
     public func cell(row: Int, column: Int) -> TableCell? {
-        guard row >= 0, row < rowCount, column >= 0, column < columnCount else {
+        guard rows.indices.contains(row), rows[row].cells.indices.contains(column) else {
             return nil
         }
-        return cells.first {
-            row >= $0.row && row < $0.row + $0.rowSpan
-                && column >= $0.column && column < $0.column + $0.columnSpan
-        }
+        return rows[row].cells[column]
     }
 
-    fileprivate static func isValid(cells: [TableCell], rowCount: Int, columnCount: Int) -> Bool {
-        var coveredSlots = Set<TableSlot>()
-        var previousRow = -1
-        var previousColumn = -1
+    /// Returns the anchor address for a literal slot.
+    ///
+    /// A non-covered slot resolves to its own address. A covered slot resolves
+    /// only because the caller asks this method explicitly.
+    public func resolvedCellAddress(row: Int, column: Int) -> TableCellAddress? {
+        guard let cell = cell(row: row, column: column) else { return nil }
+        if case let .covered(by: address) = cell.content {
+            return address
+        }
+        return TableCellAddress(row: row, column: column)
+    }
 
-        for cell in cells {
-            guard cell.row >= 0, cell.column >= 0,
-                cell.rowSpan > 0, cell.columnSpan > 0,
-                cell.rowSpan <= rowCount, cell.columnSpan <= columnCount,
-                cell.row < rowCount, cell.column < columnCount,
-                cell.row <= rowCount - cell.rowSpan,
-                cell.column <= columnCount - cell.columnSpan,
-                cell.row > previousRow
-                    || (cell.row == previousRow && cell.column > previousColumn)
-            else {
-                return false
-            }
+    /// Returns the cell at an explicitly resolved anchor.
+    public func resolvedCell(row: Int, column: Int) -> TableCell? {
+        guard let address = resolvedCellAddress(row: row, column: column) else { return nil }
+        return cell(row: address.row, column: address.column)
+    }
 
-            previousRow = cell.row
-            previousColumn = cell.column
-            for row in cell.row..<(cell.row + cell.rowSpan) {
-                for column in cell.column..<(cell.column + cell.columnSpan) {
-                    guard coveredSlots.insert(TableSlot(row: row, column: column)).inserted else {
+    private static func isValid(rows: [TableRow]) -> Bool {
+        guard let firstRow = rows.first, !firstRow.cells.isEmpty else { return false }
+        let rowCount = rows.count
+        let columnCount = firstRow.cells.count
+        guard rows.allSatisfy({ $0.cells.count == columnCount }) else { return false }
+
+        var coverage = Array(
+            repeating: Array<TableCellAddress?>(repeating: nil, count: columnCount),
+            count: rowCount
+        )
+        for row in rows.indices {
+            for column in rows[row].cells.indices {
+                let cell = rows[row].cells[column]
+                if case .covered = cell.content {
+                    guard cell.role == nil, cell.span == nil, cell.bounds == nil else {
                         return false
+                    }
+                    continue
+                }
+                let rowSpan = cell.span?.rows ?? 1
+                let columnSpan = cell.span?.columns ?? 1
+                guard rowSpan <= rowCount - row, columnSpan <= columnCount - column else {
+                    return false
+                }
+                let anchor = TableCellAddress(row: row, column: column)
+                for coveredRow in row..<(row + rowSpan) {
+                    for coveredColumn in column..<(column + columnSpan) {
+                        guard coverage[coveredRow][coveredColumn] == nil else { return false }
+                        coverage[coveredRow][coveredColumn] = anchor
                     }
                 }
             }
         }
 
-        let slotCount = rowCount.multipliedReportingOverflow(by: columnCount)
-        return !slotCount.overflow && coveredSlots.count == slotCount.partialValue
+        for row in rows.indices {
+            for column in rows[row].cells.indices {
+                guard let anchor = coverage[row][column] else { return false }
+                let cell = rows[row].cells[column]
+                if anchor.row == row && anchor.column == column {
+                    guard cell.state != .covered else { return false }
+                } else {
+                    guard case let .covered(by: address) = cell.content, address == anchor else {
+                        return false
+                    }
+                }
+            }
+        }
+        return true
     }
 }
 
-private struct TableSlot: Hashable {
-    let row: Int
-    let column: Int
-}
+/// One logical row in a rectangular table.
+public struct TableRow: Codable, Sendable, Hashable {
+    /// Cells in zero-based column order.
+    public let cells: [TableCell]
 
-private func isValidTableCellEvidence(
-    state: TableCellState,
-    detectedText: String?,
-    lines: [TextLine]
-) -> Bool {
-    guard detectedText.map({ !$0.isEmpty }) ?? true else { return false }
-    return switch state {
-    case .extracted:
-        !lines.isEmpty && detectedText == nil
-    case .empty:
-        lines.isEmpty && detectedText == nil
-    case .unresolved:
-        true
+    public init(cells: [TableCell]) {
+        precondition(!cells.isEmpty, "Table rows cannot be empty")
+        self.cells = cells
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case cells
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let cells = try container.decode([TableCell].self, forKey: .cells)
+        guard !cells.isEmpty else {
+            throw StructuredDocumentCodingError.invalidValue("Table rows cannot be empty")
+        }
+        self.cells = cells
     }
 }
 
-/// A cell in a page-local table grid.
-public struct TableCell: Codable, Sendable, Hashable {
-    /// The zero-based logical row of the cell's top-left anchor.
+/// A local table-cell address used by a covered slot.
+public struct TableCellAddress: Codable, Sendable, Hashable {
     public let row: Int
-
-    /// The zero-based logical column of the cell's top-left anchor.
     public let column: Int
 
-    /// The number of logical rows covered by this cell.
-    public let rowSpan: Int
-
-    /// The number of logical columns covered by this cell.
-    public let columnSpan: Int
-
-    /// The engine-supported semantic role of the cell.
-    public let role: TableCellRole
-
-    /// Whether the cell contains extracted, blank, or unresolved content.
-    public let state: TableCellState
-
-    /// The detector's raw cell text when it disagrees with positioned lines.
-    ///
-    /// This is present only for unresolved evidence. It preserves a detector
-    /// association without pretending it has a reliable source line or bound.
-    public let detectedText: String?
-
-    /// Extracted lines in the cell.
-    public let lines: [TextLine]
-
-    /// The union of the cell's positioned text bounds, when available.
-    ///
-    /// This does not describe the full painted grid rectangle.
-    public let bounds: DocumentBounds?
-
-    /// Creates a table cell.
-    public init(
-        row: Int,
-        column: Int,
-        rowSpan: Int = 1,
-        columnSpan: Int = 1,
-        role: TableCellRole = .unknown,
-        state: TableCellState = .unresolved,
-        detectedText: String? = nil,
-        lines: [TextLine] = [],
-        bounds: DocumentBounds? = nil
-    ) {
-        precondition(row >= 0 && column >= 0, "Cell indexes cannot be negative")
-        precondition(rowSpan > 0 && columnSpan > 0, "Cell spans must be positive")
-        precondition(
-            isValidTableCellEvidence(
-                state: state,
-                detectedText: detectedText,
-                lines: lines
-            ),
-            "Cell state, detector text, and source lines are inconsistent"
-        )
+    public init(row: Int, column: Int) {
+        precondition(row >= 0 && column >= 0, "Table cell addresses cannot be negative")
         self.row = row
         self.column = column
-        self.rowSpan = rowSpan
-        self.columnSpan = columnSpan
-        self.role = role
-        self.state = state
-        self.detectedText = detectedText
-        self.lines = lines
-        self.bounds = bounds
-    }
-
-    /// The source lines joined with newlines, or detector text when no source
-    /// line could be associated.
-    ///
-    /// This is an empty string for a confirmed empty cell and `nil` for an
-    /// unresolved cell with no text evidence.
-    public var joinedText: String? {
-        if !lines.isEmpty {
-            return lines.map(\.text).joined(separator: "\n")
-        }
-        if let detectedText {
-            return detectedText
-        }
-        return state == .empty ? "" : nil
     }
 
     private enum CodingKeys: String, CodingKey {
         case row
         case column
-        case rowSpan
-        case columnSpan
-        case role
-        case state
-        case detectedText
-        case lines
-        case bounds
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let row = try container.decode(Int.self, forKey: .row)
         let column = try container.decode(Int.self, forKey: .column)
-        let rowSpan = try container.decode(Int.self, forKey: .rowSpan)
-        let columnSpan = try container.decode(Int.self, forKey: .columnSpan)
-        guard row >= 0, column >= 0, rowSpan > 0, columnSpan > 0 else {
+        guard row >= 0, column >= 0 else {
             throw StructuredDocumentCodingError.invalidValue(
-                "Cell indexes cannot be negative and spans must be positive"
+                "Table cell addresses cannot be negative"
             )
         }
         self.row = row
         self.column = column
-        self.rowSpan = rowSpan
-        self.columnSpan = columnSpan
-        let role = try container.decode(TableCellRole.self, forKey: .role)
-        let state = try container.decode(TableCellState.self, forKey: .state)
-        let detectedText = try container.decodeIfPresent(String.self, forKey: .detectedText)
-        let lines = try container.decode([TextLine].self, forKey: .lines)
-        guard isValidTableCellEvidence(
-            state: state,
-            detectedText: detectedText,
-            lines: lines
-        ) else {
-            throw StructuredDocumentCodingError.invalidValue(
-                "Cell state, detector text, and source lines are inconsistent"
-            )
-        }
-        self.role = role
-        self.state = state
-        self.detectedText = detectedText
-        self.lines = lines
-        self.bounds = try container.decodeIfPresent(DocumentBounds.self, forKey: .bounds)
     }
 }
 
-/// The semantic role inferred for a table cell.
-public enum TableCellRole: String, Codable, Sendable, Hashable {
-    /// A header cell established by extraction evidence.
-    case header
+/// The number of logical rows and columns covered by an anchor cell.
+public struct TableCellSpan: Codable, Sendable, Hashable {
+    public let rows: Int
+    public let columns: Int
 
-    /// A body cell established by extraction evidence.
-    case body
+    public init(rows: Int, columns: Int) {
+        precondition(rows > 0 && columns > 0, "Table cell spans must be positive")
+        precondition(rows > 1 || columns > 1, "Single-cell spans must be omitted")
+        self.rows = rows
+        self.columns = columns
+    }
 
-    /// The engine could not establish a role.
-    case unknown
+    private enum CodingKeys: String, CodingKey {
+        case rows
+        case columns
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let rows = try container.decode(Int.self, forKey: .rows)
+        let columns = try container.decode(Int.self, forKey: .columns)
+        guard rows > 0, columns > 0, rows > 1 || columns > 1 else {
+            throw StructuredDocumentCodingError.invalidValue(
+                "Table cell spans must be positive and cover more than one slot"
+            )
+        }
+        self.rows = rows
+        self.columns = columns
+    }
 }
 
-/// The extraction state of a table cell.
+/// A source-backed table-cell role, present only for explicit tagged-PDF evidence.
+public enum TableCellRole: String, Codable, Sendable, Hashable {
+    case header
+    case body
+}
+
+/// The state of a table cell's content.
 public enum TableCellState: String, Codable, Sendable, Hashable {
-    /// The cell contains decoded PDF text.
-    case extracted
-
-    /// The engine established that the cell is blank.
+    case text
     case empty
-
-    /// The cell or its contents could not be resolved reliably.
     case unresolved
+    case covered
+}
+
+/// A cell in a rectangular table row.
+public struct TableCell: Codable, Sendable, Hashable {
+    /// The cell's strictly typed content evidence.
+    public let content: Content
+
+    /// Explicit tagged-PDF role evidence, when available.
+    public let role: TableCellRole?
+
+    /// The anchor cell's nontrivial span, when available.
+    public let span: TableCellSpan?
+
+    /// The union of the cell's source-line bounds, when available.
+    public let bounds: DocumentBounds?
+
+    public init(
+        content: Content,
+        role: TableCellRole? = nil,
+        span: TableCellSpan? = nil,
+        bounds: DocumentBounds? = nil
+    ) {
+        precondition(
+            Self.isValidMetadata(content: content, role: role, span: span, bounds: bounds),
+            "Covered cells cannot carry independent evidence"
+        )
+        self.content = content
+        self.role = role
+        self.span = span
+        self.bounds = bounds
+    }
+
+    public var state: TableCellState {
+        content.state
+    }
+
+    /// Positioned source lines for text or unresolved evidence.
+    public var lines: [TextLine] {
+        content.lines
+    }
+
+    /// Unreconciled detector text, when the engine retained it separately.
+    ///
+    /// It is never substituted for confirmed source text.
+    public var unresolvedCandidateText: String? {
+        content.unresolvedCandidateText
+    }
+
+    /// Confirmed source text joined with newlines, or an empty string for a
+    /// confirmed empty slot. Unresolved and covered slots return nil.
+    public var joinedText: String? {
+        content.joinedText
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case role
+        case span
+        case bounds
+    }
+
+    public init(from decoder: Decoder) throws {
+        let content = try Content(from: decoder)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let role = try container.decodeIfPresent(TableCellRole.self, forKey: .role)
+        let span = try container.decodeIfPresent(TableCellSpan.self, forKey: .span)
+        let bounds = try container.decodeIfPresent(DocumentBounds.self, forKey: .bounds)
+        guard Self.isValidMetadata(content: content, role: role, span: span, bounds: bounds) else {
+            throw StructuredDocumentCodingError.invalidValue(
+                "Covered cells cannot carry independent evidence"
+            )
+        }
+        self.content = content
+        self.role = role
+        self.span = span
+        self.bounds = bounds
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try content.encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(role, forKey: .role)
+        try container.encodeIfPresent(span, forKey: .span)
+        try container.encodeIfPresent(bounds, forKey: .bounds)
+    }
+
+    private static func isValidMetadata(
+        content: Content,
+        role: TableCellRole?,
+        span: TableCellSpan?,
+        bounds: DocumentBounds?
+    ) -> Bool {
+        guard content.isValid else { return false }
+        guard case .covered = content else { return true }
+        return role == nil && span == nil && bounds == nil
+    }
+
+    /// The source evidence stored in a table cell.
+    public enum Content: Codable, Sendable, Hashable {
+        /// Confirmed positioned lines from the PDF text layer.
+        case text([TextLine])
+
+        /// A confirmed empty slot in the detected grid.
+        case empty
+
+        /// Positioned evidence that could not be reconciled with the detector grid.
+        case unresolved(lines: [TextLine], candidateText: String?)
+
+        /// A slot covered by an anchor cell's span.
+        case covered(by: TableCellAddress)
+
+        fileprivate var isValid: Bool {
+            switch self {
+            case let .text(lines):
+                !lines.isEmpty
+            case let .unresolved(lines: _, candidateText: candidateText):
+                candidateText.map({ !$0.isEmpty }) ?? true
+            case .empty, .covered:
+                true
+            }
+        }
+
+        fileprivate var state: TableCellState {
+            switch self {
+            case .text: .text
+            case .empty: .empty
+            case .unresolved: .unresolved
+            case .covered: .covered
+            }
+        }
+
+        fileprivate var lines: [TextLine] {
+            switch self {
+            case let .text(lines):
+                lines
+            case let .unresolved(lines: lines, candidateText: _):
+                lines
+            case .empty, .covered:
+                []
+            }
+        }
+
+        fileprivate var unresolvedCandidateText: String? {
+            guard case let .unresolved(lines: _, candidateText: candidateText) = self else {
+                return nil
+            }
+            return candidateText
+        }
+
+        fileprivate var joinedText: String? {
+            switch self {
+            case let .text(lines):
+                lines.map(\.text).joined(separator: "\n")
+            case .empty:
+                ""
+            case .unresolved, .covered:
+                nil
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case state
+            case lines
+            case candidateText
+            case coveredBy
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let state = try container.decode(TableCellState.self, forKey: .state)
+            switch state {
+            case .text:
+                let lines = try container.decode([TextLine].self, forKey: .lines)
+                guard !lines.isEmpty,
+                    !container.contains(.candidateText),
+                    !container.contains(.coveredBy)
+                else {
+                    throw StructuredDocumentCodingError.invalidValue(
+                        "Text cells require lines and cannot carry unresolved evidence"
+                    )
+                }
+                self = .text(lines)
+            case .empty:
+                guard !container.contains(.lines),
+                    !container.contains(.candidateText),
+                    !container.contains(.coveredBy)
+                else {
+                    throw StructuredDocumentCodingError.invalidValue(
+                        "Empty cells cannot carry text evidence"
+                    )
+                }
+                self = .empty
+            case .unresolved:
+                let lines = try container.decodeIfPresent([TextLine].self, forKey: .lines) ?? []
+                let candidateText = try container.decodeIfPresent(String.self, forKey: .candidateText)
+                guard candidateText.map({ !$0.isEmpty }) ?? true,
+                    !container.contains(.coveredBy)
+                else {
+                    throw StructuredDocumentCodingError.invalidValue(
+                        "Unresolved cells have invalid evidence"
+                    )
+                }
+                self = .unresolved(lines: lines, candidateText: candidateText)
+            case .covered:
+                guard !container.contains(.lines), !container.contains(.candidateText) else {
+                    throw StructuredDocumentCodingError.invalidValue(
+                        "Covered cells cannot carry text evidence"
+                    )
+                }
+                self = .covered(by: try container.decode(TableCellAddress.self, forKey: .coveredBy))
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            guard isValid else {
+                throw EncodingError.invalidValue(
+                    self,
+                    EncodingError.Context(
+                        codingPath: encoder.codingPath,
+                        debugDescription: "Invalid table cell content"
+                    )
+                )
+            }
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            switch self {
+            case let .text(lines):
+                try container.encode(TableCellState.text, forKey: .state)
+                try container.encode(lines, forKey: .lines)
+            case .empty:
+                try container.encode(TableCellState.empty, forKey: .state)
+            case let .unresolved(lines, candidateText):
+                try container.encode(TableCellState.unresolved, forKey: .state)
+                if !lines.isEmpty {
+                    try container.encode(lines, forKey: .lines)
+                }
+                try container.encodeIfPresent(candidateText, forKey: .candidateText)
+            case let .covered(by: address):
+                try container.encode(TableCellState.covered, forKey: .state)
+                try container.encode(address, forKey: .coveredBy)
+            }
+        }
+    }
 }
 
 /// One extracted line and its optional source bounds.
 public struct TextLine: Codable, Sendable, Hashable {
-    /// The decoded PDF text for this line.
     public let text: String
-
-    /// The line's source bounds, when available.
     public let bounds: DocumentBounds?
 
-    /// Creates an extracted text line.
     public init(text: String, bounds: DocumentBounds? = nil) {
         self.text = text
         self.bounds = bounds
     }
 }
 
-/// A source address for interpreted document data.
+/// A source address for data derived from an extracted document.
 public struct DocumentSourceReference: Codable, Sendable, Hashable {
-    /// The original zero-based PDF page index.
     public let pageIndex: Int
-
-    /// The document-scoped block ID.
     public let blockID: String
 
-    /// The zero-based table row, when the reference points into a table.
+    /// The zero-based literal table row, when the reference points into a table.
     public let row: Int?
 
-    /// The zero-based table column, when the reference points into a table.
+    /// The zero-based literal table column, when the reference points into a table.
     public let column: Int?
 
-    /// The zero-based line index within a text block or table cell.
+    /// The zero-based line index within a text block or literal table slot.
     public let lineIndex: Int?
 
-    /// Creates a source reference.
     public init(
         pageIndex: Int,
         blockID: String,
@@ -772,7 +966,8 @@ private enum StructuredDocumentCodingError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case let .invalidValue(message): message
+        case let .invalidValue(message):
+            message
         }
     }
 }
@@ -834,12 +1029,8 @@ private func isValidStructuredDocument(
 
     var blockIDs = Set<String>()
     for page in pages {
-        for (index, block) in page.blocks.enumerated() {
-            guard block.id == "p\(page.pageIndex)-b\(index)",
-                blockIDs.insert(block.id).inserted
-            else {
-                return false
-            }
+        for block in page.blocks {
+            guard blockIDs.insert(block.id).inserted else { return false }
         }
     }
     return true
@@ -869,9 +1060,7 @@ extension DocumentInspection: Codable {
         confidence = try container.decode(Float.self, forKey: .confidence)
         let milliseconds = try container.decode(Int64.self, forKey: .processingTimeMilliseconds)
         guard milliseconds >= 0 else {
-            throw StructuredDocumentCodingError.invalidValue(
-                "Processing time cannot be negative"
-            )
+            throw StructuredDocumentCodingError.invalidValue("Processing time cannot be negative")
         }
         processingTime = .milliseconds(milliseconds)
         let pagesNeedingOCR = try container.decode([Int].self, forKey: .pagesNeedingOCR)
@@ -897,9 +1086,7 @@ extension DocumentInspection: Codable {
         self.hasEncodingIssues = try container.decodeIfPresent(Bool.self, forKey: .hasEncodingIssues)
         let engineVersion = try container.decode(String.self, forKey: .engineVersion)
         guard !engineVersion.isEmpty else {
-            throw StructuredDocumentCodingError.invalidValue(
-                "Engine version cannot be empty"
-            )
+            throw StructuredDocumentCodingError.invalidValue("Engine version cannot be empty")
         }
         self.engineVersion = engineVersion
     }
@@ -910,7 +1097,10 @@ extension DocumentInspection: Codable {
         try container.encode(pageCount, forKey: .pageCount)
         try container.encodeIfPresent(title, forKey: .title)
         try container.encode(confidence, forKey: .confidence)
-        try container.encode(processingTime.millisecondsForStructuredDocument, forKey: .processingTimeMilliseconds)
+        try container.encode(
+            processingTime.millisecondsForStructuredDocument,
+            forKey: .processingTimeMilliseconds
+        )
         try container.encode(pagesNeedingOCR, forKey: .pagesNeedingOCR)
         try container.encode(ocrReasonsByPage, forKey: .ocrReasonsByPage)
         try container.encodeIfPresent(layout, forKey: .layout)
@@ -986,7 +1176,9 @@ extension DocumentWarning: Codable {
         let code = try container.decode(String.self, forKey: .code)
         kind = DocumentWarning.Kind(warningCode: code)
         let pageIndexes = try container.decode([Int].self, forKey: .pageIndexes)
-        guard !code.isEmpty, isStrictlyAscending(pageIndexes), pageIndexes.allSatisfy({ $0 >= 0 }) else {
+        guard !code.isEmpty, isStrictlyAscending(pageIndexes),
+            pageIndexes.allSatisfy({ $0 >= 0 })
+        else {
             throw StructuredDocumentCodingError.invalidValue(
                 "Warning codes must be nonempty and page indexes must be nonnegative and ascending"
             )
@@ -1062,7 +1254,10 @@ private extension Duration {
         let seconds = components.seconds.multipliedReportingOverflow(by: 1_000)
         let fractional = components.attoseconds / 1_000_000_000_000_000
         let milliseconds = seconds.partialValue.addingReportingOverflow(fractional)
-        precondition(!seconds.overflow && !milliseconds.overflow, "Duration is too large to encode as milliseconds")
+        precondition(
+            !seconds.overflow && !milliseconds.overflow,
+            "Duration is too large to encode as milliseconds"
+        )
         return milliseconds.partialValue
     }
 }

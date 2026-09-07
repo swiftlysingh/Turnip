@@ -802,7 +802,7 @@ index 7ebc8c9..6bcd852 100644
      fn removed_sparse_folios_leave_no_layout_evidence() {
          let items = vec![
 diff --git a/src/markdown/convert.rs b/src/markdown/convert.rs
-index 5e436c5..9936c73 100644
+index 5e436c5..79d1462 100644
 --- a/src/markdown/convert.rs
 +++ b/src/markdown/convert.rs
 @@ -4,7 +4,8 @@ use std::cmp::Ordering;
@@ -833,7 +833,7 @@ index 5e436c5..9936c73 100644
  }
  
  impl PositionedMarkdown {
-@@ -60,6 +72,28 @@ impl PositionedMarkdown {
+@@ -60,6 +72,45 @@ impl PositionedMarkdown {
              x,
              markdown,
              chart_order,
@@ -850,19 +850,36 @@ index 5e436c5..9936c73 100644
 +        source_items: &[TextItem],
 +        capture_structured_output: bool,
 +    ) -> Self {
++        let captured_table = capture_structured_output.then(|| {
++            // Keep only the detector-claimed source items and rebase their
++            // indexes. A structured fallback must never turn the entire
++            // detector band into duplicate text when one claimed item cannot
++            // be placed in the raw grid.
++            let mut captured_item_indices = Vec::with_capacity(table.item_indices.len());
++            let mut captured_source_items = Vec::with_capacity(table.item_indices.len());
++            for &index in &table.item_indices {
++                if let Some(item) = source_items.get(index) {
++                    captured_item_indices.push(captured_source_items.len());
++                    captured_source_items.push(item.clone());
++                }
++            }
++            let mut captured_table = table.clone();
++            captured_table.item_indices = captured_item_indices;
++            CapturedTable {
++                table: captured_table,
++                source_items: captured_source_items,
++            }
++        });
 +        Self {
 +            y,
 +            x,
 +            markdown,
 +            chart_order,
-+            captured_table: capture_structured_output.then(|| CapturedTable {
-+                table: table.clone(),
-+                source_items: source_items.to_vec(),
-+            }),
++            captured_table,
          }
      }
  }
-@@ -89,7 +123,7 @@ fn chart_stream_position(
+@@ -89,7 +140,7 @@ fn chart_stream_position(
      (zone, column)
  }
  
@@ -871,7 +888,7 @@ index 5e436c5..9936c73 100644
      let Some(order) = block.chart_order else {
          return block.y > line.y;
      };
-@@ -158,6 +192,26 @@ fn positioned_blocks_for_page<'a>(
+@@ -158,6 +209,26 @@ fn positioned_blocks_for_page<'a>(
      blocks
  }
  
@@ -899,7 +916,7 @@ index 5e436c5..9936c73 100644
  /// so many lines that they clearly represent body text, not real headings.
  /// Returns the set of heading levels (1–6) that should be suppressed.
 diff --git a/src/markdown/mod.rs b/src/markdown/mod.rs
-index 4300f51..8321d95 100644
+index 4300f51..cdf771f 100644
 --- a/src/markdown/mod.rs
 +++ b/src/markdown/mod.rs
 @@ -15,15 +15,16 @@ mod preprocess;
@@ -923,8 +940,298 @@ index 4300f51..8321d95 100644
  };
  
  const CHART_REGION_PAD: f32 = 20.0;
-@@ -565,13 +566,42 @@ fn is_parallel_prose_table(table: &crate::tables::Table) -> bool {
+@@ -563,15 +564,332 @@ fn is_parallel_prose_table(table: &crate::tables::Table) -> bool {
+     is_parallel
+ }
  
++/// A text-only detector can stop at the final row that has values in its other
++/// columns, leaving final wrapped text lines unclaimed. Preserve each recovered
++/// baseline as a sparse row rather than attaching it to an existing cell: the
++/// detector has source anchors for those lines, but no evidence that they share
++/// the terminal cell's physical row.
++///
++/// Call this only for a structurally plain heuristic candidate. Tagged tables,
++/// rectangle grids, and ruled grids establish their own terminal boundary.
++/// Their nearby text remains separate when that boundary is present.
++fn table_with_terminal_cell_continuations(
++    table: &crate::tables::Table,
++    source_items: &[TextItem],
++) -> crate::tables::Table {
++    let mut table = table.clone();
++    absorb_terminal_cell_continuations(&mut table, source_items);
++    table
++}
++
++fn absorb_terminal_cell_continuations(table: &mut crate::tables::Table, source_items: &[TextItem]) {
++    const BASELINE_TOLERANCE: f32 = 2.5;
++
++    let Some(terminal_row) = table
++        .cells
++        .iter()
++        .rposition(|row| row.iter().any(|cell| !cell.trim().is_empty()))
++    else {
++        return;
++    };
++    let column_count = table.cells.iter().map(Vec::len).max().unwrap_or(0);
++    // Recovered terminal baselines need their own row anchors. This is only
++    // safe for the text-alignment detector's one-anchor-per-row geometry;
++    // edge-backed grids have an explicit terminal boundary instead.
++    if column_count == 0
++        || table.columns.len() != column_count
++        || table.rows.len() != table.cells.len()
++        || !table.rows.windows(2).all(|pair| pair[0] > pair[1])
++    {
++        return;
++    }
++
++    let claimed: HashSet<usize> = table.item_indices.iter().copied().collect();
++    let claimed_items: Vec<&TextItem> = claimed
++        .iter()
++        .filter_map(|&index| source_items.get(index))
++        .filter(|item| item.y.is_finite() && item.x.is_finite() && item.width.is_finite())
++        .collect();
++    let Some(terminal_y) = claimed_items
++        .iter()
++        .map(|item| item.y)
++        .min_by(|left, right| left.total_cmp(right))
++    else {
++        return;
++    };
++    let Some(page) = claimed_items.first().map(|item| item.page) else {
++        return;
++    };
++
++    let mut terminal_references: Vec<Vec<&TextItem>> = vec![Vec::new(); column_count];
++    for item in claimed_items
++        .iter()
++        .copied()
++        .filter(|item| (item.y - terminal_y).abs() <= BASELINE_TOLERANCE)
++    {
++        if let Some(column) = terminal_table_column(table, column_count, item.x + item.width / 2.0)
++        {
++            terminal_references[column].push(item);
++        }
++    }
++    if terminal_references.iter().all(Vec::is_empty) {
++        return;
++    }
++
++    let continuation_gaps: Vec<Option<f32>> = terminal_references
++        .iter()
++        .enumerate()
++        .map(|(column, references)| {
++            terminal_wrap_gap(table, terminal_row, column, &claimed_items, references)
++        })
++        .collect();
++
++    let mut lower_items: Vec<(usize, &TextItem)> = source_items
++        .iter()
++        .enumerate()
++        .filter(|(index, item)| {
++            !claimed.contains(index)
++                && item.page == page
++                && !item.text.trim().is_empty()
++                && item.y.is_finite()
++                && item.x.is_finite()
++                && item.width.is_finite()
++                && item.y < terminal_y - BASELINE_TOLERANCE
++        })
++        .collect();
++    lower_items.sort_by(|left, right| {
++        right
++            .1
++            .y
++            .total_cmp(&left.1.y)
++            .then_with(|| left.1.x.total_cmp(&right.1.x))
++    });
++
++    let mut lines: Vec<Vec<(usize, &TextItem)>> = Vec::new();
++    for item in lower_items {
++        if lines.last().is_some_and(|line| {
++            line.first()
++                .is_some_and(|first| (first.1.y - item.1.y).abs() <= BASELINE_TOLERANCE)
++        }) {
++            lines.last_mut().expect("checked above").push(item);
++        } else {
++            lines.push(vec![item]);
++        }
++    }
++
++    let mut continuation_column = None;
++    let mut previous_y = terminal_y;
++    let mut accepted = Vec::new();
++    for line in lines {
++        let line_y = line.first().map(|(_, item)| item.y).unwrap_or(previous_y);
++        let gap = previous_y - line_y;
++        if gap <= 0.0 {
++            break;
++        }
++        let Some(column) = terminal_continuation_column(
++            table,
++            terminal_row,
++            column_count,
++            &terminal_references,
++            &line,
++        ) else {
++            break;
++        };
++        if continuation_column.is_some_and(|existing| existing != column) {
++            break;
++        }
++        let Some(expected_gap) = continuation_gaps.get(column).copied().flatten() else {
++            break;
++        };
++        if !terminal_continuation_gap_matches(gap, expected_gap) {
++            break;
++        }
++        continuation_column = Some(column);
++        previous_y = line_y;
++        accepted.push((line_y, column, line));
++    }
++
++    if continuation_column.is_none() || accepted.is_empty() {
++        return;
++    }
++    for (line_y, column, line) in accepted {
++        let mut line_items: Vec<TextItem> = line.iter().map(|(_, item)| (*item).clone()).collect();
++        crate::text_utils::sort_line_items(&mut line_items);
++        let text = TextLine {
++            y: line_y,
++            page,
++            items: line_items,
++            adaptive_threshold: 0.10,
++        }
++        .text();
++        if text.trim().is_empty() {
++            continue;
++        }
++
++        let mut row = vec![String::new(); column_count];
++        row[column] = text;
++        table.rows.push(line_y);
++        table.cells.push(row);
++        for (index, _) in line {
++            if !table.item_indices.contains(&index) {
++                table.item_indices.push(index);
++            }
++        }
++    }
++}
++
++/// Require an existing same-column wrap pattern before extending a terminal
++/// cell. A single aligned line below an ordinary table is just as likely to be
++/// prose, a section heading, or a footer as it is a missing wrap.
++fn terminal_wrap_gap(
++    table: &crate::tables::Table,
++    terminal_row: usize,
++    column: usize,
++    claimed_items: &[&TextItem],
++    terminal_references: &[&TextItem],
++) -> Option<f32> {
++    let has_prior_continuation_row = table.cells[..terminal_row].iter().any(|row| {
++        row.get(column).is_some_and(|cell| !cell.trim().is_empty())
++            && row
++                .iter()
++                .enumerate()
++                .all(|(index, cell)| index == column || cell.trim().is_empty())
++    });
++    if !has_prior_continuation_row || terminal_references.is_empty() {
++        return None;
++    }
++
++    let column_count = table.cells.iter().map(Vec::len).max().unwrap_or(0);
++    let mut baselines: Vec<f32> = claimed_items
++        .iter()
++        .copied()
++        .filter(|item| {
++            terminal_table_column(table, column_count, item.x + item.width / 2.0) == Some(column)
++                && terminal_references.iter().any(|reference| {
++                    let font_tolerance = (reference.font_size.abs() * 0.15).max(1.0);
++                    (reference.font_size - item.font_size).abs() <= font_tolerance
++                        && reference.is_bold == item.is_bold
++                        && reference.is_italic == item.is_italic
++                })
++        })
++        .map(|item| item.y)
++        .collect();
++    baselines.sort_by(|left, right| right.total_cmp(left));
++    baselines.dedup_by(|left, right| (*left - *right).abs() <= 2.5);
++    baselines
++        .windows(2)
++        .map(|pair| pair[0] - pair[1])
++        .filter(|gap| gap.is_finite() && *gap >= 4.0)
++        .min_by(|left, right| left.total_cmp(right))
++}
++
++fn terminal_continuation_gap_matches(gap: f32, expected_gap: f32) -> bool {
++    let lower = (expected_gap * 0.60).max(4.0);
++    let upper = expected_gap * 1.45 + 1.0;
++    gap >= lower && gap <= upper
++}
++
++fn terminal_table_column(
++    table: &crate::tables::Table,
++    column_count: usize,
++    x: f32,
++) -> Option<usize> {
++    if !x.is_finite() {
++        return None;
++    }
++    if table.columns.len() == column_count + 1 {
++        return table.columns.windows(2).position(|edges| {
++            let low = edges[0].min(edges[1]);
++            let high = edges[0].max(edges[1]);
++            x >= low - 2.0 && x <= high + 2.0
++        });
++    }
++    (table.columns.len() == column_count).then(|| {
++        table
++            .columns
++            .iter()
++            .enumerate()
++            .min_by(|(_, left), (_, right)| (x - **left).abs().total_cmp(&(x - **right).abs()))
++            .map(|(column, _)| column)
++    })?
++}
++
++fn terminal_continuation_column(
++    table: &crate::tables::Table,
++    terminal_row: usize,
++    column_count: usize,
++    references: &[Vec<&TextItem>],
++    line: &[(usize, &TextItem)],
++) -> Option<usize> {
++    let mut line_column = None;
++    for (_, item) in line {
++        let column = terminal_table_column(table, column_count, item.x + item.width / 2.0)?;
++        if table
++            .cells
++            .get(terminal_row)
++            .and_then(|row| row.get(column))
++            .is_none_or(|cell| cell.trim().is_empty())
++        {
++            return None;
++        }
++        if line_column.is_some_and(|existing| existing != column) {
++            return None;
++        }
++        line_column = Some(column);
++    }
++    let column = line_column?;
++    let source_start = line.iter().map(|(_, item)| item.x).reduce(f32::min)?;
++    references[column]
++        .iter()
++        .any(|reference| {
++            let alignment_tolerance = (reference.font_size.abs() * 0.9).clamp(5.0, 10.0);
++            let font_tolerance = (reference.font_size.abs() * 0.15).max(1.0);
++            (reference.x - source_start).abs() <= alignment_tolerance
++                && (reference.font_size - line[0].1.font_size).abs() <= font_tolerance
++                && reference.is_bold == line[0].1.is_bold
++                && reference.is_italic == line[0].1.is_italic
++        })
++        .then_some(column)
++}
++
  fn positioned_table(
      table: &crate::tables::Table,
 +    source_items: &[TextItem],
@@ -968,7 +1275,7 @@ index 4300f51..8321d95 100644
      )
  }
  
-@@ -1102,6 +1132,13 @@ pub(crate) struct MarkdownDocumentContext<'a> {
+@@ -1102,6 +1420,13 @@ pub(crate) struct MarkdownDocumentContext<'a> {
      pub(crate) precomputed_chart_regions: Option<&'a PageChartRegions>,
  }
  
@@ -982,7 +1289,7 @@ index 4300f51..8321d95 100644
  /// Convert positioned text items to markdown, using rectangles and line segments for table detection.
  ///
  /// Line-based detection runs first (strongest structural evidence), then rect-based,
-@@ -1113,6 +1150,24 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1113,6 +1438,24 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
      pdf_lines: &[crate::types::PdfLine],
      context: MarkdownDocumentContext<'_>,
  ) -> String {
@@ -1007,7 +1314,7 @@ index 4300f51..8321d95 100644
      use crate::tables::{
          content_width, detect_tables_from_lines, detect_tables_from_rects,
          detect_tables_from_struct_tree, detect_tables_with_page_width, try_build_rect_guided_table,
-@@ -1130,9 +1185,14 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1130,9 +1473,14 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
      } = context;
  
      if items.is_empty() {
@@ -1023,7 +1330,46 @@ index 4300f51..8321d95 100644
      // Table detection must retain the original collection because short
      // numeric table cells can be indistinguishable from folios until
      // structural context is available. A precomputed mask carries the
-@@ -1396,10 +1456,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1217,6 +1565,19 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+         let group = page_groups.get(&page).unwrap();
+         let page_items: Vec<TextItem> = group.iter().map(|(_, item)| (*item).clone()).collect();
+         let page_content_width = content_width(&page_items);
++        // Keep raw tagged-table evidence even when structure-tree detection
++        // later rejects a one-row or partial descriptor. It only closes the
++        // heuristic terminal-recovery boundary; normal table detection still
++        // runs on the page's positioned text.
++        let page_has_raw_struct_table = struct_tables.iter().any(|table| {
++            table.rows.iter().any(|row| {
++                row.cells.iter().any(|cell| {
++                    cell.mcids
++                        .iter()
++                        .any(|&(_, tagged_page)| tagged_page == page)
++                })
++            })
++        });
+ 
+         // Chart-bar regions: bar charts drawn as filled rects read as cell
+         // rects or aligned text and get gridded into phantom tables. Their
+@@ -1381,8 +1742,16 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+             //    Only use struct-tree tables when they capture a majority (≥50%) of
+             //    band items.  Incomplete struct trees (partial tagging) should fall
+             //    through to geometry detection which sees all items.
+-            if !struct_tables.is_empty() {
+-                let st_tables = detect_tables_from_struct_tree(band_items, struct_tables, page);
++            let st_tables = if struct_tables.is_empty() {
++                Vec::new()
++            } else {
++                detect_tables_from_struct_tree(band_items, struct_tables, page)
++            };
++            let heuristic_has_soft_boundary = !page_has_raw_struct_table
++                && st_tables.is_empty()
++                && band_rects.is_empty()
++                && band_lines.is_empty();
++            if !st_tables.is_empty() {
+                 for table in &st_tables {
+                     let coverage = table.item_indices.len() as f32 / band_items.len().max(1) as f32;
+                     if coverage < 0.5 {
+@@ -1396,10 +1765,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                              }
                          }
                      }
@@ -1032,7 +1378,7 @@ index 4300f51..8321d95 100644
 -                        .or_default()
 -                        .push(positioned_table(table, chart_prose_order));
 +                    page_tables.entry(page).or_default().push(positioned_table(
-+                        table,
++                        &table,
 +                        band_items,
 +                        chart_prose_order,
 +                        render_markdown,
@@ -1041,7 +1387,7 @@ index 4300f51..8321d95 100644
                  }
              }
  
-@@ -1423,10 +1486,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1423,10 +1795,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                          }
                      }
                  }
@@ -1050,7 +1396,7 @@ index 4300f51..8321d95 100644
 -                    .or_default()
 -                    .push(positioned_table(table, chart_prose_order));
 +                page_tables.entry(page).or_default().push(positioned_table(
-+                    table,
++                    &table,
 +                    band_items,
 +                    chart_prose_order,
 +                    render_markdown,
@@ -1059,7 +1405,7 @@ index 4300f51..8321d95 100644
              }
  
              // 2. Line-based detection on unclaimed items (when rects didn't find tables)
-@@ -1441,10 +1507,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1441,10 +1816,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                              }
                          }
                      }
@@ -1068,7 +1414,7 @@ index 4300f51..8321d95 100644
 -                        .or_default()
 -                        .push(positioned_table(table, chart_prose_order));
 +                    page_tables.entry(page).or_default().push(positioned_table(
-+                        table,
++                        &table,
 +                        band_items,
 +                        chart_prose_order,
 +                        render_markdown,
@@ -1077,7 +1423,7 @@ index 4300f51..8321d95 100644
                  }
              }
  
-@@ -1480,10 +1549,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1480,10 +1858,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                                  }
                              }
                          }
@@ -1095,7 +1441,29 @@ index 4300f51..8321d95 100644
                          for &band_idx in &inside_map {
                              rect_claimed.insert(band_idx);
                          }
-@@ -1526,10 +1598,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1493,7 +1874,10 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+ 
+             // 3b. Heuristic fallback on unclaimed items
+             let mut run_heuristic =
+-                |subset_items: &[TextItem], index_map: &[usize], min_items: usize| {
++                |subset_items: &[TextItem],
++                 index_map: &[usize],
++                 min_items: usize,
++                 recover_terminal_rows: bool| {
+                     if subset_items.len() < min_items {
+                         return;
+                     }
+@@ -1508,6 +1892,9 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+                         page_content_width,
+                     );
+                     for table in tables {
++                        let table = recover_terminal_rows
++                            .then(|| table_with_terminal_cell_continuations(&table, subset_items))
++                            .unwrap_or(table);
+                         if reject_parallel_prose && is_parallel_prose_table(&table) {
+                             log::debug!(
+                                 "page {}: rejected {}x{} parallel-prose table hypothesis",
+@@ -1526,10 +1913,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                                  }
                              }
                          }
@@ -1113,7 +1481,43 @@ index 4300f51..8321d95 100644
                      }
                  };
  
-@@ -1591,10 +1666,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1537,7 +1927,7 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+             if rect_claimed.is_empty() && hint_regions.is_empty() {
+                 // No rect tables or hints — run heuristic on all band items
+                 let identity_map: Vec<usize> = (0..band_items.len()).collect();
+-                run_heuristic(band_items, &identity_map, 6);
++                run_heuristic(band_items, &identity_map, 6, heuristic_has_soft_boundary);
+             } else if rect_claimed.is_empty() && !hint_regions.is_empty() {
+                 // No rect tables but hint regions exist — run heuristic separately
+                 // on items inside each hint region and on items outside all hints.
+@@ -1551,7 +1941,7 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+                         })
+                         .map(|(idx, item)| (item.clone(), idx))
+                         .unzip();
+-                    run_heuristic(&inside_items, &inside_map, 6);
++                    run_heuristic(&inside_items, &inside_map, 6, false);
+                     for &band_idx in &inside_map {
+                         rect_claimed.insert(band_idx);
+                     }
+@@ -1562,7 +1952,7 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+                     .filter(|(idx, _)| !rect_claimed.contains(idx))
+                     .map(|(idx, item)| (item.clone(), idx))
+                     .unzip();
+-                run_heuristic(&outside_items, &outside_map, 6);
++                run_heuristic(&outside_items, &outside_map, 6, false);
+             } else {
+                 // Rect tables found — run heuristic on unclaimed items
+                 let (unclaimed_items, unclaimed_map): (Vec<TextItem>, Vec<usize>) = band_items
+@@ -1571,7 +1961,7 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+                     .filter(|(idx, _)| !rect_claimed.contains(idx))
+                     .map(|(idx, item)| (item.clone(), idx))
+                     .unzip();
+-                run_heuristic(&unclaimed_items, &unclaimed_map, 6);
++                run_heuristic(&unclaimed_items, &unclaimed_map, 6, false);
+             }
+ 
+             // 4. Column-based table detection for borderless tabular layouts.
+@@ -1591,10 +1981,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                              }
                          }
                      }
@@ -1131,7 +1535,7 @@ index 4300f51..8321d95 100644
                  }
              }
          }
-@@ -1653,10 +1731,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1653,10 +2046,13 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                              table_items.insert(global_idx);
                          }
                      }
@@ -1140,7 +1544,7 @@ index 4300f51..8321d95 100644
 -                        .or_default()
 -                        .push(positioned_table(table, chart_prose_order));
 +                    page_tables.entry(page).or_default().push(positioned_table(
-+                        table,
++                        &table,
 +                        &page_text,
 +                        chart_prose_order,
 +                        render_markdown,
@@ -1149,13 +1553,22 @@ index 4300f51..8321d95 100644
                  }
              }
          }
-@@ -1716,31 +1797,42 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1694,7 +2090,7 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+                 page_content_width,
+             );
+             for table in &heuristic_tables {
+-                if !chart_regions.is_empty() && is_parallel_prose_table(table) {
++                if !chart_regions.is_empty() && is_parallel_prose_table(&table) {
+                     log::debug!(
+                         "page {}: rejected {}x{} merged-band parallel-prose table hypothesis",
+                         page,
+@@ -1716,31 +2112,42 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
                  page_tables
                      .entry(page)
                      .or_default()
 -                    .push(positioned_table(table, chart_prose_order));
 +                    .push(positioned_merged_retry_table(
-+                        table,
++                        &table,
 +                        &chart_free,
 +                        chart_prose_order,
 +                        render_markdown,
@@ -1210,7 +1623,7 @@ index 4300f51..8321d95 100644
  
      // Check structure tree coverage on ALL text items (before table filtering)
      // to decide whether to use structure-aware markdown generation.
-@@ -1783,210 +1875,310 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1783,210 +2190,316 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
          .filter(|(idx, _)| !table_items.contains(idx))
          .collect();
  
@@ -1494,9 +1907,7 @@ index 4300f51..8321d95 100644
 -            page_lines.sort_by(|a, b| b.y.total_cmp(&a.y));
 -            all_lines.extend(page_lines);
 -        }
-+            zone_lines
-+        };
- 
+-
 -        // Process chart/prose pages as alternating vertical zones. Within a
 -        // prose zone, group each column independently and append columns in
 -        // newspaper order. Within a chart zone, group the full width normally.
@@ -1524,24 +1935,11 @@ index 4300f51..8321d95 100644
 -                            ),
 -                        );
 -                    }
-+        let mut chart_y_bands: Vec<(f32, f32)> = page_chart_map[&page]
-+            .iter()
-+            .map(|&(_, y0, _, y1)| (y0 - CHART_SEPARATOR_PAD, y1 + CHART_SEPARATOR_PAD))
-+            .collect();
-+        chart_y_bands.sort_by(|left, right| right.1.total_cmp(&left.1));
-+        let mut merged_chart_y_bands: Vec<(f32, f32)> = Vec::new();
-+        for (low, high) in chart_y_bands {
-+            if let Some(last) = merged_chart_y_bands.last_mut() {
-+                if high >= last.0 {
-+                    last.0 = last.0.min(low);
-+                    last.1 = last.1.max(high);
-+                    continue;
-                 }
+-                }
 -                zone_lines
 -            };
-+            }
-+            merged_chart_y_bands.push((low, high));
-+        }
++            zone_lines
++        };
  
 -            let mut chart_y_bands: Vec<(f32, f32)> = page_chart_map[&page]
 -                .iter()
@@ -1555,6 +1953,47 @@ index 4300f51..8321d95 100644
 -                        last.0 = last.0.min(low);
 -                        last.1 = last.1.max(high);
 -                        continue;
+-                    }
++        let mut chart_y_bands: Vec<(f32, f32)> = page_chart_map[&page]
++            .iter()
++            .map(|&(_, y0, _, y1)| (y0 - CHART_SEPARATOR_PAD, y1 + CHART_SEPARATOR_PAD))
++            .collect();
++        chart_y_bands.sort_by(|left, right| right.1.total_cmp(&left.1));
++        let mut merged_chart_y_bands: Vec<(f32, f32)> = Vec::new();
++        for (low, high) in chart_y_bands {
++            if let Some(last) = merged_chart_y_bands.last_mut() {
++                if high >= last.0 {
++                    last.0 = last.0.min(low);
++                    last.1 = last.1.max(high);
++                    continue;
+                 }
+-                merged_chart_y_bands.push((low, high));
+             }
++            merged_chart_y_bands.push((low, high));
++        }
+ 
+-            for (low, high) in merged_chart_y_bands {
+-                let (above, at_or_below): (Vec<TextItem>, Vec<TextItem>) =
+-                    remaining.into_iter().partition(|item| {
+-                        item.y > high && !item_is_in_chart_region(item, chart_regions)
+-                    });
+-                all_lines.extend(group_prose_zone(above));
+-
+-                let (chart_zone, below): (Vec<TextItem>, Vec<TextItem>) =
+-                    at_or_below.into_iter().partition(|item| {
+-                        item.y >= low || item_is_in_chart_region(item, chart_regions)
+-                    });
+-                all_lines.extend(
+-                    crate::extractor::group_prefiltered_items_into_lines_with_thresholds_and_charts(
+-                        chart_zone,
+-                        page_thresholds,
+-                        &table_page_set,
+-                        &page_chart_map,
+-                    ),
+-                );
+-                remaining = below;
+-            }
+-            all_lines.extend(group_prose_zone(remaining));
 +        for (low, high) in merged_chart_y_bands {
 +            let (above, at_or_below): (Vec<TextItem>, Vec<TextItem>) = remaining
 +                .into_iter()
@@ -1572,16 +2011,39 @@ index 4300f51..8321d95 100644
 +                ),
 +            );
 +            remaining = below;
-+        }
+         }
+-        // The three processing paths above are accumulated separately. Restore
+-        // document page order while preserving each page's chosen line order.
+-        all_lines.sort_by_key(|line| line.page);
+-        all_lines
+-    };
 +        all_lines.extend(group_prose_zone(remaining));
 +    }
-+
+ 
+-    // Strip repeated headers/footers before conversion
+-    let lines = if options.strip_headers_footers {
+-        preprocess::strip_repeated_lines(lines, document_page_count)
+-    } else {
+-        lines
+-    };
 +    // The processing paths above are accumulated separately. Restore document
 +    // page order while preserving each page's selected internal line order.
 +    all_lines.sort_by_key(|line| line.page);
 +    all_lines
 +}
-+
+ 
+-    // Convert to markdown, inserting tables and images at appropriate positions
+-    let mut band_split_page_set: HashSet<u32> = page_band_splits.keys().copied().collect();
+-    band_split_page_set.extend(page_chart_prose_splits.keys().copied());
+-    to_markdown_from_lines_with_tables_and_images(
+-        lines,
+-        options,
+-        page_tables,
+-        page_images,
+-        &page_chart_map,
+-        &band_split_page_set,
+-        effective_struct_roles,
+-    )
 +fn capture_structured_blocks(
 +    lines: &[TextLine],
 +    page_tables: &HashMap<u32, Vec<PositionedMarkdown>>,
@@ -1612,6 +2074,12 @@ index 4300f51..8321d95 100644
 +        let captured_table_block = |capture: &convert::CapturedTable| {
 +            if capture.table.cells.is_empty()
 +                || capture.table.cells.iter().all(|row| row.is_empty())
++                || (!capture.source_items.is_empty()
++                    && !structured::table_items_have_complete_association(
++                        &capture.table,
++                        &capture.source_items,
++                        geometry,
++                    ))
 +            {
 +                structured::text_block_from_items(&capture.source_items, geometry)
 +            } else {
@@ -1629,32 +2097,10 @@ index 4300f51..8321d95 100644
 +                    flush_lines(&mut blocks, &mut pending_lines);
 +                    if let Some(capture) = &table.captured_table {
 +                        blocks.push(captured_table_block(capture));
-                     }
++                    }
 +                    inserted_tables.insert(*index);
-                 }
--                merged_chart_y_bands.push((low, high));
-             }
--
--            for (low, high) in merged_chart_y_bands {
--                let (above, at_or_below): (Vec<TextItem>, Vec<TextItem>) =
--                    remaining.into_iter().partition(|item| {
--                        item.y > high && !item_is_in_chart_region(item, chart_regions)
--                    });
--                all_lines.extend(group_prose_zone(above));
--
--                let (chart_zone, below): (Vec<TextItem>, Vec<TextItem>) =
--                    at_or_below.into_iter().partition(|item| {
--                        item.y >= low || item_is_in_chart_region(item, chart_regions)
--                    });
--                all_lines.extend(
--                    crate::extractor::group_prefiltered_items_into_lines_with_thresholds_and_charts(
--                        chart_zone,
--                        page_thresholds,
--                        &table_page_set,
--                        &page_chart_map,
--                    ),
--                );
--                remaining = below;
++                }
++            }
 +            pending_lines.push(line.clone());
 +        }
 +        flush_lines(&mut blocks, &mut pending_lines);
@@ -1663,34 +2109,8 @@ index 4300f51..8321d95 100644
 +                if let Some(capture) = &table.captured_table {
 +                    blocks.push(captured_table_block(capture));
 +                }
-             }
--            all_lines.extend(group_prose_zone(remaining));
-         }
--        // The three processing paths above are accumulated separately. Restore
--        // document page order while preserving each page's chosen line order.
--        all_lines.sort_by_key(|line| line.page);
--        all_lines
--    };
--
--    // Strip repeated headers/footers before conversion
--    let lines = if options.strip_headers_footers {
--        preprocess::strip_repeated_lines(lines, document_page_count)
--    } else {
--        lines
--    };
--
--    // Convert to markdown, inserting tables and images at appropriate positions
--    let mut band_split_page_set: HashSet<u32> = page_band_splits.keys().copied().collect();
--    band_split_page_set.extend(page_chart_prose_splits.keys().copied());
--    to_markdown_from_lines_with_tables_and_images(
--        lines,
--        options,
--        page_tables,
--        page_images,
--        &page_chart_map,
--        &band_split_page_set,
--        effective_struct_roles,
--    )
++            }
++        }
 +        structured::assign_block_ids(page, &mut blocks);
 +        blocks_by_page.insert(page, blocks);
 +    }
@@ -1698,10 +2118,336 @@ index 4300f51..8321d95 100644
  }
  
  #[cfg(test)]
-@@ -2636,4 +2828,96 @@ mod tests {
+@@ -2636,4 +3149,461 @@ mod tests {
              "label+number table should not be split side-by-side"
          );
      }
++
++    fn terminal_wrap_fixture(include_second_tail: bool) -> (crate::tables::Table, Vec<TextItem>) {
++        let make = |text: &str, x: f32, y: f32| {
++            let mut item = make_item_w(x, y, 60.0, 1);
++            item.text = text.into();
++            item
++        };
++        let mut items = vec![
++            make("ID", 50.0, 700.0),
++            make("Description", 150.0, 700.0),
++            make("Amount", 400.0, 700.0),
++            make("A", 50.0, 670.0),
++            make("First", 150.0, 670.0),
++            make("10", 400.0, 670.0),
++            make("prior wrap", 150.0, 658.0),
++            make("B", 50.0, 646.0),
++            make("Final", 150.0, 646.0),
++            make("20", 400.0, 646.0),
++            make("tail one", 150.0, 634.0),
++        ];
++        if include_second_tail {
++            items.push(make("tail two", 150.0, 622.0));
++        }
++        // This has the same font and left edge as the description column, but
++        // its paragraph gap breaks the established 12pt wrap cadence.
++        items.push(make("Paragraph after table", 150.0, 598.0));
++        let claimed_count = 10;
++        (
++            crate::tables::Table::new(
++                vec![50.0, 150.0, 400.0],
++                vec![700.0, 670.0, 658.0, 646.0],
++                vec![
++                    vec!["ID".into(), "Description".into(), "Amount".into()],
++                    vec!["A".into(), "First".into(), "10".into()],
++                    vec![String::new(), "prior wrap".into(), String::new()],
++                    vec!["B".into(), "Final".into(), "20".into()],
++                ],
++                (0..claimed_count).collect(),
++            ),
++            items,
++        )
++    }
++
++    #[test]
++    fn terminal_table_capture_claims_aligned_tail_wraps_but_not_following_prose() {
++        let (table, items) = terminal_wrap_fixture(true);
++        let captured = table_with_terminal_cell_continuations(&table, &items);
++
++        assert_eq!(captured.cells[3][1], "Final");
++        assert_eq!(captured.cells[4][1], "tail one");
++        assert_eq!(captured.cells[5][1], "tail two");
++        assert!(captured.item_indices.contains(&10));
++        assert!(captured.item_indices.contains(&11));
++        assert!(
++            !captured.item_indices.contains(&12),
++            "a same-font, aligned paragraph after the table is not a tail wrap"
++        );
++        assert!(
++            !captured.cells[3][1].contains("Paragraph after table"),
++            "the table must stop before following prose"
++        );
++        let remaining: Vec<&str> = items
++            .iter()
++            .enumerate()
++            .filter(|(index, _)| !captured.item_indices.contains(index))
++            .map(|(_, item)| item.text.as_str())
++            .collect();
++        assert_eq!(remaining, vec!["Paragraph after table"]);
++    }
++
++    #[test]
++    fn terminal_table_capture_allows_one_tail_line_with_prior_wrap_evidence() {
++        let (table, items) = terminal_wrap_fixture(false);
++        let captured = table_with_terminal_cell_continuations(&table, &items);
++
++        assert_eq!(captured.cells[3][1], "Final");
++        assert_eq!(captured.cells[4][1], "tail one");
++        assert!(captured.item_indices.contains(&10));
++        assert!(
++            !captured.item_indices.contains(&11),
++            "following prose remains outside the table"
++        );
++    }
++
++    #[test]
++    fn heuristic_table_recovers_terminal_tail_as_an_anchored_sparse_row() {
++        let (_, items) = terminal_wrap_fixture(false);
++        let table = crate::tables::detect_tables_with_page_width(&items, 10.0, false, 450.0)
++            .into_iter()
++            .find(|table| table.cells.len() == 4 && table.cells.len() == table.rows.len())
++            .expect("heuristic table with inferred row anchors");
++
++        let captured = table_with_terminal_cell_continuations(&table, &items);
++
++        assert_eq!(captured.cells.len(), 5);
++        assert_eq!(captured.rows.len(), 5);
++        assert_eq!(captured.cells[3][1], "Final");
++        assert_eq!(captured.cells[4][1], "tail one");
++        assert!(captured.item_indices.contains(&10));
++        assert!(!captured.item_indices.contains(&11));
++    }
++
++    #[test]
++    fn rejected_one_row_tagged_table_closes_heuristic_terminal_recovery() {
++        let (_, mut items) = terminal_wrap_fixture(false);
++        items[0].mcid = Some(900);
++        items[1].mcid = Some(901);
++        // A raw tagged table with only one page row is intentionally rejected
++        // by the structural detector. Its semantic table boundary remains
++        // meaningful enough to keep aligned prose outside a heuristic table.
++        let tagged_tables = vec![crate::structure_tree::StructTable {
++            rows: vec![crate::structure_tree::StructTableRow {
++                cells: vec![
++                    crate::structure_tree::StructTableCell {
++                        is_header: true,
++                        mcids: vec![(900, 1)],
++                    },
++                    crate::structure_tree::StructTableCell {
++                        is_header: true,
++                        mcids: vec![(901, 1)],
++                    },
++                ],
++            }],
++        }];
++        let mut geometries = BTreeMap::new();
++        geometries.insert(1, crate::structured::test_page_geometry());
++
++        let conversion = to_markdown_from_items_with_rects_and_lines_with_structured_capture(
++            items,
++            MarkdownOptions::default(),
++            &[],
++            &[],
++            MarkdownDocumentContext {
++                page_thresholds: &HashMap::new(),
++                struct_roles: None,
++                struct_tables: &tagged_tables,
++                page_count: 1,
++                prefiltered_page_number_pages: None,
++                prefiltered_page_number_mask: None,
++                precomputed_chart_regions: None,
++            },
++            Some(&geometries),
++            false,
++        );
++        let blocks = conversion
++            .blocks_by_page
++            .expect("structured blocks")
++            .remove(&1)
++            .expect("page blocks");
++        let crate::structured::StructuredBlockContent::Table {
++            row_count, cells, ..
++        } = &blocks
++            .iter()
++            .find(|block| {
++                matches!(
++                    block.content,
++                    crate::structured::StructuredBlockContent::Table { .. }
++                )
++            })
++            .expect("heuristic table")
++            .content
++        else {
++            panic!("expected table");
++        };
++        assert_eq!(*row_count, 4);
++        assert!(cells
++            .iter()
++            .all(|cell| { cell.lines.iter().all(|line| line.text != "tail one") }));
++        assert!(blocks.iter().any(|block| match &block.content {
++            crate::structured::StructuredBlockContent::Text { lines } => {
++                lines.iter().any(|line| line.text == "tail one")
++            }
++            _ => false,
++        }));
++    }
++
++    #[test]
++    fn ruled_table_keeps_text_below_its_closing_edge_outside_structured_capture() {
++        let make = |text: &str, x: f32, y: f32| {
++            let mut item = make_item_w(x, y, 40.0, 1);
++            item.text = text.into();
++            item
++        };
++        let items = vec![
++            make("Key", 50.0, 690.0),
++            make("Description", 130.0, 690.0),
++            make("Amount", 340.0, 690.0),
++            make("A", 50.0, 674.0),
++            make("First", 130.0, 674.0),
++            make("10", 340.0, 674.0),
++            make("prior wrap", 130.0, 662.0),
++            make("B", 50.0, 650.0),
++            make("Final", 130.0, 650.0),
++            make("20", 340.0, 650.0),
++            // These are outside the final ruled band.
++            make("tail one", 130.0, 638.0),
++            make("Paragraph after table", 130.0, 610.0),
++        ];
++        let lines = vec![
++            crate::types::PdfLine {
++                x1: 40.0,
++                y1: 700.0,
++                x2: 500.0,
++                y2: 700.0,
++                page: 1,
++            },
++            crate::types::PdfLine {
++                x1: 40.0,
++                y1: 680.0,
++                x2: 500.0,
++                y2: 680.0,
++                page: 1,
++            },
++            crate::types::PdfLine {
++                x1: 40.0,
++                y1: 668.0,
++                x2: 500.0,
++                y2: 668.0,
++                page: 1,
++            },
++            crate::types::PdfLine {
++                x1: 40.0,
++                y1: 656.0,
++                x2: 500.0,
++                y2: 656.0,
++                page: 1,
++            },
++            crate::types::PdfLine {
++                x1: 40.0,
++                y1: 644.0,
++                x2: 500.0,
++                y2: 644.0,
++                page: 1,
++            },
++            crate::types::PdfLine {
++                x1: 40.0,
++                y1: 644.0,
++                x2: 40.0,
++                y2: 700.0,
++                page: 1,
++            },
++            crate::types::PdfLine {
++                x1: 120.0,
++                y1: 644.0,
++                x2: 120.0,
++                y2: 700.0,
++                page: 1,
++            },
++            crate::types::PdfLine {
++                x1: 330.0,
++                y1: 644.0,
++                x2: 330.0,
++                y2: 700.0,
++                page: 1,
++            },
++            crate::types::PdfLine {
++                x1: 420.0,
++                y1: 644.0,
++                x2: 420.0,
++                y2: 700.0,
++                page: 1,
++            },
++            crate::types::PdfLine {
++                x1: 500.0,
++                y1: 644.0,
++                x2: 500.0,
++                y2: 700.0,
++                page: 1,
++            },
++        ];
++        let mut geometries = BTreeMap::new();
++        geometries.insert(1, crate::structured::test_page_geometry());
++        let conversion = to_markdown_from_items_with_rects_and_lines_with_structured_capture(
++            items,
++            MarkdownOptions::default(),
++            &[],
++            &lines,
++            MarkdownDocumentContext {
++                page_thresholds: &HashMap::new(),
++                struct_roles: None,
++                struct_tables: &[],
++                page_count: 1,
++                prefiltered_page_number_pages: None,
++                prefiltered_page_number_mask: None,
++                precomputed_chart_regions: None,
++            },
++            Some(&geometries),
++            true,
++        );
++        assert_eq!(conversion.markdown.matches("tail one").count(), 1);
++        let blocks = conversion
++            .blocks_by_page
++            .expect("structured blocks")
++            .remove(&1)
++            .expect("page blocks");
++        let crate::structured::StructuredBlockContent::Table { cells, .. } = &blocks
++            .iter()
++            .find(|block| {
++                matches!(
++                    block.content,
++                    crate::structured::StructuredBlockContent::Table { .. }
++                )
++            })
++            .expect("captured table")
++            .content
++        else {
++            panic!("expected table");
++        };
++        let cell = cells
++            .iter()
++            .find(|cell| cell.row == 3 && cell.column == 1)
++            .expect("terminal description cell");
++        assert_eq!(
++            cell.lines
++                .iter()
++                .map(|line| line.text.as_str())
++                .collect::<Vec<_>>(),
++            vec!["Final"]
++        );
++        assert!(blocks.iter().any(|block| match &block.content {
++            crate::structured::StructuredBlockContent::Text { lines } =>
++                lines.iter().any(|line| line.text.contains("tail one")
++                    || line.text.contains("Paragraph after table")),
++            _ => false,
++        }));
++    }
 +
 +    #[test]
 +    fn structured_capture_uses_the_renderer_table_text_interleave() {
@@ -1764,6 +2510,45 @@ index 4300f51..8321d95 100644
 +    }
 +
 +    #[test]
++    fn structured_capture_keeps_unassignable_claimed_source_as_text() {
++        let mut claimed = make_item(50.0, 500.0, 1);
++        claimed.text = "Claimed source".into();
++        let mut unrelated = make_item(200.0, 500.0, 1);
++        unrelated.text = "Unrelated band text".into();
++        // A partial tagged table can retain a claimed item while exposing
++        // invalid row axes. The item must remain positioned source text,
++        // rather than disappearing or being assigned to a guessed cell.
++        let table = crate::tables::Table::new(
++            vec![50.0],
++            vec![500.0, 500.0],
++            vec![vec!["Claimed source".into()]],
++            vec![0],
++        );
++        let positioned = PositionedMarkdown::table(
++            500.0,
++            50.0,
++            String::new(),
++            None,
++            &table,
++            &[claimed, unrelated],
++            true,
++        );
++        let mut page_tables = HashMap::new();
++        page_tables.insert(1, vec![positioned]);
++        let mut geometries = BTreeMap::new();
++        geometries.insert(1, crate::structured::test_page_geometry());
++
++        let mut blocks_by_page = capture_structured_blocks(&[], &page_tables, &geometries, None);
++        let blocks = blocks_by_page.remove(&1).expect("page blocks");
++        assert_eq!(blocks.len(), 1);
++        let crate::structured::StructuredBlockContent::Text { lines } = &blocks[0].content else {
++            panic!("unassignable table claim must fall back to positioned text");
++        };
++        assert_eq!(lines[0].text, "Claimed source");
++        assert!(!lines.iter().any(|line| line.text.contains("Unrelated")));
++    }
++
++    #[test]
 +    fn merged_retry_capture_keeps_detector_local_chart_free_item_mapping() {
 +        let mut chart_item = make_item(50.0, 500.0, 1);
 +        chart_item.text = "Chart label".into();
@@ -1797,10 +2582,10 @@ index 4300f51..8321d95 100644
  }
 diff --git a/src/structured.rs b/src/structured.rs
 new file mode 100644
-index 0000000..44c6658
+index 0000000..b059b49
 --- /dev/null
 +++ b/src/structured.rs
-@@ -0,0 +1,1402 @@
+@@ -0,0 +1,1735 @@
 +//! Source-preserving structured extraction evidence and coordinate conversion.
 +//!
 +//! These types deliberately sit below application-specific interpretation.
@@ -2112,7 +2897,7 @@ index 0000000..44c6658
 +    let row_count = table.cells.len();
 +    let column_count = table.cells.iter().map(Vec::len).max().unwrap_or(0);
 +    let (mut cell_items, association_reliable) =
-+        assign_table_items(table, source_items, row_count, column_count);
++        assign_table_items(table, source_items, row_count, column_count, geometry);
 +    let spans = normalized_spans(&table.spans, row_count, column_count);
 +    let mut covered = HashSet::new();
 +    let mut span_at_anchor = HashMap::new();
@@ -2213,6 +2998,19 @@ index 0000000..44c6658
 +    }
 +}
 +
++/// Whether every claimed positioned source item can be associated with the
++/// detector's raw grid. Callers use this only to choose the existing text
++/// fallback; it must not invent a nearest table cell for unassignable text.
++pub(crate) fn table_items_have_complete_association(
++    table: &Table,
++    source_items: &[TextItem],
++    geometry: PageGeometry,
++) -> bool {
++    let row_count = table.cells.len();
++    let column_count = table.cells.iter().map(Vec::len).max().unwrap_or(0);
++    assign_table_items(table, source_items, row_count, column_count, geometry).1
++}
++
 +/// Assign deterministic document-scoped block IDs after reading-order capture.
 +pub(crate) fn assign_block_ids(page: u32, blocks: &mut [StructuredBlock]) {
 +    for (index, block) in blocks.iter_mut().enumerate() {
@@ -2251,7 +3049,8 @@ index 0000000..44c6658
 +    }
 +    grouped
 +        .into_iter()
-+        .map(|items| {
++        .map(|mut items| {
++            crate::text_utils::sort_line_items(&mut items);
 +            let line = TextLine {
 +                y: items.first().map(|item| item.y).unwrap_or_default(),
 +                page: items.first().map(|item| item.page).unwrap_or_default(),
@@ -2281,16 +3080,24 @@ index 0000000..44c6658
 +    source_items: &[TextItem],
 +    row_count: usize,
 +    column_count: usize,
++    geometry: PageGeometry,
 +) -> (Vec<Vec<Vec<TextItem>>>, bool) {
-+    let mut result = vec![vec![Vec::new(); column_count]; row_count];
 +    if row_count == 0 || column_count == 0 {
-+        return (result, false);
++        return (vec![vec![Vec::new(); column_count]; row_count], false);
 +    }
-+    let Some(rows) = table_axis(&table.rows, row_count) else {
-+        return (result, false);
++    // The ruled-line detector is identifiable from its N + 1 column edges.
++    // It alone retains N leading row edges for N logical rows; other
++    // detectors retain anchors or centers, for which a shifted row band is
++    // only a hypothesis.
++    let rows_support_leading_edges = column_count
++        .checked_add(1)
++        .is_some_and(|edge_count| table.columns.len() == edge_count);
++    let Some(row_axes) = table_axis_candidates(&table.rows, row_count, rows_support_leading_edges)
++    else {
++        return (vec![vec![Vec::new(); column_count]; row_count], false);
 +    };
-+    let Some(columns) = table_axis(&table.columns, column_count) else {
-+        return (result, false);
++    let Some(column_axes) = table_axis_candidates(&table.columns, column_count, false) else {
++        return (vec![vec![Vec::new(); column_count]; row_count], false);
 +    };
 +    if table.item_indices.is_empty()
 +        && table
@@ -2299,8 +3106,53 @@ index 0000000..44c6658
 +            .flatten()
 +            .any(|cell| !cell.trim().is_empty())
 +    {
-+        return (result, false);
++        return (vec![vec![Vec::new(); column_count]; row_count], false);
 +    }
++
++    // N detector coordinates can be either source-item anchors or the leading
++    // edges of N physical grid bands. Prefer anchors, then use the raw cell
++    // strings only to disambiguate an equally valid geometry convention. The
++    // raw grid has no positioned item identities, so it cannot replace this
++    // association or reconstruct duplicate source occurrences on its own.
++    let mut best = assign_items_to_axes(
++        table,
++        source_items,
++        row_count,
++        column_count,
++        row_axes[0],
++        column_axes[0],
++    );
++    let mut best_score = raw_cell_match_score(&best.0, &table.cells, geometry);
++    for (row_index, rows) in row_axes.iter().copied().enumerate() {
++        for (column_index, columns) in column_axes.iter().copied().enumerate() {
++            if row_index == 0 && column_index == 0 {
++                continue;
++            }
++            let candidate =
++                assign_items_to_axes(table, source_items, row_count, column_count, rows, columns);
++            let score = raw_cell_match_score(&candidate.0, &table.cells, geometry);
++            if score > best_score {
++                if candidate.1
++                    && raw_grid_is_fully_corroborated(&candidate.0, &table.cells, geometry)
++                {
++                    best = candidate;
++                    best_score = score;
++                }
++            }
++        }
++    }
++    (best.0, best.1)
++}
++
++fn assign_items_to_axes(
++    table: &Table,
++    source_items: &[TextItem],
++    row_count: usize,
++    column_count: usize,
++    rows: TableAxis<'_>,
++    columns: TableAxis<'_>,
++) -> (Vec<Vec<Vec<TextItem>>>, bool) {
++    let mut result = vec![vec![Vec::new(); column_count]; row_count];
 +    let mut reliable = true;
 +    for &index in &table.item_indices {
 +        let Some(item) = source_items.get(index) else {
@@ -2322,6 +3174,56 @@ index 0000000..44c6658
 +    (result, reliable)
 +}
 +
++/// An alternative interpretation of ambiguous N-coordinate geometry must
++/// reconstruct every established raw slot and leave blank/ragged slots empty.
++/// A count alone is unsafe when duplicate values let one shifted row appear to
++/// match while a different source line lands in a known blank cell.
++fn raw_grid_is_fully_corroborated(
++    cell_items: &[Vec<Vec<TextItem>>],
++    raw_cells: &[Vec<String>],
++    geometry: PageGeometry,
++) -> bool {
++    cell_items.iter().enumerate().all(|(row, cells)| {
++        cells.iter().enumerate().all(|(column, items)| {
++            let raw_text = raw_cells
++                .get(row)
++                .and_then(|raw_row| raw_row.get(column))
++                .map(String::as_str)
++                .unwrap_or("");
++            if raw_text.trim().is_empty() {
++                items.is_empty()
++            } else {
++                lines_matching_raw_cell(&source_lines(items, geometry), raw_text)
++            }
++        })
++    })
++}
++
++fn raw_cell_match_score(
++    cell_items: &[Vec<Vec<TextItem>>],
++    raw_cells: &[Vec<String>],
++    geometry: PageGeometry,
++) -> usize {
++    let mut score = 0;
++    for (row, raw_row) in raw_cells.iter().enumerate() {
++        for (column, raw_text) in raw_row.iter().enumerate() {
++            if raw_text.trim().is_empty() {
++                continue;
++            }
++            let matches = cell_items
++                .get(row)
++                .and_then(|cells| cells.get(column))
++                .is_some_and(|items| {
++                    lines_matching_raw_cell(&source_lines(items, geometry), raw_text)
++                });
++            if matches {
++                score += 1;
++            }
++        }
++    }
++    score
++}
++
 +/// A detector's coordinates are either one position per raw logical slot or
 +/// one more edge than slots. The raw `cells` matrix remains authoritative for
 +/// public dimensions; this only interprets known detector geometry for source
@@ -2330,6 +3232,10 @@ index 0000000..44c6658
 +enum TableAxis<'a> {
 +    Anchors(&'a [f32]),
 +    Edges(&'a [f32]),
++    LeadingEdges {
++        positions: &'a [f32],
++        trailing_edge: f32,
++    },
 +}
 +
 +fn table_axis(values: &[f32], logical_count: usize) -> Option<TableAxis<'_>> {
@@ -2350,7 +3256,35 @@ index 0000000..44c6658
 +    None
 +}
 +
++fn table_axis_candidates(
++    values: &[f32],
++    logical_count: usize,
++    supports_leading_edges: bool,
++) -> Option<Vec<TableAxis<'_>>> {
++    let default_axis = table_axis(values, logical_count)?;
++    let mut axes = vec![default_axis];
++    if supports_leading_edges && matches!(default_axis, TableAxis::Anchors(_)) {
++        if let Some(trailing_edge) = inferred_trailing_edge(values) {
++            axes.push(TableAxis::LeadingEdges {
++                positions: values,
++                trailing_edge,
++            });
++        }
++    }
++    Some(axes)
++}
++
++fn inferred_trailing_edge(values: &[f32]) -> Option<f32> {
++    let last = *values.last()?;
++    let previous = *values.get(values.len().checked_sub(2)?)?;
++    let trailing_edge = last + (last - previous);
++    (trailing_edge.is_finite() && trailing_edge != last).then_some(trailing_edge)
++}
++
 +fn axis_index(value: f32, axis: TableAxis<'_>) -> Option<usize> {
++    if !value.is_finite() {
++        return None;
++    }
 +    match axis {
 +        TableAxis::Anchors(values) => nearest_index(value, values),
 +        TableAxis::Edges(values) => values.windows(2).position(|pair| {
@@ -2358,6 +3292,18 @@ index 0000000..44c6658
 +            let high = pair[0].max(pair[1]);
 +            value >= low - 2.0 && value <= high + 2.0
 +        }),
++        TableAxis::LeadingEdges {
++            positions,
++            trailing_edge,
++        } => positions
++            .iter()
++            .enumerate()
++            .find_map(|(index, &leading_edge)| {
++                let following_edge = positions.get(index + 1).copied().unwrap_or(trailing_edge);
++                let low = leading_edge.min(following_edge);
++                let high = leading_edge.max(following_edge);
++                (value >= low - 2.0 && value <= high + 2.0).then_some(index)
++            }),
 +    }
 +}
 +
@@ -2669,7 +3615,7 @@ index 0000000..44c6658
 +#[cfg(test)]
 +mod tests {
 +    use super::*;
-+    use crate::types::ItemType;
++    use crate::types::{ItemType, PdfLine};
 +
 +    fn geometry(rotation: u16) -> PageGeometry {
 +        PageGeometry {
@@ -2868,6 +3814,178 @@ index 0000000..44c6658
 +        assert!(
 +            !markdown.contains("| |\n"),
 +            "Markdown cleanup removes the empty presentation row; structured output does not"
++        );
++    }
++
++    #[test]
++    fn ruled_grid_capture_keeps_successive_rows_as_distinct_source_rows() {
++        let items = vec![
++            item("Key", 50.0, 684.0),
++            item("Detail", 130.0, 684.0),
++            item("Out", 340.0, 684.0),
++            item("In", 430.0, 684.0),
++            item("A-1", 50.0, 654.0),
++            item("ALPHA", 130.0, 654.0),
++            item("2.00", 340.0, 654.0),
++            item("A-2", 50.0, 624.0),
++            item("REPEAT", 130.0, 624.0),
++            item("2.00", 430.0, 624.0),
++        ];
++        let lines = vec![
++            PdfLine {
++                x1: 40.0,
++                y1: 700.0,
++                x2: 500.0,
++                y2: 700.0,
++                page: 1,
++            },
++            PdfLine {
++                x1: 40.0,
++                y1: 670.0,
++                x2: 500.0,
++                y2: 670.0,
++                page: 1,
++            },
++            PdfLine {
++                x1: 40.0,
++                y1: 640.0,
++                x2: 500.0,
++                y2: 640.0,
++                page: 1,
++            },
++            PdfLine {
++                x1: 40.0,
++                y1: 610.0,
++                x2: 500.0,
++                y2: 610.0,
++                page: 1,
++            },
++            PdfLine {
++                x1: 40.0,
++                y1: 610.0,
++                x2: 40.0,
++                y2: 700.0,
++                page: 1,
++            },
++            PdfLine {
++                x1: 120.0,
++                y1: 610.0,
++                x2: 120.0,
++                y2: 700.0,
++                page: 1,
++            },
++            PdfLine {
++                x1: 330.0,
++                y1: 610.0,
++                x2: 330.0,
++                y2: 700.0,
++                page: 1,
++            },
++            PdfLine {
++                x1: 420.0,
++                y1: 610.0,
++                x2: 420.0,
++                y2: 700.0,
++                page: 1,
++            },
++            PdfLine {
++                x1: 500.0,
++                y1: 610.0,
++                x2: 500.0,
++                y2: 700.0,
++                page: 1,
++            },
++        ];
++        let table = crate::tables::detect_tables_from_lines(&items, &lines, 1)
++            .into_iter()
++            .next()
++            .expect("ruled table");
++        let StructuredBlockContent::Table { cells, .. } =
++            table_block(&table, &items, test_page_geometry(), None).content
++        else {
++            panic!("expected a table block");
++        };
++        let rows = (0..3)
++            .map(|row| {
++                (0..4)
++                    .map(|column| {
++                        cells
++                            .iter()
++                            .find(|cell| cell.row == row && cell.column == column)
++                            .and_then(|cell| cell.lines.first())
++                            .map(|line| line.text.as_str())
++                            .unwrap_or("")
++                    })
++                    .collect::<Vec<_>>()
++            })
++            .collect::<Vec<_>>();
++
++        assert_eq!(
++            rows,
++            vec![
++                vec!["Key", "Detail", "Out", "In"],
++                vec!["A-1", "ALPHA", "2.00", ""],
++                vec!["A-2", "REPEAT", "", "2.00"],
++            ]
++        );
++    }
++
++    #[test]
++    fn incomplete_leading_edge_candidate_keeps_the_default_association() {
++        // All nonblank cells use the same value. A shifted leading-edge
++        // interpretation would score better by count, but it also places an
++        // extra source item in a detector-confirmed blank slot. That is not
++        // enough evidence to override the default anchor interpretation.
++        let items = vec![
++            item("DUP", 20.0, 684.0),
++            item("DUP", 20.0, 654.0),
++            item("EXTRA", 120.0, 654.0),
++            item("DUP", 20.0, 624.0),
++        ];
++        let table = Table::new(
++            vec![0.0, 100.0, 200.0],
++            vec![700.0, 670.0, 640.0],
++            vec![
++                vec!["DUP".into(), String::new()],
++                vec!["DUP".into(), String::new()],
++                vec!["DUP".into(), String::new()],
++            ],
++            (0..items.len()).collect(),
++        );
++        let row_axes = table_axis_candidates(&table.rows, 3, true).expect("row candidates");
++        let column_axes = table_axis_candidates(&table.columns, 2, false).expect("column axis");
++        let default = assign_items_to_axes(&table, &items, 3, 2, row_axes[0], column_axes[0]);
++        let leading = assign_items_to_axes(&table, &items, 3, 2, row_axes[1], column_axes[0]);
++        assert!(
++            raw_cell_match_score(&leading.0, &table.cells, geometry(0))
++                > raw_cell_match_score(&default.0, &table.cells, geometry(0))
++        );
++        assert!(!raw_grid_is_fully_corroborated(
++            &leading.0,
++            &table.cells,
++            geometry(0)
++        ));
++
++        let (selected, reliable) = assign_table_items(&table, &items, 3, 2, geometry(0));
++        assert!(
++            reliable,
++            "an incomplete alternate must not downgrade a reliable default association"
++        );
++        assert!(
++            selected[0][0].is_empty(),
++            "the incompletely corroborated leading-edge candidate must not win"
++        );
++    }
++
++    #[test]
++    fn source_lines_preserve_rtl_item_order() {
++        let lines = source_lines(
++            &[item("גד", 50.0, 500.0), item("אב", 100.0, 500.0)],
++            geometry(0),
++        );
++        assert_eq!(
++            lines[0].text.split_whitespace().collect::<Vec<_>>(),
++            vec!["אב", "גד"]
 +        );
 +    }
 +
@@ -3203,8 +4321,58 @@ index 0000000..44c6658
 +        assert!(document.pages[1].blocks.is_empty());
 +    }
 +}
+diff --git a/src/tables/detect_lines.rs b/src/tables/detect_lines.rs
+index 492d47c..50d633d 100644
+--- a/src/tables/detect_lines.rs
++++ b/src/tables/detect_lines.rs
+@@ -2094,6 +2094,45 @@ mod tests {
+         assert_eq!(tables[0].cells[0].len(), 2); // 2 columns
+     }
+ 
++    #[test]
++    fn full_ruled_grid_keeps_successive_rows_separate() {
++        let lines = vec![
++            make_hline(700.0, 40.0, 500.0, 1),
++            make_hline(670.0, 40.0, 500.0, 1),
++            make_hline(640.0, 40.0, 500.0, 1),
++            make_hline(610.0, 40.0, 500.0, 1),
++            make_vline(40.0, 610.0, 700.0, 1),
++            make_vline(120.0, 610.0, 700.0, 1),
++            make_vline(330.0, 610.0, 700.0, 1),
++            make_vline(420.0, 610.0, 700.0, 1),
++            make_vline(500.0, 610.0, 700.0, 1),
++        ];
++        let items = vec![
++            make_item("Key", 50.0, 684.0, 1),
++            make_item("Detail", 130.0, 684.0, 1),
++            make_item("Out", 340.0, 684.0, 1),
++            make_item("In", 430.0, 684.0, 1),
++            make_item("A-1", 50.0, 654.0, 1),
++            make_item("ALPHA", 130.0, 654.0, 1),
++            make_item("2.00", 340.0, 654.0, 1),
++            make_item("A-2", 50.0, 624.0, 1),
++            make_item("REPEAT", 130.0, 624.0, 1),
++            make_item("2.00", 430.0, 624.0, 1),
++        ];
++
++        let tables = detect_tables_from_lines(&items, &lines, 1);
++
++        assert_eq!(tables.len(), 1);
++        assert_eq!(
++            tables[0].cells,
++            vec![
++                vec!["Key".into(), "Detail".into(), "Out".into(), "In".into()],
++                vec!["A-1".into(), "ALPHA".into(), "2.00".into(), String::new()],
++                vec!["A-2".into(), "REPEAT".into(), String::new(), "2.00".into()],
++            ]
++        );
++    }
++
+     #[test]
+     fn test_short_lines_ignored() {
+         // Lines shorter than 20pt should be ignored
 diff --git a/src/tables/detect_rects.rs b/src/tables/detect_rects.rs
-index 130cdf7..a73ce0b 100644
+index 130cdf7..2765ea2 100644
 --- a/src/tables/detect_rects.rs
 +++ b/src/tables/detect_rects.rs
 @@ -6,7 +6,7 @@ use log::debug;
@@ -3231,14 +4399,11 @@ index 130cdf7..a73ce0b 100644
  
      // Compute column centers and row centers for the Table struct
      let columns: Vec<f32> = (0..num_cols)
-@@ -1648,12 +1650,16 @@ fn try_build_grid(
+@@ -1648,12 +1650,13 @@ fn try_build_grid(
              first_col,
              last_col
          );
-+        for span in &mut spans {
-+            span.column = span.column.saturating_sub(first_col);
-+        }
-+        spans.retain(|span| span.column < trimmed_cols.len());
++        trim_spans_to_columns(&mut spans, first_col, last_col);
          (trimmed_cols, trimmed_cells)
      } else {
          (columns, cells)
@@ -3249,7 +4414,111 @@ index 130cdf7..a73ce0b 100644
  }
  
  /// Deduplicate nearby edge values within a tolerance, returning sorted unique edges.
-@@ -1774,11 +1780,12 @@ fn propagate_merged_cells(
+@@ -1710,29 +1713,14 @@ pub(crate) fn assign_items_to_grid(
+         }
+     }
+ 
+-    // Build cell strings: sort items within each cell by Y descending then X ascending
++    // Preserve the renderer's established LTR baseline ordering and spacing.
++    // Reorder only RTL baselines so raw cells agree with structured source
++    // evidence without changing ordinary Markdown snapshots.
+     let mut cells: Vec<Vec<String>> = Vec::with_capacity(num_rows);
+     for row_items in &mut cell_items {
+         let mut row_cells = Vec::with_capacity(num_cols);
+         for col_items in row_items.iter_mut() {
+-            col_items.sort_by(|a, b| {
+-                b.1.y
+-                    .partial_cmp(&a.1.y)
+-                    .unwrap_or(std::cmp::Ordering::Equal)
+-                    .then_with(|| {
+-                        a.1.x
+-                            .partial_cmp(&b.1.x)
+-                            .unwrap_or(std::cmp::Ordering::Equal)
+-                    })
+-            });
+-            let text = col_items
+-                .iter()
+-                .map(|(_, item)| item.text.trim())
+-                .filter(|t| !t.is_empty())
+-                .collect::<Vec<_>>()
+-                .join(" ");
+-            let text = remove_inner_delimiter_spaces(&text);
+-            row_cells.push(text);
++            row_cells.push(join_grid_cell_items(col_items));
+         }
+         cells.push(row_cells);
+     }
+@@ -1740,6 +1728,69 @@ pub(crate) fn assign_items_to_grid(
+     (cells, indices)
+ }
+ 
++/// Intersect rectangle-backed spans with the retained outer-column range.
++/// A span wholly inside a removed column has no remaining logical anchor and
++/// must disappear rather than being clamped onto the new first column.
++fn trim_spans_to_columns(spans: &mut Vec<TableSpan>, first_column: usize, last_column: usize) {
++    let Some(retained_end) = last_column.checked_add(1) else {
++        spans.clear();
++        return;
++    };
++    spans.retain_mut(|span| {
++        let Some(span_end) = span.column.checked_add(span.column_span) else {
++            return false;
++        };
++        let start = span.column.max(first_column);
++        let end = span_end.min(retained_end);
++        if start >= end {
++            return false;
++        }
++        span.column = start - first_column;
++        span.column_span = end - start;
++        true
++    });
++}
++
++fn join_grid_cell_items(items: &mut [(usize, &TextItem)]) -> String {
++    const BASELINE_TOLERANCE: f32 = 2.5;
++
++    items.sort_by(|left, right| {
++        right
++            .1
++            .y
++            .total_cmp(&left.1.y)
++            .then_with(|| left.1.x.total_cmp(&right.1.x))
++    });
++
++    let mut line_text = Vec::new();
++    let mut start = 0;
++    while start < items.len() {
++        let baseline = items[start].1.y;
++        let mut end = start + 1;
++        while end < items.len() && (items[end].1.y - baseline).abs() <= BASELINE_TOLERANCE {
++            end += 1;
++        }
++        let mut line_items: Vec<TextItem> = items[start..end]
++            .iter()
++            .map(|(_, item)| (*item).clone())
++            .collect();
++        if crate::text_utils::is_rtl_text(line_items.iter().map(|item| &item.text)) {
++            crate::text_utils::sort_line_items(&mut line_items);
++        }
++        let text = line_items
++            .iter()
++            .map(|item| item.text.trim())
++            .filter(|text| !text.is_empty())
++            .collect::<Vec<_>>()
++            .join(" ");
++        if !text.is_empty() {
++            line_text.push(text);
++        }
++        start = end;
++    }
++    remove_inner_delimiter_spaces(&line_text.join(" "))
++}
++
+ fn remove_inner_delimiter_spaces(text: &str) -> String {
+     let chars: Vec<char> = text.chars().collect();
+     let mut result = String::with_capacity(text.len());
+@@ -1774,11 +1825,12 @@ fn propagate_merged_cells(
      row_edges: &[f32],
      group_rects: &[(f32, f32, f32, f32)],
      skip_rects: &[bool],
@@ -3263,7 +4532,7 @@ index 130cdf7..a73ce0b 100644
      for col in 0..num_cols {
          for (rect_idx, rect) in group_rects.iter().enumerate() {
              let (rx, ry, rw, rh) = *rect;
-@@ -1803,14 +1810,14 @@ fn propagate_merged_cells(
+@@ -1803,14 +1855,14 @@ fn propagate_merged_cells(
              // entirely below the row but still passes the tolerance-slack
              // check, cascading body text from unrelated rows into one
              // merged cell.
@@ -3281,7 +4550,7 @@ index 130cdf7..a73ce0b 100644
  
              let (first, last) = match (first_row, last_row) {
                  (Some(f), Some(l)) if l > f => (f, l),
-@@ -1834,8 +1841,15 @@ fn propagate_merged_cells(
+@@ -1834,8 +1886,15 @@ fn propagate_merged_cells(
              for row in cells.iter_mut().take(last + 1).skip(first + 1) {
                  row[col] = String::new();
              }
@@ -3297,7 +4566,90 @@ index 130cdf7..a73ce0b 100644
  }
  
  /// Check if rects form a row-stripe pattern (full-width horizontal bands).
-@@ -4409,9 +4423,26 @@ mod tests {
+@@ -4280,6 +4339,82 @@ mod tests {
+         assert_eq!(cells[0][0], "Top Bottom");
+     }
+ 
++    #[test]
++    fn rect_grid_rtl_cell_matches_structured_source_order() {
++        let items = vec![
++            make_item("גד", 15.0, 70.0, 10.0),
++            make_item("אב", 38.0, 70.0, 10.0),
++            make_item("H2", 55.0, 70.0, 10.0),
++            make_item("D1", 15.0, 40.0, 10.0),
++            make_item("D2", 55.0, 40.0, 10.0),
++            make_item("E1", 15.0, 10.0, 10.0),
++            make_item("E2", 55.0, 10.0, 10.0),
++        ];
++        let group_rects = make_grid_rects();
++        let skip = vec![false; group_rects.len()];
++        let GridResult::Ok(table) = try_build_grid(&items, &group_rects, 1, &skip, false) else {
++            panic!("expected rectangle grid");
++        };
++        assert_eq!(table.cells[0][0], "אב גד");
++
++        let crate::structured::StructuredBlockContent::Table { cells, .. } =
++            crate::structured::table_block(
++                &table,
++                &items,
++                crate::structured::test_page_geometry(),
++                None,
++            )
++            .content
++        else {
++            panic!("expected structured table");
++        };
++        let cell = cells
++            .iter()
++            .find(|cell| cell.row == 0 && cell.column == 0)
++            .expect("RTL cell");
++        assert_eq!(
++            cell.state,
++            crate::structured::StructuredCellState::Extracted
++        );
++        assert_eq!(cell.lines[0].text, "אב גד");
++    }
++
++    #[test]
++    fn trimming_outer_columns_discards_removed_spans_and_intersects_crossing_spans() {
++        let mut spans = vec![
++            TableSpan {
++                row: 0,
++                column: 0,
++                row_span: 1,
++                column_span: 1,
++            },
++            TableSpan {
++                row: 1,
++                column: 0,
++                row_span: 1,
++                column_span: 3,
++            },
++            TableSpan {
++                row: 2,
++                column: 3,
++                row_span: 1,
++                column_span: 1,
++            },
++        ];
++
++        trim_spans_to_columns(&mut spans, 1, 2);
++
++        assert_eq!(
++            spans,
++            vec![TableSpan {
++                row: 1,
++                column: 0,
++                row_span: 1,
++                column_span: 2,
++            }]
++        );
++    }
++
+     // --- is_row_stripe_pattern ---
+ 
+     #[test]
+@@ -4409,9 +4544,26 @@ mod tests {
          // Rect spanning both rows in col 0
          let group_rects = vec![(0.0, 60.0, 50.0, 40.0)];
          let skip = vec![false];

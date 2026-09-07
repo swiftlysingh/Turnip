@@ -36,26 +36,27 @@ import Testing
     }
     #expect(duplicateRows.count == 2)
     #expect(duplicateRows.map { $0[3] } == ["972.66", "952.66"])
-    let duplicateSourceRows = firstTable.cells.filter {
-        $0.column == 1 && $0.joinedText == "BOOKSTORE"
+    let duplicateSourceRows = tableSlots(firstTable).filter {
+        $0.column == 1 && $0.cell.joinedText == "BOOKSTORE"
     }.map(\.row)
     #expect(duplicateSourceRows.count == 2)
     #expect(Set(duplicateSourceRows).count == 2)
 
-    let wrappedCell = firstTable.cells.first {
-        $0.lines.map(\.text).contains("LONG MERCHANT")
-    }
+    let wrappedCell = tableSlots(firstTable).first {
+        $0.cell.lines.map(\.text).contains("LONG MERCHANT")
+    }?.cell
     #expect(wrappedCell?.lines.map(\.text) == ["LONG MERCHANT", "DESCRIPTION | CONTINUED"])
 
     // Every ordinary slot is represented, including the intentionally blank
     // balance cell. This is what keeps a blank from shifting later columns.
-    #expect(firstTable.cells.count == firstTable.rowCount * firstTable.columnCount)
+    #expect(firstTable.rows.count == firstTable.rowCount)
+    #expect(firstTable.rows.allSatisfy { $0.cells.count == firstTable.columnCount })
     for row in 0..<firstTable.rowCount {
         for column in 0..<firstTable.columnCount {
             #expect(firstTable.cell(row: row, column: column) != nil)
         }
     }
-    let emptyCells = firstTable.cells.filter { $0.state == .empty }
+    let emptyCells = tableSlots(firstTable).map(\.cell).filter { $0.state == .empty }
     #expect(emptyCells.count == 1)
     #expect(emptyCells.first?.joinedText == "")
 
@@ -82,20 +83,20 @@ import Testing
 
     // A source reference resolves the original cell and its extracted line;
     // it does not reinterpret the amount or its credit convention.
-    let creditCell = try #require(firstTable.cells.first {
-        $0.lines.map(\.text) == ["5.00 CR"]
+    let creditSlot = try #require(tableSlots(firstTable).first {
+        $0.cell.lines.map(\.text) == ["5.00 CR"]
     })
     let reference = DocumentSourceReference(
         pageIndex: 0,
         blockID: firstPage.blocks[firstTableIndex].id,
-        row: creditCell.row,
-        column: creditCell.column,
+        row: creditSlot.row,
+        column: creditSlot.column,
         lineIndex: 0
     )
-    #expect(document.cell(for: reference) == creditCell)
+    #expect(document.cell(for: reference) == creditSlot.cell)
     #expect(document.line(for: reference)?.text == "5.00 CR")
     #expect(document.text(for: reference) == "5.00 CR")
-    if let bounds = creditCell.bounds {
+    if let bounds = creditSlot.cell.bounds {
         assertNormalized(bounds)
     } else {
         Issue.record("The extracted credit cell did not retain source geometry")
@@ -114,6 +115,61 @@ import Testing
         try normalizedSemanticJSON(JSONEncoder().encode(document))
             == normalizedSemanticJSON(expected)
     )
+}
+
+@Test func structuredDocumentPreservesBorderlessTableCellsWithoutFinancialInterpretation() async throws {
+    let document = try await Turnip.extractDocument(borderlessRegisterPDF())
+    let page = try #require(document.pages.first)
+    let table = try #require(page.blocks.compactMap(\.table).first)
+    let rows = tableRows(table)
+
+    // The detector's table grid keeps blank slots, repeated source rows, and
+    // surrounding prose. Turnip does not assign any financial meaning to the
+    // two numeric columns.
+    #expect(rows.contains(["Code", "Label", "Out", "In"]))
+    #expect(rows.filter { $0 == ["R-03", "REPEAT", "", "4.50"] }.count == 2)
+    #expect(rows.contains(["R-05", "SINGLE", "7.00", ""]))
+
+    let repeatCells = tableSlots(table).filter {
+        $0.column == 1 && $0.cell.joinedText == "REPEAT"
+    }
+    #expect(repeatCells.count == 2)
+    #expect(Set(repeatCells.map(\.row)).count == 2)
+
+    let blankOut = try #require(tableSlots(table).first { slot in
+        slot.column == 2 && slot.cell.state == .empty
+    }).cell
+    let blankIn = try #require(tableSlots(table).first { slot in
+        slot.column == 3 && slot.cell.state == .empty
+    }).cell
+    #expect(blankOut.joinedText == "")
+    #expect(blankIn.joinedText == "")
+
+    let text = page.blocks.compactMap(\.text).flatMap(\.lines).map(\.text)
+    #expect(text.contains("Before borderless table"))
+    #expect(text.contains("After borderless table"))
+}
+
+@Test func structuredDocumentKeepsContinuationPageTableFragmentsInSourceOrder() async throws {
+    let document = try await Turnip.extractDocument(continuationTablesPDF())
+    #expect(document.pages.map(\.pageIndex) == [0, 1])
+
+    let firstPage = try #require(document.page(at: 0))
+    let secondPage = try #require(document.page(at: 1))
+    let firstTable = try #require(firstPage.blocks.compactMap(\.table).first)
+    let secondTable = try #require(secondPage.blocks.compactMap(\.table).first)
+
+    // Each physical source page remains a separate table fragment. Repeated
+    // headers are source evidence, so no cross-page merge guesses are made.
+    #expect(tableRows(firstTable).contains(["Key", "Detail", "Out", "In"]))
+    #expect(tableRows(firstTable).contains(["A-1", "ALPHA", "2.00", ""]))
+    #expect(tableRows(secondTable).contains(["Key", "Detail", "Out", "In"]))
+    #expect(tableRows(secondTable).contains(["B-1", "BETA", "", "2.00"]))
+
+    #expect(firstPage.blocks.first?.contentText.contains("Page one introduction") == true)
+    #expect(secondPage.blocks.first?.contentText.contains("Page two introduction") == true)
+    #expect(firstPage.blocks.last?.contentText.contains("Page one note") == true)
+    #expect(secondPage.blocks.last?.contentText.contains("Page two note") == true)
 }
 
 @Test func structuredDocumentRetainsSelectedOriginalPageIndexes() async throws {
@@ -193,12 +249,14 @@ import Testing
         return false
     })
     let table = try #require(tableBlock.table)
-    let creditCell = try #require(table.cells.first { $0.joinedText == "5.00 CR" })
+    let creditSlot = try #require(tableSlots(table).first {
+        $0.cell.joinedText == "5.00 CR"
+    })
     let source = DocumentSourceReference(
         pageIndex: 0,
         blockID: tableBlock.id,
-        row: creditCell.row,
-        column: creditCell.column
+        row: creditSlot.row,
+        column: creditSlot.column
     )
 
     // This conversion is deliberately consumer-owned. Turnip supplies the
@@ -409,12 +467,16 @@ import Testing
     })
     let content = try #require(tableBlock["content"] as? [String: Any])
     #expect(content["type"] as? String == "table")
-    #expect(content["rowCount"] as? Int ?? 0 > 0)
-    #expect(content["columnCount"] as? Int ?? 0 > 0)
-    #expect(content["cells"] is [[String: Any]])
+    #expect(content["rowCount"] == nil)
+    #expect(content["columnCount"] == nil)
+    #expect(content["cells"] == nil)
+    let rows = try #require(content["rows"] as? [[String: Any]])
+    #expect(!rows.isEmpty)
+    let firstRow = try #require(rows.first?["cells"] as? [[String: Any]])
+    #expect(!firstRow.isEmpty)
 
     let firstLine = try #require(
-        (content["cells"] as? [[String: Any]])?.first?["lines"] as? [[String: Any]]
+        firstRow.first?["lines"] as? [[String: Any]]
     )
     #expect(firstLine.first?["text"] is String)
 
@@ -489,33 +551,40 @@ import Testing
 
 @Test func tableSpansPreserveGridLookupAndSourceMeaning() throws {
     let merged = TableCell(
-        row: 0,
-        column: 0,
-        rowSpan: 2,
-        columnSpan: 2,
-        role: .header,
-        state: .extracted,
-        lines: [
+        content: .text([
             TextLine(text: "Merchant | Detail"),
             TextLine(text: "wrapped continuation"),
-        ]
+        ]),
+        role: .header,
+        span: TableCellSpan(rows: 2, columns: 2)
     )
     let body = TableCell(
-        row: 2,
-        column: 0,
+        content: .text([TextLine(text: "A")]),
         role: .body,
-        state: .extracted,
-        lines: [TextLine(text: "A")]
     )
-    let empty = TableCell(row: 2, column: 1, state: .empty)
-    let table = TableBlock(rowCount: 3, columnCount: 2, cells: [merged, body, empty])
+    let coveredByMerged = TableCell(
+        content: .covered(by: TableCellAddress(row: 0, column: 0))
+    )
+    let empty = TableCell(content: .empty)
+    let table = TableBlock(rows: [
+        TableRow(cells: [merged, coveredByMerged]),
+        TableRow(cells: [coveredByMerged, coveredByMerged]),
+        TableRow(cells: [body, empty]),
+    ])
 
     #expect(table.cell(row: 0, column: 0) == merged)
-    #expect(table.cell(row: 1, column: 1) == merged)
-    #expect(table.cell(row: 0, column: 1) == merged)
-    #expect(table.cell(row: 1, column: 0) == merged)
+    #expect(table.cell(row: 0, column: 1) == coveredByMerged)
+    #expect(table.cell(row: 1, column: 0) == coveredByMerged)
+    #expect(table.cell(row: 1, column: 1) == coveredByMerged)
     #expect(table.cell(row: 2, column: 0) == body)
     #expect(table.cell(row: 2, column: 1) == empty)
+    #expect(table.resolvedCell(row: 0, column: 0) == merged)
+    #expect(table.resolvedCell(row: 0, column: 1) == merged)
+    #expect(table.resolvedCell(row: 1, column: 0) == merged)
+    #expect(table.resolvedCell(row: 1, column: 1) == merged)
+    #expect(table.resolvedCellAddress(row: 0, column: 1) == TableCellAddress(row: 0, column: 0))
+    #expect(table.resolvedCellAddress(row: 1, column: 0) == TableCellAddress(row: 0, column: 0))
+    #expect(table.resolvedCellAddress(row: 1, column: 1) == TableCellAddress(row: 0, column: 0))
 
     let block = DocumentBlock(id: "p0-b0", content: .table(table))
     let inspection = DocumentInspection(
@@ -541,8 +610,17 @@ import Testing
         warnings: []
     )
     let reference = DocumentSourceReference(pageIndex: 0, blockID: "p0-b0", row: 1, column: 1)
-    #expect(document.cell(for: reference) == merged)
-    #expect(document.text(for: reference) == "Merchant | Detail\nwrapped continuation")
+    #expect(document.cell(for: reference) == coveredByMerged)
+    #expect(document.resolvedCell(for: reference) == merged)
+    let resolvedReference = DocumentSourceReference(
+        pageIndex: 0,
+        blockID: "p0-b0",
+        row: 0,
+        column: 0
+    )
+    #expect(document.resolvedSourceReference(for: reference) == resolvedReference)
+    #expect(document.text(for: reference) == nil)
+    #expect(document.text(for: resolvedReference) == "Merchant | Detail\nwrapped continuation")
 
     let encodedReference = try JSONEncoder().encode(reference)
     #expect(try JSONDecoder().decode(DocumentSourceReference.self, from: encodedReference) == reference)
@@ -559,7 +637,8 @@ import Testing
     let encodedPages = try #require(encodedObject["pages"] as? [[String: Any]])
     let encodedBlocks = try #require(encodedPages[0]["blocks"] as? [[String: Any]])
     let encodedContent = try #require(encodedBlocks[0]["content"] as? [String: Any])
-    let encodedCells = try #require(encodedContent["cells"] as? [[String: Any]])
+    let encodedRows = try #require(encodedContent["rows"] as? [[String: Any]])
+    let encodedCells = try #require(encodedRows[0]["cells"] as? [[String: Any]])
     let encodedLines = try #require(encodedCells[0]["lines"] as? [[String: Any]])
     #expect(encodedLines.map { $0["text"] as? String } == [
         "Merchant | Detail",
@@ -580,7 +659,11 @@ import Testing
     var gridPages = encodedPages
     var gridBlocks = try #require(gridPages[0]["blocks"] as? [[String: Any]])
     var gridContent = try #require(gridBlocks[0]["content"] as? [String: Any])
-    gridContent["rowCount"] = 1
+    var gridRows = try #require(gridContent["rows"] as? [[String: Any]])
+    var gridCells = try #require(gridRows[0]["cells"] as? [[String: Any]])
+    gridCells.removeLast()
+    gridRows[0]["cells"] = gridCells
+    gridContent["rows"] = gridRows
     gridBlocks[0]["content"] = gridContent
     gridPages[0]["blocks"] = gridBlocks
     invalidGrid["pages"] = gridPages
@@ -589,37 +672,37 @@ import Testing
 
 @Test func unresolvedCellKeepsPositionedLinesAndDifferentDetectorText() throws {
     let cell = TableCell(
-        row: 0,
-        column: 0,
-        state: .unresolved,
-        detectedText: "Detector joined value",
-        lines: [
-            TextLine(
-                text: "Positioned source",
-                bounds: DocumentBounds(x: 0.1, y: 0.2, width: 0.3, height: 0.04)
-            ),
-        ]
+        content: .unresolved(
+            lines: [
+                TextLine(
+                    text: "Positioned source",
+                    bounds: DocumentBounds(x: 0.1, y: 0.2, width: 0.3, height: 0.04)
+                ),
+            ],
+            candidateText: "Detector joined value"
+        )
     )
     let encoded = try JSONEncoder().encode(
-        TableBlock(rowCount: 1, columnCount: 1, cells: [cell])
+        TableBlock(rows: [TableRow(cells: [cell])])
     )
     let decoded = try JSONDecoder().decode(TableBlock.self, from: encoded)
+    let decodedCell = try #require(decoded.rows.first?.cells.first)
 
-    #expect(decoded.cells.first?.lines.map(\.text) == ["Positioned source"])
-    #expect(decoded.cells.first?.detectedText == "Detector joined value")
-    #expect(decoded.cells.first?.joinedText == "Positioned source")
+    #expect(decodedCell.lines.map(\.text) == ["Positioned source"])
+    #expect(decodedCell.unresolvedCandidateText == "Detector joined value")
+    #expect(decodedCell.joinedText == nil)
 }
 
 @Test func unresolvedCellWithoutEvidenceDoesNotLookLikeConfirmedEmptyText() {
-    let unresolved = TableCell(row: 0, column: 0, state: .unresolved)
-    let empty = TableCell(row: 0, column: 0, state: .empty)
+    let unresolved = TableCell(content: .unresolved(lines: [], candidateText: nil))
+    let empty = TableCell(content: .empty)
 
     #expect(unresolved.joinedText == nil)
     #expect(empty.joinedText == "")
 
     let block = DocumentBlock(
         id: "p0-b0",
-        content: .table(TableBlock(rowCount: 1, columnCount: 1, cells: [unresolved]))
+        content: .table(TableBlock(rows: [TableRow(cells: [unresolved])]))
     )
     let document = ExtractedDocument(
         inspection: DocumentInspection(
@@ -713,9 +796,15 @@ import Testing
 // MARK: - Fixture helpers
 
 private func tableRows(_ table: TableBlock) -> [[String]] {
-    (0..<table.rowCount).map { row in
-        (0..<table.columnCount).map { column in
-            table.cell(row: row, column: column)?.joinedText ?? "<unresolved>"
+    table.rows.map { row in
+        row.cells.map { $0.joinedText ?? "<unresolved>" }
+    }
+}
+
+private func tableSlots(_ table: TableBlock) -> [(row: Int, column: Int, cell: TableCell)] {
+    table.rows.enumerated().flatMap { row, tableRow in
+        tableRow.cells.enumerated().map { column, cell in
+            (row: row, column: column, cell: cell)
         }
     }
 }
@@ -761,6 +850,99 @@ private func normalizedSemanticJSON(_ data: Data) throws -> Data {
     inspection["processingTimeMilliseconds"] = 0
     object["inspection"] = inspection
     return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+}
+
+private func borderlessRegisterPDF() -> Data {
+    let content = """
+    BT
+    /F1 10 Tf
+    1 0 0 1 40 760 Tm (Before borderless table) Tj
+    1 0 0 1 50 700 Tm (Code) Tj
+    1 0 0 1 145 700 Tm (Label) Tj
+    1 0 0 1 360 700 Tm (Out) Tj
+    1 0 0 1 450 700 Tm (In) Tj
+    1 0 0 1 50 678 Tm (R-01) Tj
+    1 0 0 1 145 678 Tm (ALPHA) Tj
+    1 0 0 1 360 678 Tm (1.00) Tj
+    1 0 0 1 50 656 Tm (R-02) Tj
+    1 0 0 1 145 656 Tm (BETA) Tj
+    1 0 0 1 450 656 Tm (1.00) Tj
+    1 0 0 1 50 634 Tm (R-03) Tj
+    1 0 0 1 145 634 Tm (REPEAT) Tj
+    1 0 0 1 450 634 Tm (4.50) Tj
+    1 0 0 1 50 612 Tm (R-03) Tj
+    1 0 0 1 145 612 Tm (REPEAT) Tj
+    1 0 0 1 450 612 Tm (4.50) Tj
+    1 0 0 1 50 590 Tm (R-05) Tj
+    1 0 0 1 145 590 Tm (SINGLE) Tj
+    1 0 0 1 360 590 Tm (7.00) Tj
+    1 0 0 1 50 568 Tm (R-06) Tj
+    1 0 0 1 145 568 Tm (GAMMA) Tj
+    1 0 0 1 450 568 Tm (8.00) Tj
+    1 0 0 1 50 546 Tm (R-07) Tj
+    1 0 0 1 145 546 Tm (DELTA) Tj
+    1 0 0 1 360 546 Tm (9.00) Tj
+    1 0 0 1 50 524 Tm (R-08) Tj
+    1 0 0 1 145 524 Tm (OMEGA) Tj
+    1 0 0 1 450 524 Tm (10.00) Tj
+    1 0 0 1 40 450 Tm (After borderless table) Tj
+    ET
+    """
+    return makeTextAndGridPDF([content])
+}
+
+private func continuationTablesPDF() -> Data {
+    let pageOne = continuationTablePage(
+        introduction: "Page one introduction",
+        firstRow: ("A-1", "ALPHA", "2.00", ""),
+        secondRow: ("A-2", "REPEAT", "", "2.00"),
+        note: "Page one note"
+    )
+    let pageTwo = continuationTablePage(
+        introduction: "Page two introduction",
+        firstRow: ("B-1", "BETA", "", "2.00"),
+        secondRow: ("B-2", "REPEAT", "2.00", ""),
+        note: "Page two note"
+    )
+    return makeTextAndGridPDF([pageOne, pageTwo])
+}
+
+private func continuationTablePage(
+    introduction: String,
+    firstRow: (String, String, String, String),
+    secondRow: (String, String, String, String),
+    note: String
+) -> String {
+    """
+    0.7 w
+    40 700 m 500 700 l
+    40 670 m 500 670 l
+    40 640 m 500 640 l
+    40 610 m 500 610 l
+    40 700 m 40 610 l
+    120 700 m 120 610 l
+    330 700 m 330 610 l
+    420 700 m 420 610 l
+    500 700 m 500 610 l
+    S
+    BT
+    /F1 10 Tf
+    1 0 0 1 40 760 Tm (\(introduction)) Tj
+    1 0 0 1 50 684 Tm (Key) Tj
+    1 0 0 1 130 684 Tm (Detail) Tj
+    1 0 0 1 340 684 Tm (Out) Tj
+    1 0 0 1 430 684 Tm (In) Tj
+    1 0 0 1 50 654 Tm (\(firstRow.0)) Tj
+    1 0 0 1 130 654 Tm (\(firstRow.1)) Tj
+    1 0 0 1 340 654 Tm (\(firstRow.2)) Tj
+    1 0 0 1 430 654 Tm (\(firstRow.3)) Tj
+    1 0 0 1 50 624 Tm (\(secondRow.0)) Tj
+    1 0 0 1 130 624 Tm (\(secondRow.1)) Tj
+    1 0 0 1 340 624 Tm (\(secondRow.2)) Tj
+    1 0 0 1 430 624 Tm (\(secondRow.3)) Tj
+    1 0 0 1 40 540 Tm (\(note)) Tj
+    ET
+    """
 }
 
 private func inventedStatementPDF() -> Data {
@@ -1024,7 +1206,7 @@ private extension DocumentBlock {
         switch content {
         case let .text(value): value.joinedText
         case let .table(value):
-            value.cells.compactMap(\.joinedText).joined(separator: "\n")
+            value.rows.flatMap(\.cells).compactMap(\.joinedText).joined(separator: "\n")
         }
     }
 }

@@ -89,9 +89,28 @@ let json = try JSONEncoder().encode(document)
 `ExtractedDocument` contains the public schema version, full inspection data,
 every requested page, and extraction warnings. Each page has its original
 zero-based PDF index, upright visible size, processing status, and text or
-table blocks in inferred reading order. Tables preserve explicit grid indexes,
-blank and unresolved cells, supported spans, repeated headers, duplicate rows,
-source lines, and available geometry.
+table blocks in inferred reading order. Each table contains rectangular `rows`
+of `cells`. Cells distinguish confirmed text, empty slots, unresolved content,
+and slots covered by a span. Repeated headers and duplicate rows are retained.
+Table fragments stay on their source pages.
+
+```swift
+for page in document.pages {
+    for block in page.blocks {
+        guard case let .table(table) = block.content else { continue }
+        for row in table.rows {
+            for cell in row.cells {
+                if let text = cell.joinedText {
+                    print(text)
+                }
+            }
+        }
+    }
+}
+```
+
+Schema version 2 replaces the earlier flat cell list. Unresolved candidate text
+is diagnostic evidence and is never returned as confirmed `joinedText`.
 
 Source references identify a page, block, optional table cell, and optional
 line. A consumer can resolve them without matching text:
@@ -110,7 +129,7 @@ print(sourceText)
 ```
 
 Turnip leaves values such as `5.00 CR`, `(12.34)`, and `1.234,56` as strings.
-Statement layouts, dates, money, credit and debit conventions, merchants,
+Dates, money, credit and debit conventions, merchants,
 categories, reconciliation, and import decisions belong to the consuming app.
 See [StructuredDocument.md](Documentation/StructuredDocument.md) for the JSON
 contract, coordinates, partial extraction semantics, and a complete example.
