@@ -4,7 +4,7 @@
 - pdf-inspector repository: `swiftlysingh/pdf-inspector`
 - pdf-inspector upstream source revision: `2322bcce4cd9458d24399bf8fee42f1aa201c8c1`
 - Turnip patch: `Patches/pdf-inspector-embed-apple-cmaps.patch`
-- Turnip patch SHA-256: `54cde11dd5034b35a5f57a27f45972ef6d12d56614ad984227e63920628b65c7`
+- Turnip patch SHA-256: `76ab34609c4c83342a6efdcc5b1a54ed2b52302d0f3a416fbc55c801ac19b414`
 - Rust toolchain: `1.96.0`
 - Xcode: `27.0 (27A5194q)`
 
