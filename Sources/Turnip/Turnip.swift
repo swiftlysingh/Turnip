@@ -616,7 +616,9 @@ private struct Payload: Sendable {
         operation: EngineOperation,
         selectedPageIndexes: [Int]?
     ) throws {
-        guard response.schemaVersion == 2 else {
+        guard response.schemaVersion == 3
+            || (response.schemaVersion == 2 && operation != .document)
+        else {
             throw TurnipError.engineFailure(
                 code: "unsupported_schema",
                 message: "The PDF engine returned an unsupported response."
@@ -893,10 +895,21 @@ private struct WireDocumentBlock: Decodable {
         let publicContent: DocumentBlock.Content
         switch content {
         case let .text(lines):
-            publicContent = .text(TextBlock(lines: try lines.map { try $0.publicLine() }))
-        case let .table(rowCount, columnCount, cells):
+            publicContent = .text(
+                TextBlock(lines: try lines.enumerated().map { index, line in
+                    try line.publicLine(id: "\(id)-l\(index)")
+                })
+            )
+        case let .table(rowCount, columnCount, cells, continuationRows, unassignedLines):
             publicContent = .table(
-                try publicTable(rows: rowCount, columns: columnCount, wireCells: cells)
+                try publicTable(
+                    blockID: id,
+                    rows: rowCount,
+                    columns: columnCount,
+                    wireCells: cells,
+                    continuationRows: continuationRows,
+                    unassignedLines: unassignedLines
+                )
             )
         }
         return DocumentBlock(id: id, bounds: try bounds?.publicBounds(), content: publicContent)
@@ -904,9 +917,12 @@ private struct WireDocumentBlock: Decodable {
 }
 
 private func publicTable(
+    blockID: String,
     rows rowCount: Int,
     columns columnCount: Int,
-    wireCells: [WireTableCell]
+    wireCells: [WireTableCell],
+    continuationRows: [WireTableContinuation],
+    unassignedLines: [WireTextLine]
 ) throws -> TableBlock {
     guard rowCount > 0, columnCount > 0,
         !rowCount.multipliedReportingOverflow(by: columnCount).overflow
@@ -933,7 +949,7 @@ private func publicTable(
         }
 
         let anchor = TableCellAddress(row: wireCell.row, column: wireCell.column)
-        let publicCell = try wireCell.publicCell()
+        let publicCell = try wireCell.publicCell(blockID: blockID)
         for row in wireCell.row..<(wireCell.row + wireCell.rowSpan) {
             for column in wireCell.column..<(wireCell.column + wireCell.columnSpan) {
                 let index = row * columnCount + column
@@ -958,13 +974,36 @@ private func publicTable(
             message: "The PDF engine did not cover every table slot."
         )
     }
-    let tableRows = (0..<rowCount).map { row in
-        TableRow(cells: (0..<columnCount).map { column in
-            slots[row * columnCount + column]!
+    let continuationTargets = Dictionary(
+        continuationRows.map { ($0.row, $0.continuationOf) },
+        uniquingKeysWith: { first, _ in first }
+    )
+    guard continuationTargets.count == continuationRows.count,
+        continuationRows.allSatisfy({
+            (0..<rowCount).contains($0.row) && (0..<$0.row).contains($0.continuationOf)
         })
+    else {
+        throw TurnipError.engineFailure(
+            code: "invalid_table_layout",
+            message: "The PDF engine returned invalid continuation-row layout."
+        )
+    }
+    let tableRows = (0..<rowCount).map { row in
+        TableRow(
+            id: "\(blockID)-r\(row)",
+            cells: (0..<columnCount).map { column in
+                slots[row * columnCount + column]!
+            },
+            continuationOfRowID: continuationTargets[row].map { "\(blockID)-r\($0)" }
+        )
     }
     do {
-        return try TableBlock(validating: tableRows)
+        return try TableBlock(
+            validating: tableRows,
+            unassignedLines: unassignedLines.enumerated().map { index, line in
+                try line.publicLine(id: "\(blockID)-unassigned-l\(index)")
+            }
+        )
     } catch {
         throw TurnipError.engineFailure(
             code: "invalid_table_grid",
@@ -975,7 +1014,13 @@ private func publicTable(
 
 private enum WireBlockContent: Decodable {
     case text(lines: [WireTextLine])
-    case table(rowCount: Int, columnCount: Int, cells: [WireTableCell])
+    case table(
+        rowCount: Int,
+        columnCount: Int,
+        cells: [WireTableCell],
+        continuationRows: [WireTableContinuation],
+        unassignedLines: [WireTextLine]
+    )
 
     private enum CodingKeys: String, CodingKey {
         case type
@@ -983,6 +1028,8 @@ private enum WireBlockContent: Decodable {
         case rowCount = "row_count"
         case columnCount = "column_count"
         case cells
+        case continuationRows = "continuation_rows"
+        case unassignedLines = "unassigned_lines"
     }
 
     init(from decoder: Decoder) throws {
@@ -994,7 +1041,15 @@ private enum WireBlockContent: Decodable {
             self = .table(
                 rowCount: try container.decode(Int.self, forKey: .rowCount),
                 columnCount: try container.decode(Int.self, forKey: .columnCount),
-                cells: try container.decode([WireTableCell].self, forKey: .cells)
+                cells: try container.decode([WireTableCell].self, forKey: .cells),
+                continuationRows: try container.decode(
+                    [WireTableContinuation].self,
+                    forKey: .continuationRows
+                ),
+                unassignedLines: try container.decode(
+                    [WireTextLine].self,
+                    forKey: .unassignedLines
+                )
             )
         default:
             throw DecodingError.dataCorruptedError(
@@ -1003,6 +1058,16 @@ private enum WireBlockContent: Decodable {
                 debugDescription: "Unknown structured block type"
             )
         }
+    }
+}
+
+private struct WireTableContinuation: Decodable {
+    let row: Int
+    let continuationOf: Int
+
+    enum CodingKeys: String, CodingKey {
+        case row
+        case continuationOf = "continuation_of"
     }
 }
 
@@ -1029,7 +1094,7 @@ private struct WireTableCell: Decodable {
         case bounds
     }
 
-    func publicCell() throws -> TableCell {
+    func publicCell(blockID: String) throws -> TableCell {
         guard row >= 0, column >= 0, rowSpan > 0, columnSpan > 0 else {
             throw TurnipError.engineFailure(
                 code: "invalid_table_cell",
@@ -1051,7 +1116,9 @@ private struct WireTableCell: Decodable {
             )
         }
 
-        let publicLines = try lines.map { try $0.publicLine() }
+        let publicLines = try lines.enumerated().map { index, line in
+            try line.publicLine(id: "\(blockID)-r\(row)-c\(column)-l\(index)")
+        }
         let content: TableCell.Content
         switch state {
         case "extracted":
@@ -1100,8 +1167,8 @@ private struct WireTextLine: Decodable {
     let text: String
     let bounds: WireBounds?
 
-    func publicLine() throws -> TextLine {
-        TextLine(text: text, bounds: try bounds?.publicBounds())
+    func publicLine(id: String) throws -> TextLine {
+        return TextLine(id: id, text: text, bounds: try bounds?.publicBounds())
     }
 }
 

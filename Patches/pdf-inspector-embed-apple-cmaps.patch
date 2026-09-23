@@ -299,7 +299,7 @@ index c2c7b00..60d3f56 100644
  }
  
 diff --git a/src/lib.rs b/src/lib.rs
-index 7ebc8c9..6bcd852 100644
+index 7ebc8c9..600d6c4 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -38,6 +38,7 @@ pub mod glyph_names;
@@ -317,7 +317,7 @@ index 7ebc8c9..6bcd852 100644
 +pub use structured::{
 +    StructuredBlock, StructuredBlockContent, StructuredBounds, StructuredCellRole,
 +    StructuredCellState, StructuredDocument, StructuredPage, StructuredPageSize,
-+    StructuredPageStatus, StructuredTableCell, StructuredTextLine,
++    StructuredPageStatus, StructuredTableCell, StructuredTableContinuation, StructuredTextLine,
 +};
  pub use types::{LayoutComplexity, PdfLine, PdfRect, TextItem};
  
@@ -916,7 +916,7 @@ index 5e436c5..79d1462 100644
  /// so many lines that they clearly represent body text, not real headings.
  /// Returns the set of heading levels (1–6) that should be suppressed.
 diff --git a/src/markdown/mod.rs b/src/markdown/mod.rs
-index 4300f51..cdf771f 100644
+index 4300f51..de42ab0 100644
 --- a/src/markdown/mod.rs
 +++ b/src/markdown/mod.rs
 @@ -15,15 +15,16 @@ mod preprocess;
@@ -1623,7 +1623,7 @@ index 4300f51..cdf771f 100644
  
      // Check structure tree coverage on ALL text items (before table filtering)
      // to decide whether to use structure-aware markdown generation.
-@@ -1783,210 +2190,316 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
+@@ -1783,210 +2190,310 @@ pub(crate) fn to_markdown_from_items_with_rects_and_lines(
          .filter(|(idx, _)| !table_items.contains(idx))
          .collect();
  
@@ -2074,12 +2074,6 @@ index 4300f51..cdf771f 100644
 +        let captured_table_block = |capture: &convert::CapturedTable| {
 +            if capture.table.cells.is_empty()
 +                || capture.table.cells.iter().all(|row| row.is_empty())
-+                || (!capture.source_items.is_empty()
-+                    && !structured::table_items_have_complete_association(
-+                        &capture.table,
-+                        &capture.source_items,
-+                        geometry,
-+                    ))
 +            {
 +                structured::text_block_from_items(&capture.source_items, geometry)
 +            } else {
@@ -2118,7 +2112,7 @@ index 4300f51..cdf771f 100644
  }
  
  #[cfg(test)]
-@@ -2636,4 +3149,461 @@ mod tests {
+@@ -2636,4 +3143,461 @@ mod tests {
              "label+number table should not be split side-by-side"
          );
      }
@@ -2582,10 +2576,10 @@ index 4300f51..cdf771f 100644
  }
 diff --git a/src/structured.rs b/src/structured.rs
 new file mode 100644
-index 0000000..7d26150
+index 0000000..3976657
 --- /dev/null
 +++ b/src/structured.rs
-@@ -0,0 +1,2187 @@
+@@ -0,0 +1,2222 @@
 +//! Source-preserving structured extraction evidence and coordinate conversion.
 +//!
 +//! These types deliberately sit below application-specific interpretation.
@@ -2598,7 +2592,7 @@ index 0000000..7d26150
 +use serde::Serialize;
 +
 +use crate::structure_tree::StructRole;
-+use crate::tables::{Table, TableSpan};
++use crate::tables::{Table, TableKind, TableSpan};
 +use crate::types::{TextItem, TextLine};
 +use crate::PdfError;
 +
@@ -2661,7 +2655,16 @@ index 0000000..7d26150
 +        row_count: u32,
 +        column_count: u32,
 +        cells: Vec<StructuredTableCell>,
++        continuation_rows: Vec<StructuredTableContinuation>,
++        unassigned_lines: Vec<StructuredTextLine>,
 +    },
++}
++
++/// A physical detector row joined to an earlier row by shared layout cleanup.
++#[derive(Debug, Clone, Copy, Serialize)]
++pub struct StructuredTableContinuation {
++    pub row: u32,
++    pub continuation_of: u32,
 +}
 +
 +/// One extracted line before Markdown formatting or escaping.
@@ -2898,6 +2901,17 @@ index 0000000..7d26150
 +    let column_count = table.cells.iter().map(Vec::len).max().unwrap_or(0);
 +    let (mut cell_items, association_reliable) =
 +        assign_table_items(table, source_items, row_count, column_count, geometry);
++    let unassigned_lines = if association_reliable {
++        Vec::new()
++    } else {
++        let claimed_items: Vec<TextItem> = table
++            .item_indices
++            .iter()
++            .filter_map(|&index| source_items.get(index).cloned())
++            .collect();
++        cell_items = vec![vec![Vec::new(); column_count]; row_count];
++        source_lines(&claimed_items, geometry)
++    };
 +    let spans = normalized_spans(&table.spans, row_count, column_count);
 +    let mut covered = HashSet::new();
 +    let mut span_at_anchor = HashMap::new();
@@ -2987,6 +3001,29 @@ index 0000000..7d26150
 +    }
 +
 +    let bounds = union_bounds(cells.iter().filter_map(|cell| cell.bounds));
++    let continuation_rows = if table.kind == TableKind::Toc || !association_reliable {
++        Vec::new()
++    } else {
++        let mut last_row_by_anchor = HashMap::new();
++        crate::tables::format::table_layout(&table.cells)
++            .continuation_rows
++            .into_iter()
++            .filter_map(|(row, continuation_of)| {
++                let previous = last_row_by_anchor
++                    .get(&continuation_of)
++                    .copied()
++                    .unwrap_or(continuation_of);
++                if row != previous + 1 {
++                    return None;
++                }
++                last_row_by_anchor.insert(continuation_of, row);
++                Some(StructuredTableContinuation {
++                    row: row as u32,
++                    continuation_of: continuation_of as u32,
++                })
++            })
++            .collect()
++    };
 +    StructuredBlock {
 +        id: String::new(),
 +        bounds,
@@ -2994,21 +3031,10 @@ index 0000000..7d26150
 +            row_count: row_count as u32,
 +            column_count: column_count as u32,
 +            cells,
++            continuation_rows,
++            unassigned_lines,
 +        },
 +    }
-+}
-+
-+/// Whether every claimed positioned source item can be associated with the
-+/// detector's raw grid. Callers use this only to choose the existing text
-+/// fallback; it must not invent a nearest table cell for unassignable text.
-+pub(crate) fn table_items_have_complete_association(
-+    table: &Table,
-+    source_items: &[TextItem],
-+    geometry: PageGeometry,
-+) -> bool {
-+    let row_count = table.cells.len();
-+    let column_count = table.cells.iter().map(Vec::len).max().unwrap_or(0);
-+    assign_table_items(table, source_items, row_count, column_count, geometry).1
 +}
 +
 +/// Assign deterministic document-scoped block IDs after reading-order capture.
@@ -3987,6 +4013,7 @@ index 0000000..7d26150
 +            row_count,
 +            column_count,
 +            cells,
++            ..
 +        } = table_block(&table, &items, geometry(0), None).content
 +        else {
 +            panic!("expected a table block");
@@ -4505,6 +4532,7 @@ index 0000000..7d26150
 +            row_count,
 +            column_count,
 +            cells,
++            ..
 +        } = table_block(&table, &[], geometry(0), None).content
 +        else {
 +            panic!("expected a table block");
@@ -4540,6 +4568,7 @@ index 0000000..7d26150
 +            row_count,
 +            column_count,
 +            cells,
++            ..
 +        } = table_block(&table, &items, test_page_geometry(), None).content
 +        else {
 +            panic!("expected a table block");
@@ -5130,10 +5159,80 @@ index 130cdf7..2765ea2 100644
  
      #[test]
 diff --git a/src/tables/format.rs b/src/tables/format.rs
-index 25b2450..f9840dc 100644
+index 25b2450..21fd2a3 100644
 --- a/src/tables/format.rs
 +++ b/src/tables/format.rs
-@@ -860,6 +860,7 @@ mod tests {
+@@ -18,7 +18,9 @@ pub fn table_to_markdown(table: &Table) -> String {
+     }
+ 
+     // Clean up the table: merge continuation rows, extract footnotes, remove empty rows
+-    let (cleaned_cells, footnotes) = clean_table_cells(&table.cells);
++    let layout = table_layout(&table.cells);
++    let cleaned_cells = layout.rows;
++    let footnotes = layout.footnotes;
+ 
+     if cleaned_cells.is_empty() {
+         return String::new();
+@@ -255,11 +257,23 @@ fn ends_like_incomplete_phrase(cell: &str) -> bool {
+ }
+ 
+ /// Clean up table cells: merge continuation rows, extract footnotes, remove empty rows
+-fn clean_table_cells(cells: &[Vec<String>]) -> (Vec<Vec<String>>, Vec<String>) {
++/// Layout cleanup shared by Markdown and source-preserving output.
++///
++/// Structured output consumes only `continuation_rows`. Empty-row removal and
++/// footnote extraction remain Markdown presentation choices.
++pub(crate) struct TableLayout {
++    pub(crate) rows: Vec<Vec<String>>,
++    pub(crate) footnotes: Vec<String>,
++    pub(crate) continuation_rows: Vec<(usize, usize)>,
++}
++
++pub(crate) fn table_layout(cells: &[Vec<String>]) -> TableLayout {
+     let mut cleaned: Vec<Vec<String>> = Vec::new();
++    let mut cleaned_source_rows: Vec<usize> = Vec::new();
+     let mut footnotes: Vec<String> = Vec::new();
++    let mut continuation_rows = Vec::new();
+ 
+-    for row in cells {
++    for (source_row, row) in cells.iter().enumerate() {
+         // Check if this row is empty
+         if row.iter().all(|c| c.trim().is_empty()) {
+             continue;
+@@ -419,6 +433,9 @@ fn clean_table_cells(cells: &[Vec<String>]) -> (Vec<Vec<String>>, Vec<String>) {
+         if is_continuation {
+             // Merge with previous row
+             if let Some(prev_row) = cleaned.last_mut() {
++                if let Some(&anchor_row) = cleaned_source_rows.last() {
++                    continuation_rows.push((source_row, anchor_row));
++                }
+                 for (col_idx, cell) in row.iter().enumerate() {
+                     let cell_text = cell.trim();
+                     if !cell_text.is_empty() && col_idx < prev_row.len() {
+@@ -432,10 +449,21 @@ fn clean_table_cells(cells: &[Vec<String>]) -> (Vec<Vec<String>>, Vec<String>) {
+         } else {
+             // Regular row - add as new row
+             cleaned.push(row.iter().map(|c| c.trim().to_string()).collect());
++            cleaned_source_rows.push(source_row);
+         }
+     }
+ 
+-    (cleaned, footnotes)
++    TableLayout {
++        rows: cleaned,
++        footnotes,
++        continuation_rows,
++    }
++}
++
++#[cfg(test)]
++fn clean_table_cells(cells: &[Vec<String>]) -> (Vec<Vec<String>>, Vec<String>) {
++    let layout = table_layout(cells);
++    (layout.rows, layout.footnotes)
+ }
+ 
+ /// Check if a cell value indicates a footnote row
+@@ -860,6 +888,7 @@ mod tests {
                  vec!["Bob".into(), "25".into()],
              ],
              item_indices: vec![],
@@ -5141,7 +5240,7 @@ index 25b2450..f9840dc 100644
              kind: TableKind::Data,
          };
          let md = table_to_markdown(&table);
-@@ -876,6 +877,7 @@ mod tests {
+@@ -876,6 +905,7 @@ mod tests {
              rows: vec![500.0],
              cells: vec![vec!["Only".into(), "Row".into()]],
              item_indices: vec![],
@@ -5149,7 +5248,7 @@ index 25b2450..f9840dc 100644
              kind: TableKind::Data,
          };
          let md = table_to_markdown(&table);
-@@ -890,6 +892,7 @@ mod tests {
+@@ -890,6 +920,7 @@ mod tests {
              rows: vec![],
              cells: vec![],
              item_indices: vec![],
@@ -5157,7 +5256,7 @@ index 25b2450..f9840dc 100644
              kind: TableKind::Data,
          };
          assert_eq!(table_to_markdown(&table), "");
-@@ -906,6 +909,7 @@ mod tests {
+@@ -906,6 +937,7 @@ mod tests {
                  vec!["(1)".into(), "Footnote text".into()],
              ],
              item_indices: vec![],
@@ -5165,7 +5264,7 @@ index 25b2450..f9840dc 100644
              kind: TableKind::Data,
          };
          let md = table_to_markdown(&table);
-@@ -922,6 +926,7 @@ mod tests {
+@@ -922,6 +954,7 @@ mod tests {
                  vec!["太郎".into(), "25".into()],
              ],
              item_indices: vec![],
@@ -5173,7 +5272,7 @@ index 25b2450..f9840dc 100644
              kind: TableKind::Data,
          };
          let md = table_to_markdown(&table);
-@@ -936,6 +941,7 @@ mod tests {
+@@ -936,6 +969,7 @@ mod tests {
              rows: vec![500.0],
              cells: vec![vec![]],
              item_indices: vec![],
@@ -5234,9 +5333,18 @@ index dcf8fdf..82e227e 100644
          };
  
 diff --git a/src/tables/mod.rs b/src/tables/mod.rs
-index d856cb8..6991ee8 100644
+index d856cb8..2122b05 100644
 --- a/src/tables/mod.rs
 +++ b/src/tables/mod.rs
+@@ -7,7 +7,7 @@ mod detect_lines;
+ pub(crate) mod detect_rects;
+ mod detect_struct;
+ mod financial;
+-mod format;
++pub(crate) mod format;
+ mod grid;
+ pub mod structured;
+ 
 @@ -1448,10 +1448,34 @@ pub struct Table {
      pub cells: Vec<Vec<String>>,
      /// Items that belong to this table

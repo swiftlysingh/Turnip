@@ -98,9 +98,9 @@ Table fragments stay on their source pages.
 for page in document.pages {
     for block in page.blocks {
         guard case let .table(table) = block.content else { continue }
-        for row in table.rows {
+        for row in table.layoutRows {
             for cell in row.cells {
-                if let text = cell.joinedText {
+                if let text = cell.text {
                     print(text)
                 }
             }
@@ -109,8 +109,11 @@ for page in document.pages {
 }
 ```
 
-Schema version 2 replaces the earlier flat cell list. Unresolved candidate text
-is diagnostic evidence and is never returned as confirmed `joinedText`.
+Schema version 3 keeps every physical detector row in `rows` and adds
+`layoutRows`, the continuation-row and wrapped-content view shared with the
+Markdown renderer. A layout cell lists the IDs of every original line that
+contributed to it. Unresolved candidate text remains separate from confirmed
+text.
 
 Source references identify a page, block, optional table cell, and optional
 line. A consumer can resolve them without matching text:
@@ -127,6 +130,10 @@ guard let sourceCell = document.cell(for: source) else { return }
 guard let sourceText = sourceCell.joinedText else { return }
 print(sourceText)
 ```
+
+Each `TextLine.id` identifies one source occurrence, even when two lines have
+identical text. `sourceReference(forLineID:)` resolves that ID through the
+existing source-reference API.
 
 Turnip leaves values such as `5.00 CR`, `(12.34)`, and `1.234,56` as strings.
 Dates, money, credit and debit conventions, merchants,
