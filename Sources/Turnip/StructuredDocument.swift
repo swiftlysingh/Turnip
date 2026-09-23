@@ -3,7 +3,7 @@ import Foundation
 /// A structured representation of a locally extracted PDF.
 public struct ExtractedDocument: Codable, Sendable, Hashable {
     /// The current structured-document schema version.
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public let schemaVersion: Int
     public let inspection: DocumentInspection
@@ -155,12 +155,65 @@ public struct ExtractedDocument: Codable, Sendable, Hashable {
                 return nil
             }
             return text.lines[lineIndex]
-        case .table:
+        case let .table(table):
+            if reference.row == nil, reference.column == nil,
+                table.unassignedLines.indices.contains(lineIndex)
+            {
+                return table.unassignedLines[lineIndex]
+            }
             guard let cell = cell(for: reference), cell.lines.indices.contains(lineIndex) else {
                 return nil
             }
             return cell.lines[lineIndex]
         }
+    }
+
+    /// Finds one original source-line occurrence by its extraction-scoped ID.
+    public func line(id: String) -> TextLine? {
+        guard let reference = sourceReference(forLineID: id) else { return nil }
+        return line(for: reference)
+    }
+
+    /// Returns the existing source address for an original source-line ID.
+    public func sourceReference(forLineID id: String) -> DocumentSourceReference? {
+        for page in pages {
+            for block in page.blocks {
+                switch block.content {
+                case let .text(text):
+                    if let line = text.lines.firstIndex(where: { $0.id == id }) {
+                        return DocumentSourceReference(
+                            pageIndex: page.pageIndex,
+                            blockID: block.id,
+                            lineIndex: line
+                        )
+                    }
+                case let .table(table):
+                    if let line = table.unassignedLines.firstIndex(where: { $0.id == id }) {
+                        return DocumentSourceReference(
+                            pageIndex: page.pageIndex,
+                            blockID: block.id,
+                            lineIndex: line
+                        )
+                    }
+                    for row in table.rows.indices {
+                        for column in table.rows[row].cells.indices {
+                            if let line = table.rows[row].cells[column].lines.firstIndex(
+                                where: { $0.id == id }
+                            ) {
+                                return DocumentSourceReference(
+                                    pageIndex: page.pageIndex,
+                                    blockID: block.id,
+                                    row: row,
+                                    column: column,
+                                    lineIndex: line
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return nil
     }
 
     /// Resolves a source reference to confirmed extracted text.
@@ -179,6 +232,11 @@ public struct ExtractedDocument: Codable, Sendable, Hashable {
             }
             return text.joinedText
         case .table:
+            if reference.row == nil, reference.column == nil,
+                reference.lineIndex != nil
+            {
+                return line(for: reference)?.text
+            }
             guard let cell = cell(for: reference), cell.state == .text || cell.state == .empty else {
                 return nil
             }
@@ -382,6 +440,8 @@ public struct DocumentBlock: Codable, Sendable, Hashable {
             case type
             case lines
             case rows
+            case layoutRows
+            case unassignedLines
         }
 
         public init(from decoder: Decoder) throws {
@@ -390,9 +450,21 @@ public struct DocumentBlock: Codable, Sendable, Hashable {
             case "text":
                 self = .text(TextBlock(lines: try container.decode([TextLine].self, forKey: .lines)))
             case "table":
-                self = .table(
-                    try TableBlock(validating: container.decode([TableRow].self, forKey: .rows))
+                let table = try TableBlock(
+                    validating: container.decode([TableRow].self, forKey: .rows),
+                    unassignedLines: container.decode(
+                        [TextLine].self,
+                        forKey: .unassignedLines
+                    )
                 )
+                guard try container.decode([TableLayoutRow].self, forKey: .layoutRows)
+                    == table.layoutRows
+                else {
+                    throw StructuredDocumentCodingError.invalidValue(
+                        "Table layout rows do not match their source rows"
+                    )
+                }
+                self = .table(table)
             default:
                 throw StructuredDocumentCodingError.invalidValue("Unknown document block content type")
             }
@@ -407,6 +479,8 @@ public struct DocumentBlock: Codable, Sendable, Hashable {
             case let .table(table):
                 try container.encode("table", forKey: .type)
                 try container.encode(table.rows, forKey: .rows)
+                try container.encode(table.layoutRows, forKey: .layoutRows)
+                try container.encode(table.unassignedLines, forKey: .unassignedLines)
             }
         }
     }
@@ -432,6 +506,10 @@ public struct TableBlock: Codable, Sendable, Hashable {
     /// Rows in the detector's table order.
     public let rows: [TableRow]
 
+    /// Positioned source lines claimed by the detector but not safely
+    /// associated with a logical cell.
+    public let unassignedLines: [TextLine]
+
     /// The number of logical rows, derived from rows.
     public var rowCount: Int {
         rows.count
@@ -442,27 +520,66 @@ public struct TableBlock: Codable, Sendable, Hashable {
         rows.first?.cells.count ?? 0
     }
 
-    public init(rows: [TableRow]) {
-        precondition(Self.isValid(rows: rows), "Table rows must form a complete rectangular grid")
-        self.rows = rows
+    /// Rows after shared continuation and wrapped-content joining.
+    ///
+    /// Physical source rows remain available in `rows`. Each layout row names
+    /// every physical row and source-line occurrence that contributed to it.
+    public var layoutRows: [TableLayoutRow] {
+        rows.indices.compactMap { row in
+            guard rows[row].continuationOfRowID == nil else { return nil }
+            let sourceRows = [row] + rows.indices.filter {
+                rows[$0].continuationOfRowID == rows[row].id
+            }
+            return TableLayoutRow(
+                id: rows[row].id,
+                sourceRowIDs: sourceRows.map { rows[$0].id },
+                cells: (0..<columnCount).map { column in
+                    TableLayoutCell(sourceCells: sourceRows.map { rows[$0].cells[column] })
+                }
+            )
+        }
     }
 
-    init(validating rows: [TableRow]) throws {
+    public init(rows: [TableRow], unassignedLines: [TextLine] = []) {
+        precondition(Self.isValid(rows: rows), "Table rows must form a complete rectangular grid")
+        self.rows = rows
+        self.unassignedLines = unassignedLines
+    }
+
+    init(validating rows: [TableRow], unassignedLines: [TextLine] = []) throws {
         guard Self.isValid(rows: rows) else {
             throw StructuredDocumentCodingError.invalidValue(
                 "Table rows must form a complete rectangular grid"
             )
         }
         self.rows = rows
+        self.unassignedLines = unassignedLines
     }
 
     private enum CodingKeys: String, CodingKey {
         case rows
+        case layoutRows
+        case unassignedLines
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        try self.init(validating: try container.decode([TableRow].self, forKey: .rows))
+        try self.init(
+            validating: try container.decode([TableRow].self, forKey: .rows),
+            unassignedLines: container.decode([TextLine].self, forKey: .unassignedLines)
+        )
+        guard try container.decode([TableLayoutRow].self, forKey: .layoutRows) == layoutRows else {
+            throw StructuredDocumentCodingError.invalidValue(
+                "Table layout rows do not match their source rows"
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(rows, forKey: .rows)
+        try container.encode(layoutRows, forKey: .layoutRows)
+        try container.encode(unassignedLines, forKey: .unassignedLines)
     }
 
     /// Returns the literal table slot at a zero-based row and column.
@@ -496,6 +613,20 @@ public struct TableBlock: Codable, Sendable, Hashable {
         let rowCount = rows.count
         let columnCount = firstRow.cells.count
         guard rows.allSatisfy({ $0.cells.count == columnCount }) else { return false }
+        let rowIndexes = Dictionary(
+            rows.indices.map { (rows[$0].id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        guard rowIndexes.count == rowCount,
+            rows.indices.allSatisfy({ row in
+                guard let target = rows[row].continuationOfRowID else { return true }
+                return rowIndexes[target].map {
+                    $0 < row && rows[$0].continuationOfRowID == nil
+                } ?? false
+            })
+        else {
+            return false
+        }
 
         var coverage = Array(
             repeating: Array<TableCellAddress?>(repeating: nil, count: columnCount),
@@ -544,25 +675,83 @@ public struct TableBlock: Codable, Sendable, Hashable {
 
 /// One logical row in a rectangular table.
 public struct TableRow: Codable, Sendable, Hashable {
+    /// An opaque occurrence ID unique within this extraction result.
+    public let id: String
+
     /// Cells in zero-based column order.
     public let cells: [TableCell]
 
-    public init(cells: [TableCell]) {
+    /// The earlier physical row this row continues after shared layout cleanup.
+    public let continuationOfRowID: String?
+
+    public init(id: String, cells: [TableCell], continuationOfRowID: String? = nil) {
+        precondition(!id.isEmpty, "Table row IDs cannot be empty")
         precondition(!cells.isEmpty, "Table rows cannot be empty")
+        self.id = id
         self.cells = cells
+        self.continuationOfRowID = continuationOfRowID
+    }
+
+    public init(cells: [TableCell]) {
+        self.init(id: UUID().uuidString, cells: cells)
     }
 
     private enum CodingKeys: String, CodingKey {
+        case id
         case cells
+        case continuationOfRowID
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let id = try container.decode(String.self, forKey: .id)
         let cells = try container.decode([TableCell].self, forKey: .cells)
-        guard !cells.isEmpty else {
+        guard !id.isEmpty, !cells.isEmpty else {
             throw StructuredDocumentCodingError.invalidValue("Table rows cannot be empty")
         }
+        self.id = id
         self.cells = cells
+        self.continuationOfRowID = try container.decodeIfPresent(
+            String.self,
+            forKey: .continuationOfRowID
+        )
+    }
+}
+
+/// A display row derived from one or more physical detector rows.
+public struct TableLayoutRow: Codable, Sendable, Hashable {
+    public let id: String
+    public let sourceRowIDs: [String]
+    public let cells: [TableLayoutCell]
+}
+
+/// Joined cell text plus the original source occurrences that produced it.
+public struct TableLayoutCell: Codable, Sendable, Hashable {
+    public let state: TableCellState
+    public let text: String?
+    public let candidateText: String?
+    public let sourceLineIDs: [String]
+
+    fileprivate init(sourceCells: [TableCell]) {
+        sourceLineIDs = sourceCells.flatMap { $0.lines.map(\.id) }
+        if sourceCells.contains(where: { $0.state == .unresolved }) {
+            state = .unresolved
+            text = nil
+            let candidates = sourceCells.compactMap(\.unresolvedCandidateText)
+            candidateText = candidates.isEmpty ? nil : candidates.joined(separator: " ")
+        } else if sourceCells.allSatisfy({ $0.state == .covered }) {
+            state = .covered
+            text = nil
+            candidateText = nil
+        } else {
+            let fragments = sourceCells
+                .filter { $0.state != .covered }
+                .compactMap(\.joinedText)
+                .filter { !$0.isEmpty }
+            state = fragments.isEmpty ? .empty : .text
+            text = fragments.joined(separator: " ")
+            candidateText = nil
+        }
     }
 }
 
@@ -884,12 +1073,20 @@ public struct TableCell: Codable, Sendable, Hashable {
 
 /// One extracted line and its optional source bounds.
 public struct TextLine: Codable, Sendable, Hashable {
+    /// An opaque source-occurrence ID unique within this extraction result.
+    public let id: String
     public let text: String
     public let bounds: DocumentBounds?
 
-    public init(text: String, bounds: DocumentBounds? = nil) {
+    public init(id: String, text: String, bounds: DocumentBounds? = nil) {
+        precondition(!id.isEmpty, "Source line IDs cannot be empty")
+        self.id = id
         self.text = text
         self.bounds = bounds
+    }
+
+    public init(text: String, bounds: DocumentBounds? = nil) {
+        self.init(id: UUID().uuidString, text: text, bounds: bounds)
     }
 }
 
@@ -1028,9 +1225,20 @@ private func isValidStructuredDocument(
     }
 
     var blockIDs = Set<String>()
+    var lineIDs = Set<String>()
     for page in pages {
         for block in page.blocks {
             guard blockIDs.insert(block.id).inserted else { return false }
+            let lines: [TextLine]
+            switch block.content {
+            case let .text(text):
+                lines = text.lines
+            case let .table(table):
+                lines = table.rows.flatMap { $0.cells.flatMap(\.lines) } + table.unassignedLines
+            }
+            guard lines.allSatisfy({ !$0.id.isEmpty && lineIDs.insert($0.id).inserted }) else {
+                return false
+            }
         }
     }
     return true

@@ -76,7 +76,11 @@ let anchorCell = document.resolvedCell(for: source)
 
 `cell(for:)` keeps a literal covered slot distinct from its span anchor.
 `resolvedCell(for:)` follows that link only when an app asks it to. Cell text
-stays as decoded strings and source lines. The consuming app owns any
+stays as decoded strings and source lines. `TableBlock.layoutRows` exposes the
+continuation-row joins shared with Markdown while `TableBlock.rows` retains
+every physical row. Each joined cell lists its contributing `TextLine.id`
+values, which ``ExtractedDocument/sourceReference(forLineID:)`` resolves back
+to original evidence. The consuming app owns any
 domain-specific interpretation, normalization, or import decision.
 
 For a scanned or image-only PDF, Markdown extraction throws
@@ -122,6 +126,8 @@ the input boundaries, redacted reports, and holdout rules.
 - ``TextBlock``
 - ``TableBlock``
 - ``TableRow``
+- ``TableLayoutRow``
+- ``TableLayoutCell``
 - ``TableCell``
 - ``TableCellRole``
 - ``TableCellState``
