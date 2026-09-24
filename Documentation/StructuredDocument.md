@@ -225,8 +225,8 @@ keeps nearby context, literal values, uncertainty, and source occurrences:
 
 The unresolved `MARKET` candidate is not confirmed text. A confirmed blank is
 encoded as `state: "empty"`; a spanning slot uses `state: "covered"` and its
-anchor address. JEV can select from supplied block, row, column, and source-line IDs.
-For example, it can select `p0-b1` as a transaction
+anchor address. JEV can return supplied block, row, column, and source-line IDs,
+plus `none` or `unknown`. For example, it can select `p0-b1` as a transaction
 table, column `0` as a date candidate, `p0-b1-r2` as a continuation of
 `p0-b1-r1`, or no table continuation across the next page. The application then
 resolves those IDs against `ExtractedDocument` and reads Turnip's literal
