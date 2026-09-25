@@ -3,7 +3,7 @@ import Testing
 @testable import Turnip
 
 @Test func tableRowsExposeLiteralCoveredSlotsAndExplicitResolution() throws {
-    let document = v2Document()
+    let document = structuredDocumentFixture()
     let reference = DocumentSourceReference(
         pageIndex: 0,
         blockID: "opaque-table",
@@ -39,7 +39,7 @@ import Testing
 }
 
 @Test func unresolvedEvidenceNeverBecomesConfirmedCellText() throws {
-    let document = v2Document()
+    let document = structuredDocumentFixture()
     let reference = DocumentSourceReference(
         pageIndex: 0,
         blockID: "opaque-table",
@@ -65,14 +65,14 @@ import Testing
     #expect(document.text(for: lineReference) == nil)
 }
 
-@Test func v2JSONUsesRowsAndRoundTripsWithoutFlattenedCoordinates() throws {
-    let document = v2Document()
+@Test func currentJSONUsesRowsAndRoundTripsWithoutFlattenedCoordinates() throws {
+    let document = structuredDocumentFixture()
     let encoded = try JSONEncoder().encode(document)
     let decoded = try JSONDecoder().decode(ExtractedDocument.self, from: encoded)
     #expect(decoded == document)
 
     let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
-    #expect(object["schemaVersion"] as? Int == 2)
+    #expect(object["schemaVersion"] as? Int == ExtractedDocument.currentSchemaVersion)
     let pages = try #require(object["pages"] as? [[String: Any]])
     let blocks = try #require(pages[0]["blocks"] as? [[String: Any]])
     let tableContent = try #require(
@@ -88,13 +88,13 @@ import Testing
     #expect(firstCell?["row"] == nil)
     #expect(firstCell?["column"] == nil)
 
-    let invalid = Data(#"{"state":"empty","lines":[{"text":"unexpected"}]}"#.utf8)
+    let invalid = Data(#"{"state":"empty","lines":[{"id":"unexpected-line","text":"unexpected"}]}"#.utf8)
     #expect(throws: Error.self) {
         _ = try JSONDecoder().decode(TableCell.self, from: invalid)
     }
 }
 
-private func v2Document() -> ExtractedDocument {
+private func structuredDocumentFixture() -> ExtractedDocument {
     let heading = TableCell(
         content: .text([
             TextLine(text: "North"),

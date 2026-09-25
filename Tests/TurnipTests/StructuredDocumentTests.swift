@@ -737,7 +737,7 @@ import Testing
 @Test func structuredJSONHandlesNullsAndRejectsEmptyBoundsOrInvalidIdentity() throws {
     let lineWithNull = try JSONDecoder().decode(
         TextLine.self,
-        from: Data(#"{"text":"Source","bounds":null}"#.utf8)
+        from: Data(#"{"id":"source-line","text":"Source","bounds":null}"#.utf8)
     )
     let reencodedLine = try #require(
         JSONSerialization.jsonObject(with: JSONEncoder().encode(lineWithNull)) as? [String: Any]

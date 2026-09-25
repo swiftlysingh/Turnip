@@ -1,12 +1,15 @@
 # DocumentKitCore build provenance
 
+- Turnip source revision: `cee676c8458c09e29e2cae2e263a06262786930c`
+
 - pdf-inspector version: `1.14.2`
 - pdf-inspector repository: `swiftlysingh/pdf-inspector`
 - pdf-inspector upstream source revision: `2322bcce4cd9458d24399bf8fee42f1aa201c8c1`
 - Turnip patch: `Patches/pdf-inspector-embed-apple-cmaps.patch`
-- Turnip patch SHA-256: `76ab34609c4c83342a6efdcc5b1a54ed2b52302d0f3a416fbc55c801ac19b414`
+- Turnip patch SHA-256: `22c266b3c3f0f1e0fe66934e05ccd826cbdad1765c571da8c113b5bfb8ce986f`
 - Rust toolchain: `1.96.0`
-- Xcode: `27.0 (27A5194q)`
+- Xcode: `27.0 (27A266a)`
+- Host build dependency profile: `strip = "none"` to keep Rust 1.96/macOS 27 proc-macro dylibs loadable; final release static libraries remain `strip = "symbols"`.
 
 The artifact includes indirect Form resource decoding and first-transaction-row
 deduplication from the pinned fork. It was built with CMaps embedded, the Apple
