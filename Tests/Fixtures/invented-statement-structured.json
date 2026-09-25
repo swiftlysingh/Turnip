@@ -1,6 +1,6 @@
 {
   "warnings": [],
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "inspection": {
     "kind": "text_based",
     "processingTimeMilliseconds": 0,
@@ -45,7 +45,8 @@
                   "width": 0.21325001,
                   "x": 0.06535948
                 },
-                "text": "INVENTED COMMUNITY BANK"
+                "text": "INVENTED COMMUNITY BANK",
+                "id": "p0-b0-l0"
               },
               {
                 "bounds": {
@@ -54,7 +55,8 @@
                   "width": 0.22152942,
                   "x": 0.06535948
                 },
-                "text": "Statement period: 01 Jan - 31 Jan"
+                "text": "Statement period: 01 Jan - 31 Jan",
+                "id": "p0-b0-l1"
               },
               {
                 "bounds": {
@@ -63,7 +65,8 @@
                   "width": 0.09886765,
                   "x": 0.06535948
                 },
-                "text": "Currency: USD"
+                "text": "Currency: USD",
+                "id": "p0-b0-l2"
               },
               {
                 "bounds": {
@@ -72,7 +75,8 @@
                   "width": 0.13816178,
                   "x": 0.06535948
                 },
-                "text": "Account ending 4242"
+                "text": "Account ending 4242",
+                "id": "p0-b0-l3"
               }
             ],
             "type": "text"
@@ -93,7 +97,8 @@
                           "x": 0.08169935,
                           "height": 0.01136364,
                           "width": 0.031058818
-                        }
+                        },
+                        "id": "p0-b1-r0-c0-l0"
                       }
                     ],
                     "bounds": {
@@ -113,7 +118,8 @@
                           "x": 0.2124183,
                           "height": 0.01136364,
                           "width": 0.07354413
-                        }
+                        },
+                        "id": "p0-b1-r0-c1-l0"
                       }
                     ],
                     "bounds": {
@@ -133,7 +139,8 @@
                           "x": 0.60457516,
                           "height": 0.01136364,
                           "width": 0.050676465
-                        }
+                        },
+                        "id": "p0-b1-r0-c2-l0"
                       }
                     ],
                     "bounds": {
@@ -153,7 +160,8 @@
                           "x": 0.74346405,
                           "height": 0.01136364,
                           "width": 0.053132355
-                        }
+                        },
+                        "id": "p0-b1-r0-c3-l0"
                       }
                     ],
                     "bounds": {
@@ -163,7 +171,8 @@
                       "width": 0.053132355
                     }
                   }
-                ]
+                ],
+                "id": "p0-b1-r0"
               },
               {
                 "cells": [
@@ -177,7 +186,8 @@
                           "x": 0.08169935,
                           "height": 0.01136364,
                           "width": 0.044147067
-                        }
+                        },
+                        "id": "p0-b1-r1-c0-l0"
                       }
                     ],
                     "bounds": {
@@ -197,7 +207,8 @@
                           "x": 0.2124183,
                           "height": 0.01136364,
                           "width": 0.11602943
-                        }
+                        },
+                        "id": "p0-b1-r1-c1-l0"
                       }
                     ],
                     "bounds": {
@@ -217,7 +228,8 @@
                           "x": 0.60457516,
                           "height": 0.01136364,
                           "width": 0.036794126
-                        }
+                        },
+                        "id": "p0-b1-r1-c2-l0"
                       }
                     ],
                     "bounds": {
@@ -237,7 +249,8 @@
                           "x": 0.74346405,
                           "height": 0.01136364,
                           "width": 0.044970572
-                        }
+                        },
+                        "id": "p0-b1-r1-c3-l0"
                       }
                     ],
                     "bounds": {
@@ -247,7 +260,8 @@
                       "width": 0.044970572
                     }
                   }
-                ]
+                ],
+                "id": "p0-b1-r1"
               },
               {
                 "cells": [
@@ -261,7 +275,8 @@
                           "x": 0.08169935,
                           "height": 0.01136364,
                           "width": 0.044147067
-                        }
+                        },
+                        "id": "p0-b1-r2-c0-l0"
                       }
                     ],
                     "bounds": {
@@ -281,7 +296,8 @@
                           "x": 0.2124183,
                           "height": 0.01136364,
                           "width": 0.10702945
-                        }
+                        },
+                        "id": "p0-b1-r2-c1-l0"
                       }
                     ],
                     "bounds": {
@@ -301,7 +317,8 @@
                           "x": 0.60457516,
                           "height": 0.01136364,
                           "width": 0.05394119
-                        }
+                        },
+                        "id": "p0-b1-r2-c2-l0"
                       }
                     ],
                     "bounds": {
@@ -314,7 +331,8 @@
                   {
                     "state": "empty"
                   }
-                ]
+                ],
+                "id": "p0-b1-r2"
               },
               {
                 "cells": [
@@ -328,7 +346,8 @@
                           "x": 0.08169935,
                           "height": 0.0113636255,
                           "width": 0.044147067
-                        }
+                        },
+                        "id": "p0-b1-r3-c0-l0"
                       }
                     ],
                     "bounds": {
@@ -348,7 +367,8 @@
                           "x": 0.2124183,
                           "height": 0.0113636255,
                           "width": 0.09316178
-                        }
+                        },
+                        "id": "p0-b1-r3-c1-l0"
                       }
                     ],
                     "bounds": {
@@ -368,7 +388,8 @@
                           "x": 0.60457516,
                           "height": 0.0113636255,
                           "width": 0.036794126
-                        }
+                        },
+                        "id": "p0-b1-r3-c2-l0"
                       }
                     ],
                     "bounds": {
@@ -388,7 +409,8 @@
                           "x": 0.74346405,
                           "height": 0.0113636255,
                           "width": 0.044970572
-                        }
+                        },
+                        "id": "p0-b1-r3-c3-l0"
                       }
                     ],
                     "bounds": {
@@ -398,7 +420,8 @@
                       "width": 0.044970572
                     }
                   }
-                ]
+                ],
+                "id": "p0-b1-r3"
               },
               {
                 "cells": [
@@ -412,7 +435,8 @@
                           "x": 0.08169935,
                           "height": 0.0113636255,
                           "width": 0.044147067
-                        }
+                        },
+                        "id": "p0-b1-r4-c0-l0"
                       }
                     ],
                     "bounds": {
@@ -432,7 +456,8 @@
                           "x": 0.2124183,
                           "height": 0.0113636255,
                           "width": 0.09316178
-                        }
+                        },
+                        "id": "p0-b1-r4-c1-l0"
                       }
                     ],
                     "bounds": {
@@ -452,7 +477,8 @@
                           "x": 0.60457516,
                           "height": 0.0113636255,
                           "width": 0.036794126
-                        }
+                        },
+                        "id": "p0-b1-r4-c2-l0"
                       }
                     ],
                     "bounds": {
@@ -472,7 +498,8 @@
                           "x": 0.74346405,
                           "height": 0.0113636255,
                           "width": 0.044970572
-                        }
+                        },
+                        "id": "p0-b1-r4-c3-l0"
                       }
                     ],
                     "bounds": {
@@ -482,7 +509,8 @@
                       "width": 0.044970572
                     }
                   }
-                ]
+                ],
+                "id": "p0-b1-r4"
               },
               {
                 "cells": [
@@ -496,7 +524,8 @@
                           "x": 0.08169935,
                           "height": 0.0113636255,
                           "width": 0.044147067
-                        }
+                        },
+                        "id": "p0-b1-r5-c0-l0"
                       }
                     ],
                     "bounds": {
@@ -516,7 +545,8 @@
                           "x": 0.2124183,
                           "height": 0.0113636255,
                           "width": 0.12908824
-                        }
+                        },
+                        "id": "p0-b1-r5-c1-l0"
                       },
                       {
                         "text": "DESCRIPTION | CONTINUED",
@@ -525,7 +555,8 @@
                           "x": 0.2124183,
                           "height": 0.0113636255,
                           "width": 0.19991179
-                        }
+                        },
+                        "id": "p0-b1-r5-c1-l1"
                       }
                     ],
                     "bounds": {
@@ -545,7 +576,8 @@
                           "x": 0.60457516,
                           "height": 0.0113636255,
                           "width": 0.036794126
-                        }
+                        },
+                        "id": "p0-b1-r5-c2-l0"
                       }
                     ],
                     "bounds": {
@@ -565,7 +597,8 @@
                           "x": 0.74346405,
                           "height": 0.0113636255,
                           "width": 0.044970572
-                        }
+                        },
+                        "id": "p0-b1-r5-c3-l0"
                       }
                     ],
                     "bounds": {
@@ -575,10 +608,229 @@
                       "width": 0.044970572
                     }
                   }
-                ]
+                ],
+                "id": "p0-b1-r5"
               }
             ],
-            "type": "table"
+            "type": "table",
+            "unassignedLines": [],
+            "layoutRows": [
+              {
+                "id": "p0-b1-r0",
+                "sourceRowIDs": [
+                  "p0-b1-r0"
+                ],
+                "cells": [
+                  {
+                    "state": "text",
+                    "text": "Date",
+                    "sourceLineIDs": [
+                      "p0-b1-r0-c0-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "Description",
+                    "sourceLineIDs": [
+                      "p0-b1-r0-c1-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "Amount",
+                    "sourceLineIDs": [
+                      "p0-b1-r0-c2-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "Balance",
+                    "sourceLineIDs": [
+                      "p0-b1-r0-c3-l0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "p0-b1-r1",
+                "sourceRowIDs": [
+                  "p0-b1-r1"
+                ],
+                "cells": [
+                  {
+                    "state": "text",
+                    "text": "03 Jan",
+                    "sourceLineIDs": [
+                      "p0-b1-r1-c0-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "COFFEE HOUSE",
+                    "sourceLineIDs": [
+                      "p0-b1-r1-c1-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "12.34",
+                    "sourceLineIDs": [
+                      "p0-b1-r1-c2-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "987.66",
+                    "sourceLineIDs": [
+                      "p0-b1-r1-c3-l0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "p0-b1-r2",
+                "sourceRowIDs": [
+                  "p0-b1-r2"
+                ],
+                "cells": [
+                  {
+                    "state": "text",
+                    "text": "04 Jan",
+                    "sourceLineIDs": [
+                      "p0-b1-r2-c0-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "REFUND SHOP",
+                    "sourceLineIDs": [
+                      "p0-b1-r2-c1-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "5.00 CR",
+                    "sourceLineIDs": [
+                      "p0-b1-r2-c2-l0"
+                    ]
+                  },
+                  {
+                    "state": "empty",
+                    "text": "",
+                    "sourceLineIDs": []
+                  }
+                ]
+              },
+              {
+                "id": "p0-b1-r3",
+                "sourceRowIDs": [
+                  "p0-b1-r3"
+                ],
+                "cells": [
+                  {
+                    "state": "text",
+                    "text": "05 Jan",
+                    "sourceLineIDs": [
+                      "p0-b1-r3-c0-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "BOOKSTORE",
+                    "sourceLineIDs": [
+                      "p0-b1-r3-c1-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "20.00",
+                    "sourceLineIDs": [
+                      "p0-b1-r3-c2-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "972.66",
+                    "sourceLineIDs": [
+                      "p0-b1-r3-c3-l0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "p0-b1-r4",
+                "sourceRowIDs": [
+                  "p0-b1-r4"
+                ],
+                "cells": [
+                  {
+                    "state": "text",
+                    "text": "05 Jan",
+                    "sourceLineIDs": [
+                      "p0-b1-r4-c0-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "BOOKSTORE",
+                    "sourceLineIDs": [
+                      "p0-b1-r4-c1-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "20.00",
+                    "sourceLineIDs": [
+                      "p0-b1-r4-c2-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "952.66",
+                    "sourceLineIDs": [
+                      "p0-b1-r4-c3-l0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "p0-b1-r5",
+                "sourceRowIDs": [
+                  "p0-b1-r5"
+                ],
+                "cells": [
+                  {
+                    "state": "text",
+                    "text": "06 Jan",
+                    "sourceLineIDs": [
+                      "p0-b1-r5-c0-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "LONG MERCHANT\nDESCRIPTION | CONTINUED",
+                    "sourceLineIDs": [
+                      "p0-b1-r5-c1-l0",
+                      "p0-b1-r5-c1-l1"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "10.00",
+                    "sourceLineIDs": [
+                      "p0-b1-r5-c2-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "942.66",
+                    "sourceLineIDs": [
+                      "p0-b1-r5-c3-l0"
+                    ]
+                  }
+                ]
+              }
+            ]
           },
           "bounds": {
             "height": 0.2512626,
@@ -599,7 +851,8 @@
                   "x": 0.06535948,
                   "width": 0.13157353,
                   "height": 0.0113636255
-                }
+                },
+                "id": "p0-b2-l0"
               },
               {
                 "text": "Purchases: 4",
@@ -608,7 +861,8 @@
                   "x": 0.06535948,
                   "width": 0.08582353,
                   "height": 0.0113636255
-                }
+                },
+                "id": "p0-b2-l1"
               },
               {
                 "text": "Credits: 1",
@@ -617,7 +871,8 @@
                   "x": 0.06535948,
                   "width": 0.062926464,
                   "height": 0.0113636255
-                }
+                },
+                "id": "p0-b2-l2"
               }
             ]
           },
@@ -647,7 +902,8 @@
                   "y": 0.029040404,
                   "x": 0.06535948,
                   "width": 0.21325001
-                }
+                },
+                "id": "p1-b0-l0"
               },
               {
                 "text": "Statement period continues",
@@ -656,7 +912,8 @@
                   "y": 0.051767677,
                   "x": 0.06535948,
                   "width": 0.17901471
-                }
+                },
+                "id": "p1-b0-l1"
               }
             ]
           },
@@ -689,7 +946,8 @@
                           "x": 0.08169935,
                           "height": 0.01136364,
                           "width": 0.031058818
-                        }
+                        },
+                        "id": "p1-b1-r0-c0-l0"
                       }
                     ],
                     "state": "text"
@@ -709,7 +967,8 @@
                           "x": 0.2124183,
                           "height": 0.01136364,
                           "width": 0.07354413
-                        }
+                        },
+                        "id": "p1-b1-r0-c1-l0"
                       }
                     ],
                     "state": "text"
@@ -729,7 +988,8 @@
                           "x": 0.60457516,
                           "height": 0.01136364,
                           "width": 0.050676465
-                        }
+                        },
+                        "id": "p1-b1-r0-c2-l0"
                       }
                     ],
                     "state": "text"
@@ -749,12 +1009,14 @@
                           "x": 0.74346405,
                           "height": 0.01136364,
                           "width": 0.053132355
-                        }
+                        },
+                        "id": "p1-b1-r0-c3-l0"
                       }
                     ],
                     "state": "text"
                   }
-                ]
+                ],
+                "id": "p1-b1-r0"
               },
               {
                 "cells": [
@@ -773,7 +1035,8 @@
                           "x": 0.08169935,
                           "height": 0.01136364,
                           "width": 0.044147067
-                        }
+                        },
+                        "id": "p1-b1-r1-c0-l0"
                       }
                     ],
                     "state": "text"
@@ -793,7 +1056,8 @@
                           "x": 0.2124183,
                           "height": 0.01136364,
                           "width": 0.06454413
-                        }
+                        },
+                        "id": "p1-b1-r1-c1-l0"
                       }
                     ],
                     "state": "text"
@@ -813,7 +1077,8 @@
                           "x": 0.60457516,
                           "height": 0.01136364,
                           "width": 0.036794126
-                        }
+                        },
+                        "id": "p1-b1-r1-c2-l0"
                       }
                     ],
                     "state": "text"
@@ -833,12 +1098,14 @@
                           "x": 0.74346405,
                           "height": 0.01136364,
                           "width": 0.044970572
-                        }
+                        },
+                        "id": "p1-b1-r1-c3-l0"
                       }
                     ],
                     "state": "text"
                   }
-                ]
+                ],
+                "id": "p1-b1-r1"
               },
               {
                 "cells": [
@@ -857,7 +1124,8 @@
                           "x": 0.08169935,
                           "height": 0.01136364,
                           "width": 0.044147067
-                        }
+                        },
+                        "id": "p1-b1-r2-c0-l0"
                       }
                     ],
                     "state": "text"
@@ -877,7 +1145,8 @@
                           "x": 0.2124183,
                           "height": 0.01136364,
                           "width": 0.07924999
-                        }
+                        },
+                        "id": "p1-b1-r2-c1-l0"
                       }
                     ],
                     "state": "text"
@@ -897,7 +1166,8 @@
                           "x": 0.60457516,
                           "height": 0.01136364,
                           "width": 0.062117636
-                        }
+                        },
+                        "id": "p1-b1-r2-c2-l0"
                       }
                     ],
                     "state": "text"
@@ -917,10 +1187,123 @@
                           "x": 0.74346405,
                           "height": 0.01136364,
                           "width": 0.044970572
-                        }
+                        },
+                        "id": "p1-b1-r2-c3-l0"
                       }
                     ],
                     "state": "text"
+                  }
+                ],
+                "id": "p1-b1-r2"
+              }
+            ],
+            "unassignedLines": [],
+            "layoutRows": [
+              {
+                "id": "p1-b1-r0",
+                "sourceRowIDs": [
+                  "p1-b1-r0"
+                ],
+                "cells": [
+                  {
+                    "state": "text",
+                    "text": "Date",
+                    "sourceLineIDs": [
+                      "p1-b1-r0-c0-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "Description",
+                    "sourceLineIDs": [
+                      "p1-b1-r0-c1-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "Amount",
+                    "sourceLineIDs": [
+                      "p1-b1-r0-c2-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "Balance",
+                    "sourceLineIDs": [
+                      "p1-b1-r0-c3-l0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "p1-b1-r1",
+                "sourceRowIDs": [
+                  "p1-b1-r1"
+                ],
+                "cells": [
+                  {
+                    "state": "text",
+                    "text": "08 Jan",
+                    "sourceLineIDs": [
+                      "p1-b1-r1-c0-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "GROCER",
+                    "sourceLineIDs": [
+                      "p1-b1-r1-c1-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "10.00",
+                    "sourceLineIDs": [
+                      "p1-b1-r1-c2-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "932.66",
+                    "sourceLineIDs": [
+                      "p1-b1-r1-c3-l0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "p1-b1-r2",
+                "sourceRowIDs": [
+                  "p1-b1-r2"
+                ],
+                "cells": [
+                  {
+                    "state": "text",
+                    "text": "09 Jan",
+                    "sourceLineIDs": [
+                      "p1-b1-r2-c0-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "TRANSFER",
+                    "sourceLineIDs": [
+                      "p1-b1-r2-c1-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "15.00 CR",
+                    "sourceLineIDs": [
+                      "p1-b1-r2-c2-l0"
+                    ]
+                  },
+                  {
+                    "state": "text",
+                    "text": "947.66",
+                    "sourceLineIDs": [
+                      "p1-b1-r2-c3-l0"
+                    ]
                   }
                 ]
               }
@@ -945,7 +1328,8 @@
                   "y": 0.38257575,
                   "x": 0.06535948,
                   "width": 0.12585294
-                }
+                },
+                "id": "p1-b2-l0"
               },
               {
                 "text": "Printed purchases: 72.34",
@@ -954,7 +1338,8 @@
                   "y": 0.40530303,
                   "x": 0.06535948,
                   "width": 0.16348532
-                }
+                },
+                "id": "p1-b2-l1"
               },
               {
                 "text": "Printed credits: 20.00",
@@ -963,7 +1348,8 @@
                   "y": 0.4280303,
                   "x": 0.06535948,
                   "width": 0.13895589
-                }
+                },
+                "id": "p1-b2-l2"
               },
               {
                 "text": "Closing balance: 947.66",
@@ -972,7 +1358,8 @@
                   "y": 0.45075756,
                   "x": 0.06535948,
                   "width": 0.1577647
-                }
+                },
+                "id": "p1-b2-l3"
               }
             ]
           },

@@ -53,7 +53,7 @@ DocumentKitBuffer documentkit_extract_with_options(
 );
 
 /// Extracts a structured, source-preserving document using the same local PDF
-/// pipeline as `documentkit_extract`. The JSON response has bridge schema 2
+/// pipeline as `documentkit_extract`. The JSON response has bridge schema 3
 /// and carries a `document` payload with page-local blocks, lines, and tables.
 DocumentKitBuffer documentkit_extract_document(const uint8_t *bytes, size_t length);
 
