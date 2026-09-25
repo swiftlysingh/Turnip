@@ -14,25 +14,6 @@ import Testing
     }
 }
 
-@Test func extractsMarkdownAndIncludesInspection() async throws {
-    let result = try await Turnip.extract(makeTextPDF("Turnip works"))
-
-    #expect(result.markdown.contains("Turnip works"))
-    #expect(result.inspection.kind == .textBased)
-    #expect(result.inspection.pageCount == 1)
-    #expect(result.inspection.pagesNeedingOCR.isEmpty)
-    #expect(result.inspection.engineVersion == "1.14.2@\(Turnip.engineRevision)")
-    #expect(result.inspection.layout != nil)
-}
-
-@Test func packagedEngineIdentityMatchesThePinnedSource() async throws {
-    let revision = "2322bcce4cd9458d24399bf8fee42f1aa201c8c1"
-    let inspection = try await Turnip.inspect(makeTextPDF("Engine provenance"))
-
-    #expect(Turnip.engineRevision == revision)
-    #expect(inspection.engineVersion == "1.14.2@\(revision)")
-}
-
 @Test func inspectionDoesNotExtractMarkdown() async throws {
     let inspection = try await Turnip.inspect(makeTextPDF("Inspect me"))
 

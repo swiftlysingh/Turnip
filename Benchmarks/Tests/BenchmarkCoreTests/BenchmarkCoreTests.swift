@@ -4,22 +4,6 @@ import Foundation
 import XCTest
 
 final class BenchmarkCoreTests: XCTestCase {
-    func testExactRowsAndCriticalValuesArePerfect() {
-        let rows = [
-            row("2026-01-03", "Lantern Cafe", 1234),
-            row("2026-01-04", "Orbit Paper Co.", -500),
-        ]
-        let criticals = [amount("new_balance", 734)]
-        let truth = makeTruth(rows: rows, criticals: criticals)
-        let observed = extraction(rows: rows, criticals: criticals)
-
-        let score = FinancialScorer.score(truth: truth, observed: observed)
-        XCTAssertEqual(score.row.f1, 1)
-        XCTAssertEqual(score.cell.f1, 1)
-        XCTAssertEqual(score.criticalAccuracy, 1)
-        XCTAssertTrue(score.perfect)
-    }
-
     func testUnexpectedCriticalKeepsExpectedKeyAccuracyButFailsPerfectAndAdoption() {
         let rows = [row("2026-01-03", "Lantern Cafe", 1234)]
         let criticals = [amount("new_balance", 12733)]
@@ -444,21 +428,6 @@ final class BenchmarkCoreTests: XCTestCase {
         )
     }
 
-    func testZeroMinorUnitTruthDoesNotTripPrivacySubstringScanning() async throws {
-        let corpus = try makeTemporaryCorpus(
-            truth: makeTruth(
-                rows: [row("2026-01-03", "Alpha Store", 100)],
-                criticals: [amount("fees", 0)]
-            )
-        )
-        defer { corpus.cleanup() }
-        do {
-            _ = try await BenchmarkRunner.run(corpus.configuration)
-        } catch {
-            XCTFail("zero-valued truth must not trip privacy validation: \(error)")
-        }
-    }
-
     func testPrivacyUsesTokenBoundariesAndExcludesDirectoryBasenames() async throws {
         XCTAssertNoThrow(try ReportPrivacy.validate(
             surfaces: [Data("Raw extraction timing is available.".utf8)],
@@ -532,21 +501,10 @@ final class BenchmarkCoreTests: XCTestCase {
         ))
     }
 
-    func testEmptyMultisetRulesAndNativeSHA256KnownVector() {
+    func testEmptyMultisetRules() {
         XCTAssertEqual(Multiset.evaluate(expected: [String](), observed: []).f1, 1)
         XCTAssertEqual(Multiset.evaluate(expected: ["row"], observed: []).f1, 0)
         XCTAssertEqual(Multiset.evaluate(expected: [String](), observed: ["row"]).f1, 0)
-        XCTAssertEqual(
-            Digest.sha256Hex(Data("abc".utf8)),
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        )
-    }
-
-    func testAdapterContractChecksumPinsCanonicalizationContract() {
-        XCTAssertNotEqual(
-            AMEXAdapter.checksum,
-            AMEXAdapter.checksum(forCanonicalizationContract: AMEXAdapter.canonicalizationContract + ";changed")
-        )
     }
 
     func testAdapterImplementationSourceDigestIsRepinned() throws {

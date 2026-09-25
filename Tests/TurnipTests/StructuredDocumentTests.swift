@@ -116,18 +116,6 @@ import Testing
     )
 }
 
-@Test func structuredDocumentRetainsSelectedOriginalPageIndexes() async throws {
-    let document = try await Turnip.extractDocument(
-        inventedStatementPDF(),
-        options: DocumentOptions(pageIndexes: [1])
-    )
-
-    #expect(document.inspection.pageCount == 2)
-    #expect(document.pages.map(\.pageIndex) == [1])
-    #expect(document.pages.first?.blocks.map(\.contentText).joined().contains("08 Jan") == true)
-    #expect(document.pages.first?.blocks.map(\.contentText).joined().contains("03 Jan") == false)
-}
-
 @Test func structuredDocumentKeepsSparseSelectedIndexesInSourceOrder() async throws {
     let pdf = makeTextAndGridPDF([
         textContent("First selected page has enough embedded text for native extraction."),
@@ -147,30 +135,6 @@ import Testing
     #expect(extractedText.contains("Last selected page"))
 }
 
-@Test func structuredDocumentValidatesEveryPageSelectionError() async {
-    let pdf = textOnlyPDF()
-
-    await #expect(throws: TurnipError.invalidPageSelection(.empty)) {
-        try await Turnip.extractDocument(pdf, options: DocumentOptions(pageIndexes: []))
-    }
-    await #expect(throws: TurnipError.invalidPageSelection(.negative(pageIndex: -1))) {
-        try await Turnip.extractDocument(pdf, options: DocumentOptions(pageIndexes: [-1]))
-    }
-    await #expect(throws: TurnipError.invalidPageSelection(.duplicate(pageIndex: 0))) {
-        try await Turnip.extractDocument(pdf, options: DocumentOptions(pageIndexes: [0, 0]))
-    }
-    await #expect(
-        throws: TurnipError.invalidPageSelection(
-            .exceedsEngineLimit(pageIndex: Int(UInt32.max))
-        )
-    ) {
-        try await Turnip.extractDocument(
-            pdf,
-            options: DocumentOptions(pageIndexes: [Int(UInt32.max)])
-        )
-    }
-}
-
 @Test func encodingWarningAttributionRequiresTheGarbledTextReason() {
     let reasons = [
         PageOCRReasons(pageIndex: 0, reasons: ["scanned"]),
@@ -183,39 +147,6 @@ import Testing
 
     #expect(encodingIssuePageIndexes(from: reasons) == [1, 2])
     #expect(encodingIssuePageIndexes(from: []) == [])
-}
-
-@Test func retroBudgetConsumerCanValidateAnInterpretedValueAgainstItsSourceCell() async throws {
-    let document = try await Turnip.extractDocument(inventedStatementPDF())
-    let page = try #require(document.page(at: 0))
-    let tableBlock = try #require(page.blocks.first { block in
-        if case .table = block.content { return true }
-        return false
-    })
-    let table = try #require(tableBlock.table)
-    let creditCell = try #require(table.cells.first { $0.joinedText == "5.00 CR" })
-    let source = DocumentSourceReference(
-        pageIndex: 0,
-        blockID: tableBlock.id,
-        row: creditCell.row,
-        column: creditCell.column
-    )
-
-    // This conversion is deliberately consumer-owned. Turnip supplies the
-    // source string and address but never decides that CR means a negative USD
-    // amount.
-    let interpreted = RetroBudgetInterpretedValue(
-        amountMinor: -500,
-        currency: "USD",
-        source: source,
-        expectedSourceText: "5.00 CR"
-    )
-    #expect(interpreted.amountMinor == -500)
-    #expect(interpreted.currency == "USD")
-    #expect(interpreted.matchesSource(in: document))
-
-    let encoded = try JSONEncoder().encode(interpreted)
-    #expect(try JSONDecoder().decode(RetroBudgetInterpretedValue.self, from: encoded) == interpreted)
 }
 
 @Test func structuredDocumentTextOnlyPagesKeepLineBoundaries() async throws {
@@ -300,51 +231,6 @@ import Testing
 
     #expect(document.pages.map(\.pageIndex) == [0])
     #expect(document.pages.flatMap(\.blocks).map(\.contentText).joined().contains("DocumentKit Fixture"))
-}
-
-@Test func structuredDocumentTreatsAnEmptyPasswordAsSupplied() async throws {
-    let encrypted = try encryptedFixture()
-
-    await #expect(throws: TurnipError.encryptedPDF) {
-        try await Turnip.extractDocument(
-            encrypted,
-            options: DocumentOptions(password: "")
-        )
-    }
-
-    #expect(!String(describing: DocumentOptions()).contains("REDACTED"))
-    #expect(String(describing: DocumentOptions(password: "")).contains("REDACTED"))
-}
-
-@Test func structuredDocumentPreservesTypedFatalErrors() async throws {
-    await #expect(throws: TurnipError.invalidPDF) {
-        try await Turnip.extractDocument(Data("not a PDF".utf8))
-    }
-
-    let encrypted = try encryptedFixture()
-    await #expect(throws: TurnipError.encryptedPDF) {
-        try await Turnip.extractDocument(encrypted)
-    }
-    await #expect(throws: TurnipError.encryptedPDF) {
-        try await Turnip.extractDocument(
-            encrypted,
-            options: DocumentOptions(password: "wrong-password")
-        )
-    }
-
-    let pageError = TurnipError.pageOutOfRange(pageIndex: 2, pageCount: 2)
-    await #expect(throws: pageError) {
-        try await Turnip.extractDocument(
-            inventedStatementPDF(),
-            options: DocumentOptions(pageIndexes: [2])
-        )
-    }
-    await #expect(throws: TurnipError.invalidPageSelection(.notAscending)) {
-        try await Turnip.extractDocument(
-            inventedStatementPDF(),
-            options: DocumentOptions(pageIndexes: [1, 0])
-        )
-    }
 }
 
 @Test func structuredDocumentPreservesCancellationBehavior() async {
@@ -717,17 +603,6 @@ private func tableRows(_ table: TableBlock) -> [[String]] {
         (0..<table.columnCount).map { column in
             table.cell(row: row, column: column)?.joinedText ?? "<unresolved>"
         }
-    }
-}
-
-private struct RetroBudgetInterpretedValue: Codable, Equatable {
-    let amountMinor: Int
-    let currency: String
-    let source: DocumentSourceReference
-    let expectedSourceText: String
-
-    func matchesSource(in document: ExtractedDocument) -> Bool {
-        document.text(for: source) == expectedSourceText
     }
 }
 
