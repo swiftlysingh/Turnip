@@ -25,6 +25,7 @@ build_target() {
         CARGO_TARGET_DIR="$target_dir" \
         RUSTFLAGS="$DOCUMENTKIT_RUSTFLAGS" \
         "$DOCUMENTKIT_CARGO" build --config "build.rustc = '$DOCUMENTKIT_RUSTC'" \
+        --config 'profile.release.build-override.strip="none"' \
             --locked --release --manifest-path "$MANIFEST" --target "$target"
     mkdir -p "$(dirname "$destination")"
     cp "$target_dir/$target/release/libdocumentkit_core.a" "$destination"

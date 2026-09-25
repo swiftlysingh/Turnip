@@ -1,7 +1,7 @@
 {
   "inspection" : {
     "confidence" : 1,
-    "engineVersion" : "1.14.2@2322bcce4cd9458d24399bf8fee42f1aa201c8c1",
+    "engineVersion" : "1.24.0@67cda0ba18ca31b12f3ae94a0c0c5c9b6f390b18",
     "hasEncodingIssues" : false,
     "kind" : "text_based",
     "layout" : {

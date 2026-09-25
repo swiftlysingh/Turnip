@@ -255,18 +255,13 @@ the tracked Apple patch. `Turnip.engineRevision` reports the upstream
 source revision, not a full patched-tree identity. At compile time, the Rust
 build script reconstructs `HEAD` plus the patch and rejects any other prepared
 tree. `Scripts/verify-artifact.sh` checks the packaged slices against that
-pin. The current pre-release pin uses
-`swiftlysingh/pdf-inspector` while the indirect Form resource and
-transaction-row fixes are prepared for upstream.
+pin, which uses `swiftlysingh/pdf-inspector`.
 
-The patch makes four narrow changes to the pinned engine:
+The patch keeps three Turnip-specific changes on the pinned engine:
 
-- embeds Adobe CMaps so CID text extraction never depends on a build-machine
-  filesystem path;
 - uses lopdf's single-threaded parser on Apple targets to keep the binary and
   build footprint bounded;
-- evaluates sparse-text and undecodable-font quality heuristics against the
-  selected pages when a page filter is supplied;
+- preserves explicit sparse single-byte ToUnicode mappings;
 - captures page-local text and table structure before Markdown-only cleanup,
   while reusing the established table detection and reading-order pipeline.
 

@@ -5,8 +5,8 @@
 Turnip includes compiled portions of
 [`swiftlysingh/pdf-inspector`](https://github.com/swiftlysingh/pdf-inspector), a
 fork of [`firecrawl/pdf-inspector`](https://github.com/firecrawl/pdf-inspector),
-pinned to version 1.14.2 and source commit
-`2322bcce4cd9458d24399bf8fee42f1aa201c8c1`.
+pinned to version 1.24.0 and source commit
+`67cda0ba18ca31b12f3ae94a0c0c5c9b6f390b18`.
 
 The included code is licensed under these terms:
 
