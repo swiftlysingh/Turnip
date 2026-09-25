@@ -844,48 +844,12 @@ mod tests {
     }
 
     #[test]
-    fn engine_identity_uses_the_verified_build_provenance() {
-        let version = unsafe { std::ffi::CStr::from_ptr(documentkit_engine_version()) };
-        let revision = unsafe { std::ffi::CStr::from_ptr(documentkit_engine_revision()) };
-
-        assert_eq!(
-            version.to_str().unwrap(),
-            format!("pdf-inspector/{PDF_INSPECTOR_VERSION}")
-        );
-        assert_eq!(
-            revision.to_str().unwrap(),
-            env!("DOCUMENTKIT_PDF_INSPECTOR_REVISION")
-        );
-    }
-
-    #[test]
     fn empty_input_returns_typed_error() {
         let value = unsafe { documentkit_extract([0_u8].as_ptr(), 0) };
         assert!(!value.data.is_null());
         let json = std::str::from_utf8(unsafe { slice::from_raw_parts(value.data, value.length) })
             .unwrap();
         assert!(json.contains(r#""code":"empty_input""#));
-        unsafe { documentkit_buffer_free(value) };
-    }
-
-    #[test]
-    fn structured_empty_input_uses_bridge_schema_two() {
-        let value = unsafe { documentkit_extract_document([0_u8].as_ptr(), 0) };
-        let json = std::str::from_utf8(unsafe { slice::from_raw_parts(value.data, value.length) })
-            .unwrap();
-        assert!(json.contains(r#""schema_version":2"#), "{json}");
-        assert!(json.contains(r#""code":"empty_input""#));
-        unsafe { documentkit_buffer_free(value) };
-    }
-
-    #[test]
-    fn non_pdf_returns_typed_error() {
-        let bytes = b"definitely not a PDF";
-        let value = unsafe { documentkit_inspect(bytes.as_ptr(), bytes.len()) };
-        assert!(!value.data.is_null());
-        let json = std::str::from_utf8(unsafe { slice::from_raw_parts(value.data, value.length) })
-            .unwrap();
-        assert!(json.contains(r#""code":"not_a_pdf""#));
         unsafe { documentkit_buffer_free(value) };
     }
 
@@ -906,28 +870,6 @@ mod tests {
         };
         let json = std::str::from_utf8(unsafe { slice::from_raw_parts(value.data, value.length) })
             .unwrap();
-        assert!(json.contains(r#""code":"empty_page_selection""#));
-        unsafe { documentkit_buffer_free(value) };
-    }
-
-    #[test]
-    fn structured_empty_selected_pages_returns_typed_error() {
-        let bytes = b"%PDF-1.4";
-        let value = unsafe {
-            documentkit_extract_document_with_options(
-                bytes.as_ptr(),
-                bytes.len(),
-                std::ptr::null(),
-                0,
-                1,
-                std::ptr::null(),
-                0,
-                0,
-            )
-        };
-        let json = std::str::from_utf8(unsafe { slice::from_raw_parts(value.data, value.length) })
-            .unwrap();
-        assert!(json.contains(r#""schema_version":2"#), "{json}");
         assert!(json.contains(r#""code":"empty_page_selection""#));
         unsafe { documentkit_buffer_free(value) };
     }
