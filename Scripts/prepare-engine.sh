@@ -6,7 +6,6 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 REPOSITORY=https://github.com/swiftlysingh/pdf-inspector.git
 REVISION=$(tr -d '[:space:]' < "$ROOT/ENGINE_REVISION")
 ENGINE="$ROOT/Build/vendor/pdf-inspector"
-PATCH="$ROOT/Patches/pdf-inspector-embed-apple-cmaps.patch"
 MANIFEST="$ROOT/Native/DocumentKitCore/Cargo.toml"
 
 case "$REVISION" in
@@ -54,19 +53,8 @@ if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
     exit 1
 fi
 
-if git -C "$ENGINE" apply --check "$PATCH" >/dev/null 2>&1; then
-    git -C "$ENGINE" apply "$PATCH"
-elif ! git -C "$ENGINE" apply --reverse --check "$PATCH" >/dev/null 2>&1; then
-    echo "The Apple CMap patch does not apply cleanly to pdf-inspector $REVISION." >&2
-    exit 1
-fi
-
-EXPECTED_INDEX=
 ACTUAL_INDEX=
 cleanup_indexes() {
-    if [ -n "$EXPECTED_INDEX" ]; then
-        rm -f "$EXPECTED_INDEX" "$EXPECTED_INDEX.lock"
-    fi
     if [ -n "$ACTUAL_INDEX" ]; then
         rm -f "$ACTUAL_INDEX" "$ACTUAL_INDEX.lock"
     fi
@@ -74,21 +62,18 @@ cleanup_indexes() {
 trap cleanup_indexes 0
 trap 'cleanup_indexes; exit 1' HUP INT TERM
 
-EXPECTED_INDEX=$(mktemp "${TMPDIR:-/tmp}/documentkit-pdf-inspector-expected.XXXXXX")
 ACTUAL_INDEX=$(mktemp "${TMPDIR:-/tmp}/documentkit-pdf-inspector-actual.XXXXXX")
 
-if ! GIT_INDEX_FILE="$EXPECTED_INDEX" git -C "$ENGINE" read-tree HEAD || \
-    ! GIT_INDEX_FILE="$EXPECTED_INDEX" git -C "$ENGINE" apply --cached -- "$PATCH"; then
-    echo "Could not apply the tracked Apple CMap patch to pdf-inspector $REVISION." >&2
+if ! GIT_INDEX_FILE="$ACTUAL_INDEX" git -C "$ENGINE" read-tree HEAD; then
+    echo "Could not prepare the expected pdf-inspector tree." >&2
     exit 1
 fi
-if ! EXPECTED_TREE=$(GIT_INDEX_FILE="$EXPECTED_INDEX" git -C "$ENGINE" write-tree); then
+if ! EXPECTED_TREE=$(GIT_INDEX_FILE="$ACTUAL_INDEX" git -C "$ENGINE" write-tree); then
     echo "Could not create the expected pdf-inspector tree." >&2
     exit 1
 fi
 
-if ! GIT_INDEX_FILE="$ACTUAL_INDEX" git -C "$ENGINE" read-tree HEAD || \
-    ! GIT_INDEX_FILE="$ACTUAL_INDEX" git -C "$ENGINE" add -A -- .; then
+if ! GIT_INDEX_FILE="$ACTUAL_INDEX" git -C "$ENGINE" add -A -- .; then
     echo "Could not stage the prepared pdf-inspector tree." >&2
     exit 1
 fi
@@ -97,12 +82,11 @@ if ! ACTUAL_TREE=$(GIT_INDEX_FILE="$ACTUAL_INDEX" git -C "$ENGINE" write-tree); 
     exit 1
 fi
 if [ "$EXPECTED_TREE" != "$ACTUAL_TREE" ]; then
-    echo "Prepared pdf-inspector must match $REVISION plus $PATCH exactly." >&2
+    echo "Prepared pdf-inspector must match $REVISION exactly." >&2
     exit 1
 fi
-# `git add -A` above stages ordinary untracked files. That allows patch-added
-# files only when they match the expected tree, and makes any unexpected file
-# fail the tree comparison. Ignored files are not staged, so reject them here.
+# `git add -A` above stages ordinary untracked files, so any unexpected file
+# fails the tree comparison. Ignored files are not staged, so reject them here.
 if [ -n "$(git -C "$ENGINE" ls-files --others --ignored --exclude-standard)" ]; then
     echo "Prepared pdf-inspector must not contain ignored untracked files." >&2
     exit 1

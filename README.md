@@ -276,25 +276,11 @@ locked truth, review, holdout, and scoring contract.
 
 The engine revision is fixed in [`ENGINE_REVISION`](ENGINE_REVISION). The build
 does not follow `main` or a semver range. `Scripts/prepare-engine.sh` clones that
-exact upstream source revision into the ignored `Build` directory and applies
-the tracked Apple patch. `Turnip.engineRevision` reports the upstream
-source revision, not a full patched-tree identity. At compile time, the Rust
-build script reconstructs `HEAD` plus the patch and rejects any other prepared
-tree. `Scripts/verify-artifact.sh` checks the packaged slices against that
-pin. The current pre-release pin uses
-`swiftlysingh/pdf-inspector` while the indirect Form resource and
-transaction-row fixes are prepared for upstream.
-
-The patch makes four narrow changes to the pinned engine:
-
-- embeds Adobe CMaps so CID text extraction never depends on a build-machine
-  filesystem path;
-- uses lopdf's single-threaded parser on Apple targets to keep the binary and
-  build footprint bounded;
-- evaluates sparse-text and undecodable-font quality heuristics against the
-  selected pages when a page filter is supplied;
-- captures page-local text and table structure before Markdown-only cleanup,
-  while reusing the established table detection and reading-order pipeline.
+exact source revision into the ignored `Build` directory. `Turnip.engineRevision`
+reports that commit. At compile time, the Rust build script rejects the prepared
+engine unless it is the exact clean `HEAD`. `Scripts/verify-artifact.sh` checks
+every packaged slice against the same pin. The pre-release pin uses the maintained
+`swiftlysingh/pdf-inspector` fork, which owns the reusable extraction behavior.
 
 To rebuild all five Rust slices and replace the local artifact:
 
@@ -311,7 +297,6 @@ then verifies the XCFramework architecture and header layout.
 Sources/Turnip/                Public Swift APIs and models, DocC, and private wire decoder
 Native/DocumentKitCore/        Rust static-library bridge and C header
 Artifacts/                     Prebuilt local XCFramework
-Patches/                       Minimal patch applied to pinned pdf-inspector
 Examples/TurnipDemo/           Native PDF-versus-structured-JSON sample app
 Benchmarks/                    Corpus manifest, runner, and methodology
 Scripts/                       Reproducible engine, artifact, and DocC build checks

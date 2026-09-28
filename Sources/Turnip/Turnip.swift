@@ -14,9 +14,6 @@ public enum Turnip {
     public static let maximumInputSize = 100 * 1024 * 1024
 
     /// The pinned upstream engine source revision embedded in the packaged binary.
-    ///
-    /// This identifies the upstream source commit. It does not include the
-    /// hash of Turnip's tracked Apple patch.
     public static let engineRevision = String(cString: documentkit_engine_revision())
 
     /// Inspects PDF data without producing Markdown.
