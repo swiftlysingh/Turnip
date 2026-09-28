@@ -207,6 +207,30 @@ import Testing
     })
 }
 
+@Test func structuredDocumentKeepsSourceEvidenceWhenMixedPDFIsReclassifiedAsScanned() async throws {
+    let pdf = mixedGarbledTextPDF()
+    let initialInspection = try await Turnip.inspect(pdf)
+    #expect(initialInspection.kind == .mixed)
+
+    let document = try await Turnip.extractDocument(pdf)
+    #expect(document.inspection.kind == .scanned)
+    #expect(document.inspection.pagesNeedingOCR == [0, 1])
+    #expect(document.pages.map(\.pageIndex) == [0, 1])
+    #expect(document.pages.allSatisfy { $0.status == .needsOCR })
+
+    let firstPageText = document.pages[0].blocks.map(\.contentText).joined(separator: "\n")
+    let secondPageText = document.pages[1].blocks.map(\.contentText).joined(separator: "\n")
+    #expect(firstPageText.contains("ordinary readable text"))
+    #expect(secondPageText.contains("x!@^&+=~:;?<>"))
+
+    let readablePage = try await Turnip.extractDocument(
+        pdf, options: DocumentOptions(pageIndexes: [0])
+    )
+    #expect(readablePage.pages.map(\.pageIndex) == [0])
+    #expect(readablePage.pages[0].status == .extracted)
+    #expect(readablePage.pagesNeedingOCR.isEmpty)
+}
+
 @Test func structuredDocumentRetainsSparseTextOCRRoutingWithoutRenderingMarkdown() async throws {
     let document = try await Turnip.extractDocument(
         makeTextAndGridPDF([textContent("Short")])
@@ -275,11 +299,36 @@ import Testing
     #expect(abs(bounds.height - 0.696_225) < 0.000_001)
 }
 
+@Test func structuredDocumentIntersectsCropBoxWithMediaBoxForSizeAndCoordinates() async throws {
+    let document = try await Turnip.extractDocument(overhangingCropBoxPDF())
+    let page = try #require(document.pages.first)
+
+    #expect(page.size.width == 150)
+    #expect(page.size.height == 150)
+    let line = try #require(page.blocks.compactMap(\.text).flatMap(\.lines).first)
+    #expect(line.text == "VISIBLE")
+    let bounds = try #require(line.bounds)
+    assertNormalized(bounds)
+    #expect(abs(bounds.x - (10.0 / 150.0)) < 0.000_001)
+}
+
+@Test func structuredDocumentResolvesIndirectMediaBoxNumbers() async throws {
+    let document = try await Turnip.extractDocument(indirectMediaBoxPDF())
+    let page = try #require(document.pages.first)
+
+    #expect(page.size.width == 612)
+    #expect(page.size.height == 792)
+    #expect(page.blocks.map(\.contentText).joined().contains("VISIBLE"))
+}
+
 @Test func structuredDocumentJSONIsTaggedRoundTrippableAndOmitsIncidentalFields() async throws {
     let document = try await Turnip.extractDocument(inventedStatementPDF())
     let data = try JSONEncoder().encode(document)
     let decoded = try JSONDecoder().decode(ExtractedDocument.self, from: data)
     #expect(decoded == document)
+    let sourceTable = try #require(document.pages[0].blocks.compactMap(\.table).first)
+    let decodedTable = try #require(decoded.pages[0].blocks.compactMap(\.table).first)
+    #expect(decodedTable.layoutRows == sourceTable.layoutRows)
 
     let object = try #require(
         JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -299,6 +348,7 @@ import Testing
     #expect(content["rowCount"] == nil)
     #expect(content["columnCount"] == nil)
     #expect(content["cells"] == nil)
+    #expect(content["layoutRows"] == nil)
     let rows = try #require(content["rows"] as? [[String: Any]])
     #expect(!rows.isEmpty)
     let firstRow = try #require(rows.first?["cells"] as? [[String: Any]])
@@ -943,6 +993,31 @@ private func mixedTextAndImagePDF() -> Data {
     return makePDF(objects)
 }
 
+private func mixedGarbledTextPDF() -> Data {
+    let readableLines = (0..<12).map { row in
+        "1 0 0 1 30 \(730 - row * 16) Tm (This is ordinary readable text that has enough different letters.) Tj"
+    }.joined(separator: "\n")
+    let garbled = String(repeating: "x!@^&+=~:;?<>", count: 60)
+    let garbledLines = (0..<5).map { row in
+        "1 0 0 1 30 \(730 - row * 16) Tm (\(garbled)) Tj"
+    }.joined(separator: "\n")
+    let firstPage = "BT /F1 10 Tf\n\(readableLines)\nET"
+    let secondPage = "q 612 0 0 792 0 0 cm /Im1 Do Q\nBT /F1 10 Tf\n\(garbledLines)\nET"
+    // Each RunLength packet expands to 128 pixels, yielding a full-page image.
+    let imageData = String(repeating: "81ff", count: 15_000) + "80>"
+    let objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> /XObject << /Im1 8 0 R >> >> /Contents 6 0 R >>",
+        "<< /Length \(firstPage.utf8.count) >>\nstream\n\(firstPage)\nendstream",
+        "<< /Length \(secondPage.utf8.count) >>\nstream\n\(secondPage)\nendstream",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        "<< /Type /XObject /Subtype /Image /Width 1200 /Height 1600 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter [/ASCIIHexDecode /RunLengthDecode] /Length \(imageData.utf8.count) >>\nstream\n\(imageData)\nendstream",
+    ]
+    return makePDF(objects)
+}
+
 private func rotatedOffsetCropPDF() -> Data {
     let content = "BT /F1 12 Tf 1 0 0 1 60 120 Tm (Rotated cropped text) Tj ET"
     let objects = [
@@ -951,6 +1026,31 @@ private func rotatedOffsetCropPDF() -> Data {
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 300] /CropBox [20 30 180 270] /Rotate 90 /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
         "<< /Length \(content.utf8.count) >>\nstream\n\(content)\nendstream",
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    return makePDF(objects)
+}
+
+private func overhangingCropBoxPDF() -> Data {
+    let content = "BT /F1 12 Tf 1 0 0 1 60 100 Tm (VISIBLE) Tj ET"
+    let objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /CropBox [50 50 250 250] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        "<< /Length \(content.utf8.count) >>\nstream\n\(content)\nendstream",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    return makePDF(objects)
+}
+
+private func indirectMediaBoxPDF() -> Data {
+    let content = "BT /F1 12 Tf 60 100 Td (VISIBLE) Tj ET"
+    let objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 6 0 R 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        "<< /Length \(content.utf8.count) >>\nstream\n\(content)\nendstream",
+        "612",
     ]
     return makePDF(objects)
 }

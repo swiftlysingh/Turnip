@@ -439,9 +439,6 @@ public struct DocumentBlock: Codable, Sendable, Hashable {
         private enum CodingKeys: String, CodingKey {
             case type
             case lines
-            case rows
-            case layoutRows
-            case unassignedLines
         }
 
         public init(from decoder: Decoder) throws {
@@ -450,21 +447,7 @@ public struct DocumentBlock: Codable, Sendable, Hashable {
             case "text":
                 self = .text(TextBlock(lines: try container.decode([TextLine].self, forKey: .lines)))
             case "table":
-                let table = try TableBlock(
-                    validating: container.decode([TableRow].self, forKey: .rows),
-                    unassignedLines: container.decode(
-                        [TextLine].self,
-                        forKey: .unassignedLines
-                    )
-                )
-                guard try container.decode([TableLayoutRow].self, forKey: .layoutRows)
-                    == table.layoutRows
-                else {
-                    throw StructuredDocumentCodingError.invalidValue(
-                        "Table layout rows do not match their source rows"
-                    )
-                }
-                self = .table(table)
+                self = .table(try TableBlock(from: decoder))
             default:
                 throw StructuredDocumentCodingError.invalidValue("Unknown document block content type")
             }
@@ -478,9 +461,7 @@ public struct DocumentBlock: Codable, Sendable, Hashable {
                 try container.encode(text.lines, forKey: .lines)
             case let .table(table):
                 try container.encode("table", forKey: .type)
-                try container.encode(table.rows, forKey: .rows)
-                try container.encode(table.layoutRows, forKey: .layoutRows)
-                try container.encode(table.unassignedLines, forKey: .unassignedLines)
+                try table.encode(to: encoder)
             }
         }
     }
@@ -558,7 +539,6 @@ public struct TableBlock: Codable, Sendable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case rows
-        case layoutRows
         case unassignedLines
     }
 
@@ -568,18 +548,6 @@ public struct TableBlock: Codable, Sendable, Hashable {
             validating: try container.decode([TableRow].self, forKey: .rows),
             unassignedLines: container.decode([TextLine].self, forKey: .unassignedLines)
         )
-        guard try container.decode([TableLayoutRow].self, forKey: .layoutRows) == layoutRows else {
-            throw StructuredDocumentCodingError.invalidValue(
-                "Table layout rows do not match their source rows"
-            )
-        }
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(rows, forKey: .rows)
-        try container.encode(layoutRows, forKey: .layoutRows)
-        try container.encode(unassignedLines, forKey: .unassignedLines)
     }
 
     /// Returns the literal table slot at a zero-based row and column.

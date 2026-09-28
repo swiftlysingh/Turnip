@@ -60,18 +60,6 @@ table.
         ]
       }
     ],
-    "layoutRows": [
-      {
-        "id": "p0-b1-r0",
-        "sourceRowIDs": ["p0-b1-r0"],
-        "cells": [
-          {"state": "text", "text": "Place", "sourceLineIDs": ["p0-b1-r0-c0-l0"]},
-          {"state": "text", "text": "North Campus",
-           "sourceLineIDs": ["p0-b1-r0-c1-l0", "p0-b1-r0-c1-l1"]},
-          {"state": "empty", "text": "", "sourceLineIDs": []}
-        ]
-      }
-    ],
     "unassignedLines": []
   }
 }
@@ -90,6 +78,8 @@ cell keeps `sourceLineIDs` for every contributing original `TextLine`, including
 identical repeated strings. `document.sourceReference(forLineID:)` converts an
 ID back to a `DocumentSourceReference`; `document.line(id:)` returns the
 original string and bounds. Joined display text has no invented bounds.
+`layoutRows` is computed from the physical rows and is not stored in the document
+JSON. Decoding reconstructs the same projection from source evidence.
 
 Empty-row removal and footnote extraction remain Markdown-only. Structured
 `rows` retain meaningful blanks, footnotes, repeated headers, and identical
@@ -188,7 +178,8 @@ raw text-item stream.
 
 An application can send a compact selection of this result to JEV without a
 second extraction path or a Turnip dependency on JEV. This invented fragment
-keeps nearby context, literal values, uncertainty, and source occurrences:
+keeps nearby context, literal values, uncertainty, and source occurrences.
+An app can explicitly include computed `layoutRows` in this custom payload:
 
 ```json
 {
@@ -244,8 +235,8 @@ Schema v3 requires:
 - `type` plus `lines` for text content, or `type` plus `rows`
   for table content.
 - `id` and `text` on every original source line.
-- `id` and `cells` on each physical table row, plus `layoutRows` and
-  `unassignedLines` on the table.
+- `id` and `cells` on each physical table row, plus `unassignedLines`
+  on the table.
 - `state` on each cell. Text cells require `lines`; covered cells
   require `coveredBy`.
 
