@@ -61,6 +61,8 @@ to your app target:
 https://github.com/swiftlysingh/Turnip.git
 ```
 
+Select version `0.2.0` or later in Xcode's package dependency settings.
+
 The binary target is an implementation detail. Client code imports only:
 
 ```swift
