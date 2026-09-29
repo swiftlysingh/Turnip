@@ -9,7 +9,6 @@ fn main() {
     let manifest_dir = Path::new(&manifest_dir);
     let root = manifest_dir.join("../..");
     let engine = root.join("Build/vendor/pdf-inspector");
-    let patch_path = root.join("Patches/pdf-inspector-embed-apple-cmaps.patch");
 
     let revision_path = root.join("ENGINE_REVISION");
     let expected_revision = read(&revision_path).trim().to_owned();
@@ -49,35 +48,15 @@ fn main() {
         "the prepared pdf-inspector revision does not match ENGINE_REVISION"
     );
 
-    let expected_index = TemporaryIndex::new("expected");
-    let output = git_output(&engine, Some(expected_index.path()), &["read-tree", "HEAD"]);
-    assert!(
-        output.status.success(),
-        "could not prepare the expected pdf-inspector tree"
-    );
-    let output = git_output(
-        &engine,
-        Some(expected_index.path()),
-        &[
-            "apply",
-            "--cached",
-            "--",
-            patch_path.to_str().expect("patch path is UTF-8"),
-        ],
-    );
-    assert!(
-        output.status.success(),
-        "could not apply the tracked Apple CMap patch"
-    );
-    let expected_tree = write_tree(&engine, expected_index.path());
-    let expected_paths = tracked_engine_paths(&engine, expected_index.path());
-
     let actual_index = TemporaryIndex::new("actual");
     let output = git_output(&engine, Some(actual_index.path()), &["read-tree", "HEAD"]);
     assert!(
         output.status.success(),
-        "could not prepare the actual pdf-inspector tree"
+        "could not prepare the expected pdf-inspector tree"
     );
+    let expected_tree = write_tree(&engine, actual_index.path());
+    let expected_paths = tracked_engine_paths(&engine, actual_index.path());
+
     let output = git_output(
         &engine,
         Some(actual_index.path()),
@@ -90,12 +69,11 @@ fn main() {
     let actual_tree = write_tree(&engine, actual_index.path());
     assert_eq!(
         expected_tree, actual_tree,
-        "the prepared pdf-inspector tree does not match ENGINE_REVISION plus the tracked Apple CMap patch"
+        "the prepared pdf-inspector tree does not match ENGINE_REVISION exactly"
     );
 
     // `git add -A` above includes ordinary untracked files in `actual_tree`.
-    // That permits patch-added files only when they exactly match `expected_tree`,
-    // while any other ordinary untracked file makes the tree comparison fail.
+    // Any ordinary untracked file therefore makes the tree comparison fail.
     let output = git_output(
         &engine,
         None,
@@ -121,7 +99,6 @@ fn main() {
         "cargo:rerun-if-changed={}",
         manifest_dir.join("Cargo.lock").display()
     );
-    println!("cargo:rerun-if-changed={}", patch_path.display());
     for path in &expected_paths {
         rerun_if_changed(path);
     }

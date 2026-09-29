@@ -9,7 +9,7 @@ Turnip wraps a pinned PDF engine behind a small Swift API. It reads PDF
 data in the app process, preserves source text and tables in a typed document,
 produces Markdown when requested, and reports classification, layout, encoding,
 and OCR-routing signals alongside the result. It does not upload PDFs, call an
-LLM, convert Office documents, perform OCR, or interpret financial values.
+LLM, convert Office documents, perform OCR, or interpret domain values.
 
 ```swift
 import Turnip
@@ -70,13 +70,18 @@ let source = DocumentSourceReference(
     column: 2
 )
 
-let originalCell = document.cell(for: source)
+let literalCell = document.cell(for: source)
+let anchorCell = document.resolvedCell(for: source)
 ```
 
-Table cells remain strings. The consuming app owns statement recognition,
-dates, amounts, currency, merchant cleanup, reconciliation, and import
-decisions. It can store source references with interpreted values and resolve
-them against the same document before accepting an import.
+`cell(for:)` keeps a literal covered slot distinct from its span anchor.
+`resolvedCell(for:)` follows that link only when an app asks it to. Cell text
+stays as decoded strings and source lines. `TableBlock.layoutRows` exposes the
+continuation-row joins shared with Markdown while `TableBlock.rows` retains
+every physical row. Each joined cell lists its contributing `TextLine.id`
+values, which ``ExtractedDocument/sourceReference(forLineID:)`` resolves back
+to original evidence. The consuming app owns any
+domain-specific interpretation, normalization, or import decision.
 
 For a scanned or image-only PDF, Markdown extraction throws
 ``TurnipError/noExtractableText(_:)`` and includes the inspection that
@@ -84,21 +89,11 @@ explains the routing decision. Structured extraction instead returns each
 requested page with ``DocumentPage/status`` set to
 ``DocumentPageStatus/needsOCR`` and no invented text.
 
-## Benchmark status
+## Validation status
 
-Both candidate pipelines are exact on the committed two-variant invented
-fixture. The two variants share one four-transaction truth. The aggregate
-report counts those four truth rows once per variant, so its eight figure is
-case-rows rather than eight distinct transactions. That proves mechanical
-benchmark-harness coverage, not a real-statement accuracy finding or a timing
-claim. The synthetic corpus passes the mechanical gate, but it is not
-real-holdout or product-adoption evidence. One unseen real statement period and
-its paired variants are the minimum useful holdout. Three separate unseen
-periods are required before a broader public accuracy claim.
-
-The [repository benchmark methodology](https://github.com/swiftlysingh/Turnip/blob/main/Benchmarks/README.md)
-defines the candidate boundary, frozen adapter, redacted reports, and holdout
-rules.
+Committed fixtures prove mechanical behavior only. They do not support a
+general accuracy or performance claim. The repository validation notes define
+the input boundaries, redacted reports, and holdout rules.
 
 ## Topics
 
@@ -130,9 +125,14 @@ rules.
 - ``DocumentBlock``
 - ``TextBlock``
 - ``TableBlock``
+- ``TableRow``
+- ``TableLayoutRow``
+- ``TableLayoutCell``
 - ``TableCell``
 - ``TableCellRole``
 - ``TableCellState``
+- ``TableCellAddress``
+- ``TableCellSpan``
 - ``TextLine``
 - ``DocumentSourceReference``
 - ``DocumentExtraction``

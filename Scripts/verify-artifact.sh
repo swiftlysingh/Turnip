@@ -7,10 +7,8 @@ MANIFEST="$ROOT/Native/DocumentKitCore/Cargo.toml"
 LOCKFILE="$ROOT/Native/DocumentKitCore/Cargo.lock"
 RUST_SOURCE="$ROOT/Native/DocumentKitCore/src/lib.rs"
 SWIFT_SOURCE="$ROOT/Sources/Turnip/Turnip.swift"
-PATCH="$ROOT/Patches/pdf-inspector-embed-apple-cmaps.patch"
 ENGINE_REVISION=$(tr -d '[:space:]' < "$ROOT/ENGINE_REVISION")
 ENGINE_VERSION=$(sed -n 's/^pdf-inspector = {.*version = "=\([^"]*\)".*}$/\1/p' "$MANIFEST")
-PATCH_DIGEST=$(shasum -a 256 "$PATCH" | awk '{print $1}')
 THIN_FILE=
 STRINGS_FILE=
 
@@ -57,7 +55,6 @@ esac
 
 grep -Fq -- "- pdf-inspector version: \`$ENGINE_VERSION\`" "$ROOT/Artifacts/BUILD_INFO.md"
 grep -Fq -- "- pdf-inspector upstream source revision: \`$ENGINE_REVISION\`" "$ROOT/Artifacts/BUILD_INFO.md"
-grep -Fq -- "- Turnip patch SHA-256: \`$PATCH_DIGEST\`" "$ROOT/Artifacts/BUILD_INFO.md"
 grep -Fq "pinned to version $ENGINE_VERSION and source commit" "$ROOT/THIRD_PARTY_NOTICES.md"
 grep -Fq "\`$ENGINE_REVISION\`" "$ROOT/THIRD_PARTY_NOTICES.md"
 grep -Fq 'env!("DOCUMENTKIT_PDF_INSPECTOR_VERSION")' "$RUST_SOURCE"

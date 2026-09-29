@@ -61,6 +61,8 @@ to your app target:
 https://github.com/swiftlysingh/Turnip.git
 ```
 
+Select version `0.2.0` or later in Xcode's package dependency settings.
+
 The binary target is an implementation detail. Client code imports only:
 
 ```swift
@@ -89,9 +91,31 @@ let json = try JSONEncoder().encode(document)
 `ExtractedDocument` contains the public schema version, full inspection data,
 every requested page, and extraction warnings. Each page has its original
 zero-based PDF index, upright visible size, processing status, and text or
-table blocks in inferred reading order. Tables preserve explicit grid indexes,
-blank and unresolved cells, supported spans, repeated headers, duplicate rows,
-source lines, and available geometry.
+table blocks in inferred reading order. Each table contains rectangular `rows`
+of `cells`. Cells distinguish confirmed text, empty slots, unresolved content,
+and slots covered by a span. Repeated headers and duplicate rows are retained.
+Table fragments stay on their source pages.
+
+```swift
+for page in document.pages {
+    for block in page.blocks {
+        guard case let .table(table) = block.content else { continue }
+        for row in table.layoutRows {
+            for cell in row.cells {
+                if let text = cell.text {
+                    print(text)
+                }
+            }
+        }
+    }
+}
+```
+
+Schema version 3 keeps every physical detector row in `rows` and adds
+`layoutRows`, the continuation-row and wrapped-content view shared with the
+Markdown renderer. A layout cell lists the IDs of every original line that
+contributed to it. Unresolved candidate text remains separate from confirmed
+text.
 
 Source references identify a page, block, optional table cell, and optional
 line. A consumer can resolve them without matching text:
@@ -109,8 +133,12 @@ guard let sourceText = sourceCell.joinedText else { return }
 print(sourceText)
 ```
 
+Each `TextLine.id` identifies one source occurrence, even when two lines have
+identical text. `sourceReference(forLineID:)` resolves that ID through the
+existing source-reference API.
+
 Turnip leaves values such as `5.00 CR`, `(12.34)`, and `1.234,56` as strings.
-Statement layouts, dates, money, credit and debit conventions, merchants,
+Dates, money, credit and debit conventions, merchants,
 categories, reconciliation, and import decisions belong to the consuming app.
 See [StructuredDocument.md](Documentation/StructuredDocument.md) for the JSON
 contract, coordinates, partial extraction semantics, and a complete example.
@@ -250,25 +278,11 @@ locked truth, review, holdout, and scoring contract.
 
 The engine revision is fixed in [`ENGINE_REVISION`](ENGINE_REVISION). The build
 does not follow `main` or a semver range. `Scripts/prepare-engine.sh` clones that
-exact upstream source revision into the ignored `Build` directory and applies
-the tracked Apple patch. `Turnip.engineRevision` reports the upstream
-source revision, not a full patched-tree identity. At compile time, the Rust
-build script reconstructs `HEAD` plus the patch and rejects any other prepared
-tree. `Scripts/verify-artifact.sh` checks the packaged slices against that
-pin. The current pre-release pin uses
-`swiftlysingh/pdf-inspector` while the indirect Form resource and
-transaction-row fixes are prepared for upstream.
-
-The patch makes four narrow changes to the pinned engine:
-
-- embeds Adobe CMaps so CID text extraction never depends on a build-machine
-  filesystem path;
-- uses lopdf's single-threaded parser on Apple targets to keep the binary and
-  build footprint bounded;
-- evaluates sparse-text and undecodable-font quality heuristics against the
-  selected pages when a page filter is supplied;
-- captures page-local text and table structure before Markdown-only cleanup,
-  while reusing the established table detection and reading-order pipeline.
+exact source revision into the ignored `Build` directory. `Turnip.engineRevision`
+reports that commit. At compile time, the Rust build script rejects the prepared
+engine unless it is the exact clean `HEAD`. `Scripts/verify-artifact.sh` checks
+every packaged slice against the same pin. The pre-release pin uses the maintained
+`swiftlysingh/pdf-inspector` fork, which owns the reusable extraction behavior.
 
 To rebuild all five Rust slices and replace the local artifact:
 
@@ -285,7 +299,6 @@ then verifies the XCFramework architecture and header layout.
 Sources/Turnip/                Public Swift APIs and models, DocC, and private wire decoder
 Native/DocumentKitCore/        Rust static-library bridge and C header
 Artifacts/                     Prebuilt local XCFramework
-Patches/                       Minimal patch applied to pinned pdf-inspector
 Examples/TurnipDemo/           Native PDF-versus-structured-JSON sample app
 Benchmarks/                    Corpus manifest, runner, and methodology
 Scripts/                       Reproducible engine, artifact, and DocC build checks

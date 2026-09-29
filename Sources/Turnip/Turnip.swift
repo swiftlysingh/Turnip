@@ -14,9 +14,6 @@ public enum Turnip {
     public static let maximumInputSize = 100 * 1024 * 1024
 
     /// The pinned upstream engine source revision embedded in the packaged binary.
-    ///
-    /// This identifies the upstream source commit. It does not include the
-    /// hash of Turnip's tracked Apple patch.
     public static let engineRevision = String(cString: documentkit_engine_revision())
 
     /// Inspects PDF data without producing Markdown.
@@ -616,7 +613,9 @@ private struct Payload: Sendable {
         operation: EngineOperation,
         selectedPageIndexes: [Int]?
     ) throws {
-        guard response.schemaVersion == 2 else {
+        guard response.schemaVersion == 3
+            || (response.schemaVersion == 2 && operation != .document)
+        else {
             throw TurnipError.engineFailure(
                 code: "unsupported_schema",
                 message: "The PDF engine returned an unsupported response."
@@ -893,28 +892,132 @@ private struct WireDocumentBlock: Decodable {
         let publicContent: DocumentBlock.Content
         switch content {
         case let .text(lines):
-            publicContent = .text(TextBlock(lines: try lines.map { try $0.publicLine() }))
-        case let .table(rowCount, columnCount, cells):
-            let publicCells = try cells.map { try $0.publicCell() }
-            guard let table = try? TableBlock(
-                validating: rowCount,
-                columnCount: columnCount,
-                cells: publicCells
-            ) else {
-                throw TurnipError.engineFailure(
-                    code: "invalid_table_grid",
-                    message: "The PDF engine returned an invalid table grid."
+            publicContent = .text(
+                TextBlock(lines: try lines.enumerated().map { index, line in
+                    try line.publicLine(id: "\(id)-l\(index)")
+                })
+            )
+        case let .table(rowCount, columnCount, cells, continuationRows, unassignedLines):
+            publicContent = .table(
+                try publicTable(
+                    blockID: id,
+                    rows: rowCount,
+                    columns: columnCount,
+                    wireCells: cells,
+                    continuationRows: continuationRows,
+                    unassignedLines: unassignedLines
                 )
-            }
-            publicContent = .table(table)
+            )
         }
         return DocumentBlock(id: id, bounds: try bounds?.publicBounds(), content: publicContent)
     }
 }
 
+private func publicTable(
+    blockID: String,
+    rows rowCount: Int,
+    columns columnCount: Int,
+    wireCells: [WireTableCell],
+    continuationRows: [WireTableContinuation],
+    unassignedLines: [WireTextLine]
+) throws -> TableBlock {
+    guard rowCount > 0, columnCount > 0,
+        !rowCount.multipliedReportingOverflow(by: columnCount).overflow
+    else {
+        throw TurnipError.engineFailure(
+            code: "invalid_table_grid",
+            message: "The PDF engine returned invalid table dimensions."
+        )
+    }
+
+    let slotCount = rowCount * columnCount
+    var slots = Array<TableCell?>(repeating: nil, count: slotCount)
+    for wireCell in wireCells {
+        guard wireCell.row >= 0, wireCell.column >= 0,
+            wireCell.row < rowCount, wireCell.column < columnCount,
+            wireCell.rowSpan > 0, wireCell.columnSpan > 0,
+            wireCell.rowSpan <= rowCount - wireCell.row,
+            wireCell.columnSpan <= columnCount - wireCell.column
+        else {
+            throw TurnipError.engineFailure(
+                code: "invalid_table_grid",
+                message: "The PDF engine returned a cell outside its table grid."
+            )
+        }
+
+        let anchor = TableCellAddress(row: wireCell.row, column: wireCell.column)
+        let publicCell = try wireCell.publicCell(blockID: blockID)
+        for row in wireCell.row..<(wireCell.row + wireCell.rowSpan) {
+            for column in wireCell.column..<(wireCell.column + wireCell.columnSpan) {
+                let index = row * columnCount + column
+                guard slots[index] == nil else {
+                    throw TurnipError.engineFailure(
+                        code: "invalid_table_grid",
+                        message: "The PDF engine returned overlapping table cells."
+                    )
+                }
+                slots[index] = if row == wireCell.row && column == wireCell.column {
+                    publicCell
+                } else {
+                    TableCell(content: .covered(by: anchor))
+                }
+            }
+        }
+    }
+
+    guard !slots.contains(where: { $0 == nil }) else {
+        throw TurnipError.engineFailure(
+            code: "invalid_table_grid",
+            message: "The PDF engine did not cover every table slot."
+        )
+    }
+    let continuationTargets = Dictionary(
+        continuationRows.map { ($0.row, $0.continuationOf) },
+        uniquingKeysWith: { first, _ in first }
+    )
+    guard continuationTargets.count == continuationRows.count,
+        continuationRows.allSatisfy({
+            (0..<rowCount).contains($0.row) && (0..<$0.row).contains($0.continuationOf)
+        })
+    else {
+        throw TurnipError.engineFailure(
+            code: "invalid_table_layout",
+            message: "The PDF engine returned invalid continuation-row layout."
+        )
+    }
+    let tableRows = (0..<rowCount).map { row in
+        TableRow(
+            id: "\(blockID)-r\(row)",
+            cells: (0..<columnCount).map { column in
+                slots[row * columnCount + column]!
+            },
+            continuationOfRowID: continuationTargets[row].map { "\(blockID)-r\($0)" }
+        )
+    }
+    do {
+        return try TableBlock(
+            validating: tableRows,
+            unassignedLines: unassignedLines.enumerated().map { index, line in
+                try line.publicLine(id: "\(blockID)-unassigned-l\(index)")
+            }
+        )
+    } catch {
+        throw TurnipError.engineFailure(
+            code: "invalid_table_grid",
+            message: "The PDF engine returned an invalid table grid."
+        )
+    }
+}
+
 private enum WireBlockContent: Decodable {
     case text(lines: [WireTextLine])
-    case table(rowCount: Int, columnCount: Int, cells: [WireTableCell])
+    case table(
+        rowCount: Int,
+        columnCount: Int,
+        cells: [WireTableCell],
+        continuationRows: [WireTableContinuation],
+        unassignedLines: [WireTextLine]
+    )
 
     private enum CodingKeys: String, CodingKey {
         case type
@@ -922,6 +1025,8 @@ private enum WireBlockContent: Decodable {
         case rowCount = "row_count"
         case columnCount = "column_count"
         case cells
+        case continuationRows = "continuation_rows"
+        case unassignedLines = "unassigned_lines"
     }
 
     init(from decoder: Decoder) throws {
@@ -933,7 +1038,15 @@ private enum WireBlockContent: Decodable {
             self = .table(
                 rowCount: try container.decode(Int.self, forKey: .rowCount),
                 columnCount: try container.decode(Int.self, forKey: .columnCount),
-                cells: try container.decode([WireTableCell].self, forKey: .cells)
+                cells: try container.decode([WireTableCell].self, forKey: .cells),
+                continuationRows: try container.decode(
+                    [WireTableContinuation].self,
+                    forKey: .continuationRows
+                ),
+                unassignedLines: try container.decode(
+                    [WireTextLine].self,
+                    forKey: .unassignedLines
+                )
             )
         default:
             throw DecodingError.dataCorruptedError(
@@ -942,6 +1055,16 @@ private enum WireBlockContent: Decodable {
                 debugDescription: "Unknown structured block type"
             )
         }
+    }
+}
+
+private struct WireTableContinuation: Decodable {
+    let row: Int
+    let continuationOf: Int
+
+    enum CodingKeys: String, CodingKey {
+        case row
+        case continuationOf = "continuation_of"
     }
 }
 
@@ -968,39 +1091,70 @@ private struct WireTableCell: Decodable {
         case bounds
     }
 
-    func publicCell() throws -> TableCell {
+    func publicCell(blockID: String) throws -> TableCell {
         guard row >= 0, column >= 0, rowSpan > 0, columnSpan > 0 else {
             throw TurnipError.engineFailure(
                 code: "invalid_table_cell",
                 message: "The PDF engine returned an invalid table cell."
             )
         }
-        guard let publicRole = TableCellRole(rawValue: role),
-            let publicState = TableCellState(rawValue: state)
-        else {
+        let publicRole: TableCellRole?
+        switch role {
+        case "header":
+            publicRole = .header
+        case "body":
+            publicRole = .body
+        case "unknown":
+            publicRole = nil
+        default:
             throw TurnipError.engineFailure(
                 code: "unknown_table_cell_value",
-                message: "The PDF engine returned an unknown table cell role or state."
+                message: "The PDF engine returned an unknown table cell role."
             )
         }
-        guard detectedText.map({ !$0.isEmpty }) ?? true,
-            publicState != .extracted || (!lines.isEmpty && detectedText == nil),
-            publicState != .empty || (lines.isEmpty && detectedText == nil)
-        else {
+
+        let publicLines = try lines.enumerated().map { index, line in
+            try line.publicLine(id: "\(blockID)-r\(row)-c\(column)-l\(index)")
+        }
+        let content: TableCell.Content
+        switch state {
+        case "extracted":
+            guard !publicLines.isEmpty, detectedText == nil else {
+                throw TurnipError.engineFailure(
+                    code: "inconsistent_table_cell_state",
+                    message: "The PDF engine returned invalid extracted cell evidence."
+                )
+            }
+            content = .text(publicLines)
+        case "empty":
+            guard publicLines.isEmpty, detectedText == nil else {
+                throw TurnipError.engineFailure(
+                    code: "inconsistent_table_cell_state",
+                    message: "The PDF engine returned invalid empty cell evidence."
+                )
+            }
+            content = .empty
+        case "unresolved":
+            guard detectedText.map({ !$0.isEmpty }) ?? true else {
+                throw TurnipError.engineFailure(
+                    code: "inconsistent_table_cell_state",
+                    message: "The PDF engine returned invalid unresolved cell evidence."
+                )
+            }
+            content = .unresolved(lines: publicLines, candidateText: detectedText)
+        default:
             throw TurnipError.engineFailure(
-                code: "inconsistent_table_cell_state",
-                message: "The PDF engine returned a table cell whose state contradicts its lines."
+                code: "unknown_table_cell_value",
+                message: "The PDF engine returned an unknown table cell state."
             )
         }
+
         return TableCell(
-            row: row,
-            column: column,
-            rowSpan: rowSpan,
-            columnSpan: columnSpan,
+            content: content,
             role: publicRole,
-            state: publicState,
-            detectedText: detectedText,
-            lines: try lines.map { try $0.publicLine() },
+            span: rowSpan > 1 || columnSpan > 1
+                ? TableCellSpan(rows: rowSpan, columns: columnSpan)
+                : nil,
             bounds: try bounds?.publicBounds()
         )
     }
@@ -1010,8 +1164,8 @@ private struct WireTextLine: Decodable {
     let text: String
     let bounds: WireBounds?
 
-    func publicLine() throws -> TextLine {
-        TextLine(text: text, bounds: try bounds?.publicBounds())
+    func publicLine(id: String) throws -> TextLine {
+        return TextLine(id: id, text: text, bounds: try bounds?.publicBounds())
     }
 }
 

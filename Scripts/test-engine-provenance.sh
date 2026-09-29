@@ -16,11 +16,10 @@ trap 'cleanup; exit 1' HUP INT TERM
 FIXTURE=$(mktemp -d "${TMPDIR:-/tmp}/documentkit-engine-provenance.XXXXXX")
 CORE="$FIXTURE/Native/DocumentKitCore"
 ENGINE="$FIXTURE/Build/vendor/pdf-inspector"
-PATCH="$FIXTURE/Patches/pdf-inspector-embed-apple-cmaps.patch"
 MANIFEST="$CORE/Cargo.toml"
 TARGET="$FIXTURE/target"
 
-mkdir -p "$CORE/src" "$ENGINE/src" "$FIXTURE/Patches" "$FIXTURE/Scripts"
+mkdir -p "$CORE/src" "$ENGINE/src" "$FIXTURE/Scripts"
 cp "$ROOT/Native/DocumentKitCore/build.rs" "$CORE/build.rs"
 cp "$ROOT/Scripts/prepare-engine.sh" "$FIXTURE/Scripts/prepare-engine.sh"
 chmod +x "$FIXTURE/Scripts/prepare-engine.sh"
@@ -33,18 +32,18 @@ printf '%s\n' \
     'build = "build.rs"' \
     '' \
     '[dependencies]' \
-    'pdf-inspector = { path = "../../Build/vendor/pdf-inspector", version = "=1.14.2", optional = true }' \
+    'pdf-inspector = { path = "../../Build/vendor/pdf-inspector", version = "=1.0.0", optional = true }' \
     > "$MANIFEST"
 printf '%s\n' 'pub fn fixture() {}' > "$CORE/src/lib.rs"
 
 printf '%s\n' \
     '[package]' \
     'name = "pdf-inspector"' \
-    'version = "1.14.2"' \
+    'version = "1.0.0"' \
     'edition = "2024"' \
     > "$ENGINE/Cargo.toml"
 printf '%s\n' 'pub const BASELINE: bool = true;' > "$ENGINE/src/lib.rs"
-printf '%s\n' 'src/patched/ignored/' > "$ENGINE/.gitignore"
+printf '%s\n' 'src/ignored/' > "$ENGINE/.gitignore"
 
 git -C "$ENGINE" init -q
 git -C "$ENGINE" config user.email provenance@example.invalid
@@ -53,16 +52,6 @@ git -C "$ENGINE" add Cargo.toml src/lib.rs .gitignore
 git -C "$ENGINE" commit -qm baseline
 REVISION=$(git -C "$ENGINE" rev-parse HEAD)
 printf '%s\n' "$REVISION" > "$FIXTURE/ENGINE_REVISION"
-
-printf '%s\n' \
-    'diff --git a/src/patched/deep.rs b/src/patched/deep.rs' \
-    'new file mode 100644' \
-    'index 0000000..f92f4a3' \
-    '--- /dev/null' \
-    '+++ b/src/patched/deep.rs' \
-    '@@ -0,0 +1 @@' \
-    '+pub const PATCHED: bool = true;' \
-    > "$PATCH"
 
 cargo generate-lockfile --offline --manifest-path "$MANIFEST"
 "$FIXTURE/Scripts/prepare-engine.sh"
@@ -89,17 +78,17 @@ expect_build_failure() {
 
 build
 
-mkdir -p "$ENGINE/src/patched/ordinary/nested"
+mkdir -p "$ENGINE/src/ordinary/nested"
 printf '%s\n' 'pub const UNEXPECTED: bool = true;' \
-    > "$ENGINE/src/patched/ordinary/nested/unexpected.rs"
-expect_build_failure ordinary 'does not match ENGINE_REVISION plus the tracked Apple CMap patch'
+    > "$ENGINE/src/ordinary/nested/unexpected.rs"
+expect_build_failure ordinary 'does not match ENGINE_REVISION exactly'
 
-rm -rf "$ENGINE/src/patched/ordinary"
+rm -rf "$ENGINE/src/ordinary"
 build
 
-mkdir -p "$ENGINE/src/patched/ignored/nested"
+mkdir -p "$ENGINE/src/ignored/nested"
 printf '%s\n' 'pub const UNEXPECTED: bool = true;' \
-    > "$ENGINE/src/patched/ignored/nested/unexpected.rs"
+    > "$ENGINE/src/ignored/nested/unexpected.rs"
 expect_build_failure ignored 'contains ignored untracked files'
 
 echo "Verified Cargo reruns provenance checks for nested ordinary and ignored files."

@@ -6,22 +6,19 @@
 	<array>
 		<dict>
 			<key>BinaryPath</key>
-			<string>libdocumentkit_core.a</string>
+			<string>libdocumentkit_core-ios.a</string>
 			<key>HeadersPath</key>
 			<string>Headers</string>
 			<key>LibraryIdentifier</key>
-			<string>ios-arm64_x86_64-simulator</string>
+			<string>ios-arm64</string>
 			<key>LibraryPath</key>
-			<string>libdocumentkit_core.a</string>
+			<string>libdocumentkit_core-ios.a</string>
 			<key>SupportedArchitectures</key>
 			<array>
 				<string>arm64</string>
-				<string>x86_64</string>
 			</array>
 			<key>SupportedPlatform</key>
 			<string>ios</string>
-			<key>SupportedPlatformVariant</key>
-			<string>simulator</string>
 		</dict>
 		<dict>
 			<key>BinaryPath</key>
@@ -42,19 +39,22 @@
 		</dict>
 		<dict>
 			<key>BinaryPath</key>
-			<string>libdocumentkit_core-ios.a</string>
+			<string>libdocumentkit_core.a</string>
 			<key>HeadersPath</key>
 			<string>Headers</string>
 			<key>LibraryIdentifier</key>
-			<string>ios-arm64</string>
+			<string>ios-arm64_x86_64-simulator</string>
 			<key>LibraryPath</key>
-			<string>libdocumentkit_core-ios.a</string>
+			<string>libdocumentkit_core.a</string>
 			<key>SupportedArchitectures</key>
 			<array>
 				<string>arm64</string>
+				<string>x86_64</string>
 			</array>
 			<key>SupportedPlatform</key>
 			<string>ios</string>
+			<key>SupportedPlatformVariant</key>
+			<string>simulator</string>
 		</dict>
 	</array>
 	<key>CFBundlePackageType</key>

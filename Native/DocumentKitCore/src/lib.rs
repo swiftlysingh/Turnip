@@ -11,7 +11,7 @@ use std::slice;
 
 const PDF_INSPECTOR_VERSION: &str = env!("DOCUMENTKIT_PDF_INSPECTOR_VERSION");
 const MAX_INPUT_BYTES: usize = 100 * 1024 * 1024;
-const BRIDGE_SCHEMA_VERSION: u32 = 2;
+const BRIDGE_SCHEMA_VERSION: u32 = 3;
 const VERSION: &[u8] = concat!(
     "pdf-inspector/",
     env!("DOCUMENTKIT_PDF_INSPECTOR_VERSION"),
@@ -619,7 +619,18 @@ fn validate_structured_document(
                     row_count,
                     column_count,
                     cells,
-                } => validate_table(*row_count, *column_count, cells)?,
+                    continuation_rows,
+                    unassigned_lines,
+                } => {
+                    for line in cells
+                        .iter()
+                        .flat_map(|cell| &cell.lines)
+                        .chain(unassigned_lines)
+                    {
+                        validate_bounds(line.bounds.as_ref())?;
+                    }
+                    validate_table(*row_count, *column_count, cells, continuation_rows)?;
+                }
             }
         }
     }
@@ -630,6 +641,7 @@ fn validate_table(
     row_count: u32,
     column_count: u32,
     cells: &[pdf_inspector::StructuredTableCell],
+    continuation_rows: &[pdf_inspector::StructuredTableContinuation],
 ) -> Result<(), ErrorPayload> {
     let slot_count = row_count
         .checked_mul(column_count)
@@ -637,6 +649,16 @@ fn validate_table(
     if row_count == 0 || column_count == 0 || cells.len() > slot_count as usize {
         return Err(structured_output_error(
             "The structured table dimensions are invalid",
+        ));
+    }
+    let mut seen_continuations = HashSet::new();
+    if continuation_rows.iter().any(|entry| {
+        entry.row >= row_count
+            || entry.continuation_of >= entry.row
+            || !seen_continuations.insert(entry.row)
+    }) {
+        return Err(structured_output_error(
+            "The structured table contains invalid continuation rows",
         ));
     }
 
@@ -761,7 +783,7 @@ fn error_payload(error: PdfError) -> ErrorPayload {
 
 fn encode_response(response: Response) -> DocumentKitBuffer {
     let json = serde_json::to_vec(&response).unwrap_or_else(|_| {
-        br#"{"schema_version":2,"ok":false,"result":null,"error":{"code":"serialization_error","message":"Could not encode the engine response"}}"#.to_vec()
+        br#"{"schema_version":3,"ok":false,"result":null,"error":{"code":"serialization_error","message":"Could not encode the engine response"}}"#.to_vec()
     });
     let mut bytes = json.into_boxed_slice();
     let buffer = DocumentKitBuffer {
@@ -802,6 +824,7 @@ mod tests {
                     content: StructuredBlockContent::Table {
                         row_count: 2,
                         column_count: 2,
+                        continuation_rows: Vec::new(),
                         cells: vec![
                             StructuredTableCell {
                                 row: 0,
@@ -837,6 +860,7 @@ mod tests {
                                 bounds: None,
                             },
                         ],
+                        unassigned_lines: Vec::new(),
                     },
                 }],
             }],
@@ -930,6 +954,13 @@ mod tests {
                 pages_needing_ocr: Vec::new(),
                 ocr_reasons_by_page: Vec::new(),
                 title: None,
+                author: None,
+                subject: None,
+                keywords: None,
+                creator: None,
+                producer: None,
+                creation_date: None,
+                mod_date: None,
                 confidence: 1.0,
                 layout: pdf_inspector::LayoutComplexity {
                     is_complex: true,
@@ -937,6 +968,7 @@ mod tests {
                     pages_with_columns: vec![1, 1],
                 },
                 has_encoding_issues: false,
+                cmap_gaps: Vec::new(),
                 structured_document: Some(valid_spanning_document()),
             },
             None,

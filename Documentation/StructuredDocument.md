@@ -1,278 +1,258 @@
-# Structured document schema v1
+# Structured document schema v3
 
-`Turnip.extractDocument` returns an `ExtractedDocument`. Every public model in
-the document graph is `Codable`, `Sendable`, and `Hashable`. The JSON is a
-consumer contract, not the private Rust bridge envelope.
+`Turnip.extractDocument` returns an `ExtractedDocument`: ordered
+text and page-local tables from a digital PDF. It is a local extraction
+contract. It does not run OCR, expose native text items, or assign meaning to
+extracted strings.
 
-## Contract
+Every model in the document graph is `Codable`, `Sendable`, and
+`Hashable`. The public JSON is independent from the private native
+bridge payload.
 
-These fields are required in schema v1:
+## Shape
 
-- `schemaVersion`, `inspection`, `pages`, and `warnings` on the root object
-- `kind`, `pageCount`, `confidence`, `processingTimeMilliseconds`,
-  `pagesNeedingOCR`, `ocrReasonsByPage`, and `engineVersion` on inspection
-- `isComplex`, `pagesWithTables`, and `pagesWithColumns` when `layout` is present
-- `pageIndex` and `reasons` on each OCR-reason entry
-- `code` and `pageIndexes` on each warning
-- `pageIndex`, `size`, `status`, and `blocks` on every page
-- `width` and `height` on every page size
-- `id` and `content` on every block
-- `type` and `lines` for text content
-- `type`, `rowCount`, `columnCount`, and `cells` for table content
-- `row`, `column`, `rowSpan`, `columnSpan`, `role`, `state`, and `lines` on cells
-- `text` on lines
-- `x`, `y`, `width`, and `height` when a bounds object is present
+```swift
+for page in document.pages {
+    for block in page.blocks {
+        switch block.content {
+        case let .text(text):
+            print(text.joinedText)
+        case let .table(table):
+            let cell = table.layoutRows[0].cells[0]
+            print(cell.text)
+        }
+    }
+}
+```
 
-`title`, `layout`, `hasEncodingIssues`, `detectedText`, and every `bounds` field
-are optional.
-Turnip's encoder omits an optional field when no value is available. Its
-decoder accepts either an omitted field or `null`, then re-encoding omits the
-field. Passwords, input bytes, file paths, and Markdown are never part of this
-schema.
+Pages use their original zero-based PDF indexes and appear in ascending source
+order. Blocks appear in inferred reading order within a page. A table stays on
+the physical page where it was detected. Turnip does not join page fragments,
+deduplicate repeated rows, or remove repeated headers.
 
-A separately encoded `DocumentSourceReference` requires `pageIndex` and
-`blockID`. Its `row`, `column`, and `lineIndex` fields are optional and omitted
-when absent. Row and column must either both be present or both be absent.
-
-Block content has an explicit discriminator:
+Text before, between, and after detected tables remains in text blocks at its
+place in the inferred reading order. This is still extraction output. A visual
+table can be missed or represented as text when the engine cannot establish a
+table.
 
 ```json
 {
   "id": "p0-b1",
   "content": {
     "type": "table",
-    "rowCount": 1,
-    "columnCount": 1,
-    "cells": [
+    "rows": [
       {
-        "row": 0,
-        "column": 0,
-        "rowSpan": 1,
-        "columnSpan": 1,
-        "role": "unknown",
-        "state": "empty",
-        "lines": []
+        "id": "p0-b1-r0",
+        "cells": [
+          {
+            "state": "text",
+            "role": "header",
+            "lines": [{ "id": "p0-b1-r0-c0-l0", "text": "Place" }]
+          },
+          {
+            "state": "text",
+            "lines": [
+              { "id": "p0-b1-r0-c1-l0", "text": "North" },
+              { "id": "p0-b1-r0-c1-l1", "text": "Campus" }
+            ]
+          },
+          { "state": "empty" }
+        ]
       }
-    ]
+    ],
+    "unassignedLines": []
   }
 }
 ```
 
-Schema v1 uses these enum strings:
+`TableBlock.rows[r].cells[c]` is the literal logical slot at row `r`
+and column `c`. A table has at least one row and one column. Every row
+has the same number of cells, so both counts are derived from `rows`.
+The JSON does not store a flat cell list or repeat row and column indexes in
+each cell.
 
-- page status: `extracted`, `needsOCR`, `extractionFailed`
-- block type: `text`, `table`
-- cell role: `header`, `body`, `unknown`
-- cell state: `extracted`, `empty`, `unresolved`
-- document kind: `text_based`, `scanned`, `image_based`, `mixed`
-- known warning codes: `ocrRequired`, `encodingIssues`
+Every physical row has an opaque `id`. `continuationOfRowID` is present only
+when shared layout cleanup classifies that row as wrapped content belonging to
+an earlier row. `layoutRows` is the joined view used for display. Each layout
+cell keeps `sourceLineIDs` for every contributing original `TextLine`, including
+identical repeated strings. `document.sourceReference(forLineID:)` converts an
+ID back to a `DocumentSourceReference`; `document.line(id:)` returns the
+original string and bounds. Joined display text has no invented bounds.
+`layoutRows` is computed from the physical rows and is not stored in the document
+JSON. Decoding reconstructs the same projection from source evidence.
 
-Unknown structural enums and unsupported root schema versions fail decoding.
-Warning codes are different because warnings are advisory and extensible. An
-unknown warning code decodes as `DocumentWarning.Kind.unknown(String)` and is
-preserved when encoded again. Unknown object fields are ignored within schema
-v1; a change that alters the meaning of existing fields requires a new root
-schema version.
+Empty-row removal and footnote extraction remain Markdown-only. Structured
+`rows` retain meaningful blanks, footnotes, repeated headers, and identical
+rows. Markdown also retains its presentation-only paragraph cleanup and
+cross-page continuation rendering. Structured table fragments always remain
+page-local.
 
-Warning `pageIndexes` contain only pages for which the engine supplied
-page-local evidence. An empty list means the warning applies to the document
-but could not be localized. Consumers must not interpret an empty list as every
-requested page.
+When the detector finds a grid but positioned source lines cannot be safely
+assigned to its cells, the cells remain `unresolved` and keep detector strings
+as candidate text. The original positioned strings move to
+`TableBlock.unassignedLines`; they do not become empty cells or disappear.
 
-Pages are strictly ascending by their original zero-based PDF index. Blocks
-remain in inferred reading order. Cells are ordered by zero-based row and then
-column. JSON array order is meaningful and round-tripping preserves it.
+## Cell evidence
 
-## Pages and partial extraction
+Each `TableCell` has one tagged content state:
 
-Every requested page appears in a successful result, including a selected page
-that contains no extracted text. `inspection.pageCount` is the source PDF's
-total page count, while `pages` contains only the requested indexes.
+- `text` has one or more positioned `TextLine` values. The lines
+  preserve the engine's line grouping. `joinedText` joins them with newline
+  characters.
+- `empty` is a confirmed empty logical slot. Its `joinedText` is
+  the empty string.
+- `unresolved` means the engine could not reconcile table evidence.
+  It can retain positioned `lines` and separately marked
+  `unresolvedCandidateText`. Its `joinedText` is always `nil`.
+  Turnip never promotes candidate text to confirmed source text.
+- `covered` is a slot occupied by another cell's span. Its
+  `coveredBy` address points to the anchor. Its `joinedText` is
+  `nil`.
 
-`extracted` means processing completed. It is not a correctness claim.
-`needsOCR` means Turnip found evidence that OCR is needed; Turnip does not run
-OCR. Such a page can still contain best-effort embedded text. `extractionFailed`
-is reserved for an engine that can report and recover from a page-local
-failure. The pinned engine does not currently emit it. A page extraction
-failure, invalid PDF, encryption failure, out-of-range selection, or other
-engine failure remains a thrown error instead of a successful empty document.
+A span appears on its anchor as `span: { rows, columns }`. Every slot it
+covers remains present as `covered`; no value is duplicated. Only spans
+the engine can establish appear in output. Do not infer a span from blank or
+matching strings.
 
-A consumer should treat `needsOCR` or `extractionFailed` as incomplete page
-coverage. Warnings and page statuses must be retained with interpreted output.
+`role` is optional. `header` and `body` appear only when
+tagged-PDF evidence provides that role. Turnip does not make a row a header to
+suit a presentation format.
 
-## Tables, lines, and spans
+Cell values remain strings. Turnip does not parse numbers, dates, units,
+identifiers, signs, categories, or any other application-specific values.
 
-Structured tables are captured before Markdown presentation cleanup. Page-local
-fragments retain repeated headers, duplicate rows, empty rows, continuation
-rows, and their source order. Cell text is decoded PDF text before Markdown
-escaping. Values such as `03 Jan`, `01/02`, `5.00 CR`, `(12.34)`, and
-`1.234,56` remain strings.
-
-Line arrays preserve the source lines available to the engine. A cell's
-optional `joinedText` convenience accessor joins them with newline characters,
-falling back to `detectedText` only when no positioned line was associated. It
-returns an empty string for a confirmed empty cell and `nil` for an unresolved
-cell with no text evidence. It is not a second stored text representation.
-
-A spanning cell appears once at its top-left row and column. `rowSpan` and
-`columnSpan` say which slots it covers, and those covered slots do not get
-duplicate cell objects. All other grid slots are explicit. Turnip preserves a
-span only when the extraction path has structural or vector evidence for it.
-It does not infer a span from similar or blank strings.
-
-Cell state carries an important distinction:
-
-- `extracted`: positioned source lines agree with the raw grid content.
-- `empty`: an established, non-covered grid slot has no raw text or associated
-  positioned source item.
-- `unresolved`: raw grid content and positioned evidence could not be
-  reconciled. Positioned `lines` and their available bounds remain present.
-  If the detector also produced different raw cell content, `detectedText`
-  preserves it without pretending it is a source line. This is the only case
-  where both representations can appear.
-
-An empty cell is not proof that the visible PDF region is blank.
-
-## Coordinates
-
-`DocumentBounds` uses normalized `x`, `y`, `width`, and `height` values. Its
-origin is the top-left of the upright visible page after the inherited CropBox,
-nonzero crop origin, `/Rotate`, and positive finite inherited `/UserUnit` are
-applied. `DocumentPage.size` is the same upright visible page in PDF points.
-Malformed or non-positive `/UserUnit` values fail extraction instead of
-producing misleading dimensions.
-
-The engine transforms all rectangle corners, takes their enclosing rectangle,
-clips it to the visible page, and then normalizes it. Native PDF rectangles can
-use signed extents, so their endpoint order is canonicalized before this
-transformation. Public widths and heights are always positive. A wholly
-outside, non-finite, or unavailable location is omitted. It is never replaced
-with a zero rectangle.
-
-PDF text often lacks exact glyph boxes. The engine can estimate line height
-from font size, so a UI should pad highlights and present them as an approximate
-source region. In schema v1, a table cell bound is the union of its positioned
-text lines, not the full painted grid rectangle. Empty and unresolved cells can
-therefore have no bound even when the table detector saw surrounding rules.
-
-## Source references and financial interpretation
+## Source references
 
 `DocumentSourceReference` addresses:
 
 ```text
-pageIndex -> blockID -> optional cell row/column -> optional lineIndex
+pageIndex -> blockID -> optional literal row/column -> optional lineIndex
 ```
 
-Use `document.block(for:)`, `cell(for:)`, `line(for:)`, or `text(for:)` to
-resolve a reference. Row and column must be supplied together. A wrapped
-transaction can carry references to multiple rows or cells. Row identity is
-the tuple `(pageIndex, blockID, row)`, so two legitimate rows with identical
-text remain separate and accidental reuse is detectable.
+`blockID` is an opaque identifier unique within one extracted document.
+A table row is identified by `(pageIndex, blockID, row)`; identical rows
+remain separate because their array positions differ.
 
-Turnip does not recognize a statement layout or convert dates and money. A
-RetroBudget interpreter can turn `5.00 CR` into signed minor units after
-considering statement context, then validate the result against its referenced
-cell. RetroBudget also owns candidate coverage, row reuse checks, printed-total
-reconciliation, and the decision to import or request review.
+A table reference with `lineIndex` and no row or column addresses an original
+line in `unassignedLines`. The line's text is source evidence, while its
+logical cell remains unresolved.
 
-For example, RetroBudget can store its interpretation separately from the
-Turnip document:
+`document.cell(for:)` returns the literal slot. A covered slot stays
+covered. `document.resolvedCell(for:)` and
+`document.resolvedSourceReference(for:)` follow `coveredBy` only
+when the caller asks. A line reference to a covered slot is invalid and does
+not become a line reference on its anchor.
+
+`document.text(for:)` returns confirmed text only. It returns `nil`
+for a literal unresolved or covered table slot. `document.line(for:)`
+can expose a positioned line retained by an unresolved cell, without making
+the cell confirmed text.
+
+References are useful within the same extraction result. They are not durable
+keys across a changed PDF, page selection, schema version, or engine revision.
+
+## Pages, warnings, and bounds
+
+Every requested page appears once, even when it has no blocks.
+`inspection.pageCount` is the total source-PDF page count; `pages`
+contains the requested selection.
+
+`extracted` means the engine processed the page. It does not claim that
+the text is correct. `needsOCR` means the engine found evidence that OCR
+would be needed. Turnip reports that state but does not perform OCR.
+`extractionFailed` is reserved for a recoverable page-local failure; a
+fatal parse, encryption, or selection error still throws.
+
+Keep page statuses and warnings with downstream results. An empty warning
+`pageIndexes` list means the warning is document-level but could not be
+localized. It does not mean every selected page is affected.
+
+`DocumentBounds` is optional source-inspection evidence. It has normalized
+`x`, `y`, `width`, and `height` coordinates in the
+top-left-origin upright visible page. `DocumentPage.size` supplies that
+page's visible size in PDF points. Bounds can be absent and are approximate
+locations, not glyph positions or table reconstruction data. Turnip exposes no
+raw text-item stream.
+
+## Preparing input for JEV
+
+An application can send a compact selection of this result to JEV without a
+second extraction path or a Turnip dependency on JEV. This invented fragment
+keeps nearby context, literal values, uncertainty, and source occurrences.
+An app can explicitly include computed `layoutRows` in this custom payload:
 
 ```json
 {
-  "amountMinor": -500,
-  "currency": "USD",
-  "source": {
-    "pageIndex": 0,
-    "blockID": "p0-b1",
-    "row": 2,
-    "column": 2
-  }
-}
-```
-
-Before accepting that value, it can resolve the address with
-`document.cell(for: source)` and confirm that the cell still contains
-`5.00 CR`. This validates the interpretation against the captured extraction
-evidence. It does not prove that the extraction matches the visible PDF.
-
-## Complete example
-
-This is the complete public JSON produced from the invented text-only fixture
-in `StructuredDocumentTests.swift`. The measured processing time is from that
-run and will vary by device.
-
-```json
-{
-  "schemaVersion": 1,
-  "inspection": {
-    "kind": "text_based",
-    "pageCount": 1,
-    "confidence": 1,
-    "processingTimeMilliseconds": 1,
-    "pagesNeedingOCR": [],
-    "ocrReasonsByPage": [],
-    "layout": {
-      "isComplex": false,
-      "pagesWithTables": [],
-      "pagesWithColumns": []
-    },
-    "hasEncodingIssues": false,
-    "engineVersion": "1.14.2@2322bcce4cd9458d24399bf8fee42f1aa201c8c1"
-  },
-  "pages": [
-    {
-      "pageIndex": 0,
-      "size": {
-        "width": 612,
-        "height": 792
-      },
-      "status": "extracted",
-      "blocks": [
-        {
-          "id": "p0-b0",
-          "bounds": {
-            "x": 0.09803922,
-            "y": 0.07575758,
-            "width": 0.199451,
-            "height": 0.09090909
-          },
-          "content": {
-            "type": "text",
-            "lines": [
-              {
-                "text": "Statement details",
-                "bounds": {
-                  "x": 0.09803922,
-                  "y": 0.07575758,
-                  "width": 0.15149021,
-                  "height": 0.015151516
-                }
-              },
-              {
-                "text": "No detected table here",
-                "bounds": {
-                  "x": 0.09803922,
-                  "y": 0.11363637,
-                  "width": 0.19837257,
-                  "height": 0.015151508
-                }
-              },
-              {
-                "text": "Keep this line separate",
-                "bounds": {
-                  "x": 0.09803922,
-                  "y": 0.15151516,
-                  "width": 0.199451,
-                  "height": 0.015151516
-                }
-              }
-            ]
-          }
-        }
-      ]
-    }
+  "pageIndex": 0,
+  "contextBefore": [
+    {"id": "p0-b0-l0", "text": "Statement period 09/01 to 09/30"},
+    {"id": "p0-b0-l1", "text": "Amounts shown in USD"}
   ],
-  "warnings": []
+  "table": {
+    "blockID": "p0-b1",
+    "rows": [
+      {"id": "p0-b1-r0", "cells": ["Date", "Details", "Amount"]},
+      {"id": "p0-b1-r1", "cells": ["09/05", "PARK CAFE", "$73.18"]},
+      {"id": "p0-b1-r2", "continuationOfRowID": "p0-b1-r1",
+       "cells": ["", "Terminal 2", ""]},
+      {"id": "p0-b1-r3", "cells": ["09/06", null, "5.00 CR"],
+       "candidateTextByColumn": {"1": "MARKET"}}
+    ],
+    "layoutRows": [
+      {"id": "p0-b1-r1", "sourceRowIDs": ["p0-b1-r1", "p0-b1-r2"],
+       "cells": [
+         {"state": "text", "text": "09/05", "sourceLineIDs": ["p0-b1-r1-c0-l0"]},
+         {"state": "text", "text": "PARK CAFE Terminal 2",
+          "sourceLineIDs": ["p0-b1-r1-c1-l0", "p0-b1-r2-c1-l0"]},
+         {"state": "text", "text": "$73.18", "sourceLineIDs": ["p0-b1-r1-c2-l0"]}
+       ]}
+    ]
+  },
+  "contextAfter": [
+    {"id": "p0-b2-l0", "text": "Summary balance (12.34)"}
+  ]
 }
 ```
+
+The unresolved `MARKET` candidate is not confirmed text. A confirmed blank is
+encoded as `state: "empty"`; a spanning slot uses `state: "covered"` and its
+anchor address. JEV can return supplied block, row, column, and source-line IDs,
+plus `none` or `unknown`. For example, it can select `p0-b1` as a transaction
+table, column `0` as a date candidate, `p0-b1-r2` as a continuation of
+`p0-b1-r1`, or no table continuation across the next page. The application then
+resolves those IDs against `ExtractedDocument` and reads Turnip's literal
+strings. Turnip does not infer dates, years, currencies, signs, merchants,
+transaction types, categories, or totals.
+
+## JSON and versioning
+
+Schema v3 requires:
+
+- `schemaVersion`, `inspection`, `pages`, and `warnings` on
+  the root.
+- `pageIndex`, `size`, `status`, and `blocks` on each page.
+- `id` and `content` on each block.
+- `type` plus `lines` for text content, or `type` plus `rows`
+  for table content.
+- `id` and `text` on every original source line.
+- `id` and `cells` on each physical table row, plus `unassignedLines`
+  on the table.
+- `state` on each cell. Text cells require `lines`; covered cells
+  require `coveredBy`.
+
+`bounds`, `role`, `span`, and `candidateText` are optional.
+Optional values are omitted when absent. Unsupported root schema versions and
+unknown structural enum values fail decoding. Unknown warning codes remain
+round-trippable because warnings are advisory.
+
+Encoding a valid v3 model, decoding it, and encoding it again preserves the
+public value and ordered arrays. The contract does not promise identical JSON
+bytes, JSON key order, measured processing time, block IDs, or extraction
+results across engine or schema changes.
+
+For the same PDF bytes, options, schema, and Turnip build, v3 acceptance
+tests require stable page, block, row, cell, and line order. They cover
+multiline cells, repeated rows, confirmed blanks, unresolved evidence, spans,
+text around a table, page-local table fragments, source-reference resolution,
+and JSON round trips using generated digital PDFs. These tests do not establish
+accuracy across all document layouts.

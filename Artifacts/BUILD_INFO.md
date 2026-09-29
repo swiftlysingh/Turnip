@@ -1,22 +1,22 @@
 # DocumentKitCore build provenance
 
-- pdf-inspector version: `1.14.2`
-- pdf-inspector repository: `swiftlysingh/pdf-inspector`
-- pdf-inspector upstream source revision: `2322bcce4cd9458d24399bf8fee42f1aa201c8c1`
-- Turnip patch: `Patches/pdf-inspector-embed-apple-cmaps.patch`
-- Turnip patch SHA-256: `c154bb2d0fbf4302afe898a356800782e088b63c4bf3fe2c9eb13d9e9081f140`
-- Rust toolchain: `1.96.0`
-- Xcode: `26.3 (17C529)`
+- Turnip source revision: `9687c4a85c854cd78b8f5d368228495e38efd517`
 
-The artifact includes indirect Form resource decoding and first-transaction-row
-deduplication from the pinned fork. It was built with CMaps embedded, the Apple
-single-threaded lopdf configuration, selection-aware sparse-text/font quality
-heuristics, explicit sparse single-byte ToUnicode mappings with per-byte fallback,
-and source-preserving structured capture before Markdown presentation cleanup from
-the tracked patch. Build paths were remapped to `/DocumentKit`,
-`/Cargo`, and `/BuildUser`. Rebuilds must update this file and pass
-`Scripts/verify-artifact.sh` plus Swift runtime and parity tests. Artifact
-runtime checks confirm the version and upstream source revision in every
-packaged library slice. `Turnip.engineRevision` reports that upstream
-source revision, not the patch state. Compile-time verification requires the
-exact `HEAD` plus tracked-patch tree.
+- pdf-inspector version: `1.24.0`
+- pdf-inspector repository: `swiftlysingh/pdf-inspector`
+- pdf-inspector upstream source revision: `714c6c80bed26040026d50985b667a68ff2f5fbc`
+- Rust toolchain: `1.96.0`
+- Xcode: `27.0 (27A266a)`
+- Host build dependency profile: `strip = "none"` to keep Rust 1.96/macOS 27 proc-macro dylibs loadable; final release static libraries remain `strip = "symbols"`.
+
+The artifact includes indirect Form resource decoding, first-transaction-row
+deduplication, embedded CMaps, the Apple single-threaded lopdf configuration,
+selection-aware sparse-text and font-quality heuristics, explicit sparse
+single-byte ToUnicode mappings with per-byte fallback, and source-preserving
+structured capture from the pinned fork, shared visible-page box resolution,
+and consistent OCR coverage after reclassification. Build paths were remapped to
+`/DocumentKit`, `/Cargo`, and `/BuildUser`. Rebuilds must update this file and
+pass `Scripts/verify-artifact.sh` plus Swift runtime and parity tests. Artifact
+runtime checks confirm the version and source revision in every packaged
+library slice. `Turnip.engineRevision` reports that exact source revision.
+Compile-time verification requires an exact clean `HEAD`.
