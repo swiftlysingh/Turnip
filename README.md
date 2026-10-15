@@ -293,6 +293,16 @@ Scripts/build-xcframework.sh
 Rust 1.96.0 is pinned in `rust-toolchain.toml`. The build script creates and
 then verifies the XCFramework architecture and header layout.
 
+## Release
+
+Run the Release workflow from `main` with a stable version such as `0.2.0`.
+Before creating the tag, it requires successful Codemagic `SDK` and `Rust`
+checks for that exact commit. The SDK check includes packaged-artifact
+verification. Missing, pending, skipped, or failed checks block publication;
+a newer rerun supersedes an older result. Finish the checks and rerun Release.
+
+Run `Scripts/test-release-checks.sh` to exercise the release guard locally.
+
 ## Project layout
 
 ```text
