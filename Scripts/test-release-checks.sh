@@ -34,8 +34,8 @@ check() {
 }
 
 jq -n --arg sha "$GITHUB_SHA" '[{check_runs: [
-  {id: 1, name: "SDK", head_sha: $sha, app: {slug: "codemagic-ci-cd"}, status: "completed", conclusion: "success"},
-  {id: 2, name: "Rust", head_sha: $sha, app: {slug: "codemagic-ci-cd"}, status: "completed", conclusion: "success"}
+  {id: 1, name: "SDK", head_sha: $sha, app: {slug: "codemagic-ci-cd"}, external_id: "sdk-original", started_at: "2026-11-11T10:00:00Z", status: "completed", conclusion: "success"},
+  {id: 2, name: "Rust", head_sha: $sha, app: {slug: "codemagic-ci-cd"}, external_id: "rust-original", started_at: "2026-11-11T10:00:00Z", status: "completed", conclusion: "success"}
 ]}]' > "$fixture/baseline.json"
 check passing pass '.'
 check missing-sdk fail '.[0].check_runs |= map(select(.name != "SDK"))'
@@ -46,7 +46,23 @@ check cancelled fail '.[0].check_runs[0].conclusion = "cancelled"'
 check skipped fail '.[0].check_runs[0].conclusion = "skipped"'
 check wrong-provider fail '.[0].check_runs[0].app.slug = "another-app"'
 check wrong-commit fail '.[0].check_runs[0].head_sha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"'
-check newer-failure fail '.[0].check_runs += [ (.[0].check_runs[0] | .id = 3 | .conclusion = "failure") ]'
-check newer-success pass '.[0].check_runs += [ (.[0].check_runs[0] | .id = 3) ] | .[0].check_runs[0].conclusion = "failure"'
+check newer-failure fail '.[0].check_runs += [ (.[0].check_runs[0] | .id = 3 | .external_id = "sdk-rerun" | .started_at = "2026-11-11T10:01:00Z" | .conclusion = "failure") ]'
+check newer-success pass '.[0].check_runs += [ (.[0].check_runs[0] | .id = 3 | .external_id = "sdk-rerun" | .started_at = "2026-11-11T10:01:00Z") ] | .[0].check_runs[0].conclusion = "failure"'
 check paginated pass '[{check_runs: [.[0].check_runs[0]]}, {check_runs: [.[0].check_runs[1]]}]'
 TEST_API_FAILURE=1 check api-failure fail '.'
+
+# Codemagic creates a separate completion entry for the same external build ID.
+overlapping='
+  .[0].check_runs += [
+    (.[0].check_runs[0] | .id = 3 | .external_id = "sdk-rerun"
+      | .started_at = "2026-11-11T10:01:00Z"),
+    (.[0].check_runs[0] | .id = 4)
+  ]
+  | .[0].check_runs[0] |= (.status = "in_progress" | .conclusion = null)
+'
+check older-success-newer-pending fail "$overlapping | .[0].check_runs[2] |= (.status = \"in_progress\" | .conclusion = null)"
+check older-success-newer-failure fail "$overlapping | .[0].check_runs[2].conclusion = \"failure\""
+check older-failure-newer-success pass "$overlapping | .[0].check_runs[3].conclusion = \"failure\""
+check separate-completion-entry pass "$overlapping | .[0].check_runs[2] |= (.status = \"in_progress\" | .conclusion = null) | .[0].check_runs += [(.[0].check_runs[2] | .id = 5 | .status = \"completed\" | .conclusion = \"success\")]"
+check same-second-newer-pending fail "$overlapping | .[0].check_runs[2] |= (.started_at = \"2026-11-11T10:00:00Z\" | .status = \"in_progress\" | .conclusion = null)"
+check same-second-newer-success pass "$overlapping | .[0].check_runs[2].started_at = \"2026-11-11T10:00:00Z\" | .[0].check_runs[3].conclusion = \"failure\" | .[0].check_runs |= reverse"

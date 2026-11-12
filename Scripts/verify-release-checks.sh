@@ -11,10 +11,14 @@ fi
 checks=$(gh api --paginate --slurp \
   "repos/$GH_REPO/commits/$GITHUB_SHA/check-runs?filter=all&per_page=100")
 for name in SDK Rust; do
-  # A newer failed/pending rerun must supersede an older successful run.
+  # Codemagic creates separate start and completion entries for each build.
+  # Choose the newest start, breaking same-second ties by its first check ID.
   latest=$(jq -c --arg name "$name" --arg sha "$GITHUB_SHA" '
     [.[].check_runs[] | select(.name == $name and .head_sha == $sha
-      and .app.slug == "codemagic-ci-cd")] | max_by(.id)
+      and .app.slug == "codemagic-ci-cd")]
+    | group_by(.external_id)
+    | (max_by(min_by(.id) | [.started_at, .id]) // [])
+    | max_by(.id)
   ' <<< "$checks")
   if ! jq -e '.status == "completed" and .conclusion == "success"' \
       <<< "$latest" >/dev/null; then
