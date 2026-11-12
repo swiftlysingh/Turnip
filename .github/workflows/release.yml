@@ -9,6 +9,7 @@ on:
         type: string
 
 permissions:
+  checks: read
   contents: write
 
 concurrency:
@@ -19,6 +20,12 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Require passing SDK and Rust checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: Scripts/verify-release-checks.sh
       - name: Create tag and release
         env:
           GH_TOKEN: ${{ github.token }}
