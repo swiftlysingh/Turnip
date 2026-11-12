@@ -1,0 +1,41 @@
+# Temporary: rebuilds DocumentKitCore.xcframework on macOS for the
+# pdf-inspector 1.25.2 update. Removed before merge.
+name: Temporary engine rebuild
+
+on:
+  push:
+    branches:
+      - chore/pdf-inspector-1.25.2
+    paths:
+      - .github/workflows/tmp-build-engine.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Install pinned Rust toolchain
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.96.0 --profile minimal \
+            --target aarch64-apple-darwin --target x86_64-apple-darwin \
+            --target aarch64-apple-ios --target aarch64-apple-ios-sim --target x86_64-apple-ios
+          rustup show active-toolchain
+          xcodebuild -version
+
+      - name: Build xcframework
+        run: Scripts/build-xcframework.sh
+
+      - name: Upload xcframework
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocumentKitCore-xcframework
+          path: Artifacts/DocumentKitCore.xcframework
+          if-no-files-found: error

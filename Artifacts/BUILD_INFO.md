@@ -2,9 +2,9 @@
 
 - Turnip source revision: `9687c4a85c854cd78b8f5d368228495e38efd517`
 
-- pdf-inspector version: `1.24.0`
+- pdf-inspector version: `1.25.2`
 - pdf-inspector repository: `swiftlysingh/pdf-inspector`
-- pdf-inspector upstream source revision: `714c6c80bed26040026d50985b667a68ff2f5fbc`
+- pdf-inspector upstream source revision: `ac05c0c9d28a66de7a4dcaf14435e3138a8c444c`
 - Rust toolchain: `1.96.0`
 - Xcode: `27.0 (27A266a)`
 - Host build dependency profile: `strip = "none"` to keep Rust 1.96/macOS 27 proc-macro dylibs loadable; final release static libraries remain `strip = "symbols"`.

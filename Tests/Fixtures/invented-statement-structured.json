@@ -4,7 +4,7 @@
   "inspection": {
     "kind": "text_based",
     "processingTimeMilliseconds": 0,
-    "engineVersion": "1.24.0@714c6c80bed26040026d50985b667a68ff2f5fbc",
+    "engineVersion": "1.25.2@ac05c0c9d28a66de7a4dcaf14435e3138a8c444c",
     "hasEncodingIssues": false,
     "layout": {
       "pagesWithTables": [
