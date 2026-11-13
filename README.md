@@ -7,8 +7,8 @@
 <!-- TODO: add a short GIF or screenshot of Examples/TurnipDemo (macOS) showing a PDF beside the structured JSON. Record the real sample app with Benchmarks/Fixtures/Smoke/synthetic-amex-standard.pdf only; don't mock it and don't use a real statement. -->
 
 Turn a PDF into typed Swift data and Markdown, on the device. Tables come back
-as rows and cells, and every cell points to the page, block and line it came
-from. No OCR, no LLM, no uploads.
+as rows and cells. Extracted cell text retains references to its source page,
+block and lines. No OCR, no LLM, no uploads.
 
 Turnip wraps the Rust [`pdf-inspector`](https://github.com/swiftlysingh/pdf-inspector)
 engine, a fork of [firecrawl/pdf-inspector](https://github.com/firecrawl/pdf-inspector),
