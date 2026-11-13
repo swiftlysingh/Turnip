@@ -1,10 +1,31 @@
 # Turnip
 
-Turnip extracts typed document structure and Markdown from PDFs locally in
-native Swift apps. It wraps a pinned build of the Rust
-[`pdf-inspector`](https://github.com/swiftlysingh/pdf-inspector) engine behind a
-small Swift API and ships the engine as a prebuilt XCFramework for iOS and
-macOS.
+[![Swift versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fswiftlysingh%2FTurnip%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/swiftlysingh/Turnip)
+[![Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fswiftlysingh%2FTurnip%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/swiftlysingh/Turnip)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+<!-- TODO: add a short GIF or screenshot of Examples/TurnipDemo (macOS) showing a PDF beside the structured JSON. Record the real sample app with Benchmarks/Fixtures/Smoke/synthetic-amex-standard.pdf only; don't mock it and don't use a real statement. -->
+
+Turn a PDF into typed Swift data and Markdown, on the device. Tables come back
+as rows and cells, and every cell points to the page, block and line it came
+from. No OCR, no LLM, no uploads.
+
+Turnip wraps the Rust [`pdf-inspector`](https://github.com/swiftlysingh/pdf-inspector)
+engine, a fork of [firecrawl/pdf-inspector](https://github.com/firecrawl/pdf-inspector),
+and ships it as a prebuilt XCFramework for iOS 16+ and macOS 13+.
+
+## What you get
+
+- A versioned `Codable` document you can encode and pass around in Swift: pages, text blocks, and tables.
+- Table-aware cells, including spans, empty slots, and unresolved content.
+- Source references down to the cell and line. You resolve them by ID, without matching text.
+- It runs on the device. The file is never uploaded.
+- It's been battle-tested inside RetroBudget's credit card statement imports.
+
+Pre-1.0. Turnip reads text-based PDFs. It flags pages that need OCR but doesn't
+do OCR, and it leaves values like `(12.34)` as strings for your app to interpret.
+
+## Quick start
 
 ```swift
 let document = try await Turnip.extractDocument(pdfData)
@@ -16,16 +37,18 @@ for page in document.pages {
 let json = try JSONEncoder().encode(document)
 ```
 
-Turnip is pre-release. The current scope is deliberately narrow: local PDF
-inspection and extraction. It does not generate PDFs, convert Office documents,
-perform OCR, use an LLM, upload files, or interpret financial values.
+To try it in the sample app, open [`Examples/TurnipDemo`](Examples/TurnipDemo),
+run the macOS scheme, and drop in
+`Benchmarks/Fixtures/Smoke/synthetic-amex-standard.pdf`. The prebuilt engine is
+already in the repo, so you don't need to build it first.
 
 ## Why it exists
 
-`pdf-inspector` already does the hard PDF work well: classification, embedded
-text extraction, reading order, layout analysis, table-aware Markdown, and
-page-level OCR routing. Turnip makes that engine practical in Swift by
-adding:
+PDFKit gives you one string per page, so tables lose their rows and columns.
+Cloud parsers keep the structure, but they need an upload and charge per page.
+Turnip keeps the structure and the file stays on the device.
+
+It wraps a pinned build of `pdf-inspector` and adds:
 
 - an idiomatic `async throws` API with typed results and errors;
 - a stable, ownership-safe C bridge hidden from client apps;
@@ -38,6 +61,27 @@ adding:
 Processing is local and synchronous inside Rust. The Swift API moves the work
 off the caller's executor, but cancellation cannot interrupt a parse already in
 progress.
+
+## How it compares
+
+| | Turnip | PDFKit text | Vision `RecognizeDocumentsRequest` | Cloud parsers (LlamaParse, Reducto, Firecrawl) |
+|---|---|---|---|---|
+| Runs | On device | On device | On device | Their servers, so the file is uploaded |
+| Input | PDF with embedded text | PDF with embedded text | Images. Render PDF pages first | PDF (and more) |
+| Scanned pages | Flags them as `needsOCR`, doesn't read them | No | Yes, it's OCR | Yes |
+| Tables | Rows and cells, spans marked | No, one string per page | Rows and cells, spans as ranges | Yes |
+| Trace back to source | Page, block, cell, line | Selections have bounds | Bounding regions | Bounding boxes (Reducto, Firecrawl layout blocks) |
+| Minimum OS | iOS 16, macOS 13 | iOS 11, macOS 10.4 | iOS 26, macOS 26 | n/a |
+| Cost | Free, MIT | Free | Free | LlamaParse 1–25 credits/page at $1.50 per 1,000 credits. Reducto r-1 $10 / 1,000 pages, r-1 mini $1 / 1,000. Firecrawl 1 credit/page |
+
+If your users scan paper, use Vision. Turnip is for PDFs that already have
+text, like bank statements, invoices, and reports.
+
+Sources: PDFKit [`PDFDocument.string`](https://developer.apple.com/documentation/pdfkit/pdfdocument/string)
+and `PDFPage.string`. Vision: [WWDC25 "Read documents using the Vision framework"](https://developer.apple.com/videos/play/wwdc2025/272/).
+[LlamaParse pricing](https://developers.llamaindex.ai/llamaparse/general/pricing/).
+[Reducto credit usage](https://docs.reducto.ai/reference/credit-usage) (list prices from Sep 1, 2026).
+[Firecrawl document parsing](https://docs.firecrawl.dev/features/document-parsing).
 
 ## Requirements
 
@@ -61,7 +105,10 @@ to your app target:
 https://github.com/swiftlysingh/Turnip.git
 ```
 
-Select version `0.2.0` or later in Xcode's package dependency settings.
+Select version `0.3.0` or later in Xcode's package dependency settings.
+
+The clone is about 126 MB because the XCFramework is committed with its
+history, and SwiftPM clones all of it.
 
 The binary target is an implementation detail. Client code imports only:
 
@@ -295,7 +342,7 @@ then verifies the XCFramework architecture and header layout.
 
 ## Release
 
-Run the Release workflow from `main` with a stable version such as `0.2.0`.
+Run the Release workflow from `main` with a stable version such as `0.3.0`.
 Before creating the tag, it requires successful Codemagic `SDK` and `Rust`
 checks for that exact commit. The SDK check includes packaged-artifact
 verification. Missing, pending, skipped, or failed checks block publication;
