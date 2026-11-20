@@ -3,4 +3,3 @@
 
 # Keep upstream license and notice text byte-for-byte.
 RUST_THIRD_PARTY_LICENSES.md -whitespace
-ThirdPartyLicenses/** -whitespace

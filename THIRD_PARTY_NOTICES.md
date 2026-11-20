@@ -119,11 +119,9 @@ The crate license and notice texts for all five Apple targets are included in
 [`RUST_THIRD_PARTY_LICENSES.md`](RUST_THIRD_PARTY_LICENSES.md). Distribute that
 file together with this notice when redistributing the packaged engine.
 
-The statically linked Rust standard library also has its own notices in
-[`ThirdPartyLicenses/Rust/`](ThirdPartyLicenses/Rust/). Include that directory
-when redistributing the engine. The generator copies the original standard-library
-copyright document and license texts from the pinned Rust toolchain. The
-upstream document includes platform-specific components beyond Apple targets.
+The same file includes the statically linked Rust standard library's
+attributions and license texts from the pinned toolchain. Runtime dependency
+notices are limited to crates present in the Apple standard libraries.
 
 The exact crate versions and checksums are fixed in
 `Native/DocumentKitCore/Cargo.lock`. After preparing the pinned engine with
