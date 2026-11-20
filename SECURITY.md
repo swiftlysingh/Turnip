@@ -1,15 +1,17 @@
 # Security
 
-## Supported version
+## Supported versions
 
-Turnip is in pre-release development. Security fixes are applied to the
-latest commit on `main`; no released version is supported yet.
+Use the latest release, currently `0.3.0`. Security fixes are applied to
+`main` first and included in the next release. Older releases do not receive
+guaranteed backports.
 
 ## Reporting a vulnerability
 
-Do not open a public issue for a suspected vulnerability. Use GitHub's private
-security advisory flow for `swiftlysingh/Turnip`, or contact the repository
-owner privately with a minimal reproducer and the affected engine revision.
+Do not open a public issue for a suspected vulnerability. If GitHub private
+vulnerability reporting is enabled, use the [private advisory form](https://github.com/swiftlysingh/Turnip/security/advisories/new).
+If the form is unavailable, email [sayhi@swiftlysingh.com](mailto:sayhi@swiftlysingh.com)
+privately. Include a minimal reproducer and the affected engine revision.
 
 ## Threat model
 

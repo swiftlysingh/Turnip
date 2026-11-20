@@ -115,7 +115,32 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Rust dependencies
 
-The exact transitive crate versions and checksums are fixed in
-`Native/DocumentKitCore/Cargo.lock`. Review the locked dependency licenses and
-bundled assets whenever dependencies change and before distributing a new
-binary. This notice is not a substitute for a release-time legal review.
+The crate license and notice texts for all five Apple targets are included in
+[`RUST_THIRD_PARTY_LICENSES.md`](RUST_THIRD_PARTY_LICENSES.md). Distribute that
+file together with this notice when redistributing the packaged engine.
+
+The statically linked Rust standard library also has its own notices in
+[`ThirdPartyLicenses/Rust/`](ThirdPartyLicenses/Rust/). Include that directory
+when redistributing the engine. The generator copies the original standard-library
+copyright document and license texts from the pinned Rust toolchain. The
+upstream document includes platform-specific components beyond Apple targets.
+
+The exact crate versions and checksums are fixed in
+`Native/DocumentKitCore/Cargo.lock`. After preparing the pinned engine with
+`Scripts/prepare-engine.sh`, regenerate the notices with Python 3.9 or later:
+
+```sh
+python3 Scripts/generate-rust-licenses.py
+```
+
+The generator uses Cargo's normal and build dependency trees for each Apple
+target, excludes development-only dependencies, and collects the original
+license and notice texts. Identical texts are listed once with their sources.
+Codemagic checks that the committed inventory is current before a release.
+
+`alloc-stdlib 0.2.4`, `include_dir 0.7.4`, and `include_dir_macros 0.7.4` omit
+their workspace-root license files from their published crates. Copies in
+`Scripts/LicenseOverrides/` come from each crate's recorded source revision:
+
+- [alloc-stdlib license](https://github.com/dropbox/rust-alloc-no-stdlib/blob/ae42d22078b98549e987d2f03d12df7b984fde47/LICENSE)
+- [include_dir and include_dir_macros license](https://github.com/Michael-F-Bryan/include_dir/blob/d742c6fffce99ee89da91b934e7ce6fb2a82680c/LICENSE)
