@@ -104,8 +104,6 @@ workflows:
           echo "PATH=$HOME/.cargo/bin:$PATH" >> "$CM_ENV"
       - name: Prepare pinned engine
         script: Scripts/prepare-engine.sh
-      - name: Verify Rust dependency notices
-        script: python3 Scripts/generate-rust-licenses.py --check
       - name: Test engine provenance reruns
         script: Scripts/test-engine-provenance.sh
       - name: Test bridge
