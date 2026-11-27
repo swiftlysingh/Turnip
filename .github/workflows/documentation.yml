@@ -8,7 +8,7 @@ on:
       - .github/workflows/documentation.yml
       - Package.swift
       - Sources/Turnip/**
-      - Artifacts/DocumentKitCore.xcframework/**
+      - Native/DocumentKitCore/include/**
       - Scripts/build-documentation.sh
 
 permissions:
@@ -26,6 +26,42 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Check whether Package.swift uses a published release artifact
+        id: manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq '^let releaseArtifactURL: String\? = "https://' Package.swift; then
+            echo "needs_local_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_local_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache Cargo registry
+        if: steps.manifest.outputs.needs_local_build == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: docs-cargo-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Native/DocumentKitCore/Cargo.lock') }}
+          restore-keys: |
+            docs-cargo-${{ runner.os }}-
+
+      - name: Build local XCFramework when Package.swift has no release URL
+        if: steps.manifest.outputs.needs_local_build == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup show active-toolchain
+          Scripts/build-xcframework.sh
+          echo "TURNIP_USE_LOCAL_XCFRAMEWORK=1" >> "$GITHUB_ENV"
 
       - name: Build DocC archive
         run: Scripts/build-documentation.sh Build/Turnip.doccarchive

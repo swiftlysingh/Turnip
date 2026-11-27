@@ -2,6 +2,7 @@
 .swiftpm/
 /.ci-tmp/
 .DS_Store
+Artifacts/DocumentKitCore.xcframework/
 Native/DocumentKitCore/target/
 Build/
 DerivedData/

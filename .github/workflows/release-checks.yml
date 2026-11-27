@@ -5,10 +5,12 @@ on:
     paths:
       - '.github/workflows/release*.yml'
       - 'Scripts/*release-checks.sh'
+      - 'Scripts/set-release-artifact.sh'
   pull_request:
     paths:
       - '.github/workflows/release*.yml'
       - 'Scripts/*release-checks.sh'
+      - 'Scripts/set-release-artifact.sh'
 
 permissions:
   contents: read
@@ -18,5 +20,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash -n Scripts/verify-release-checks.sh Scripts/test-release-checks.sh
+      - run: bash -n Scripts/verify-release-checks.sh Scripts/test-release-checks.sh Scripts/set-release-artifact.sh
       - run: Scripts/test-release-checks.sh

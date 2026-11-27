@@ -39,8 +39,10 @@ let json = try JSONEncoder().encode(document)
 
 To try it in the sample app, open [`Examples/TurnipDemo`](Examples/TurnipDemo),
 run the macOS scheme, and drop in
-`Benchmarks/Fixtures/Smoke/synthetic-amex-standard.pdf`. The prebuilt engine is
-already in the repo, so you don't need to build it first.
+`Benchmarks/Fixtures/Smoke/synthetic-amex-standard.pdf`. For tagged releases,
+SwiftPM fetches the prebuilt XCFramework from GitHub Releases automatically;
+for an unreleased local checkout or after modifying the Rust bridge, build it
+locally with `Scripts/build-xcframework.sh`.
 
 ## Why it exists
 
@@ -52,7 +54,7 @@ It wraps a pinned build of `pdf-inspector` and adds:
 
 - an idiomatic `async throws` API with typed results and errors;
 - a stable, ownership-safe C bridge hidden from client apps;
-- Apple device, simulator, and macOS slices in one local XCFramework;
+- Apple device, simulator, and macOS slices packaged in one prebuilt XCFramework;
 - zero-based page indexes everywhere in the Swift API;
 - versioned `Codable` and `Sendable` document, page, text, and table models;
 - a native PDF-versus-structured-JSON sample app;
@@ -89,26 +91,31 @@ and `PDFPage.string`. Vision: [WWDC25 "Read documents using the Vision framework
 - macOS 13 or later
 - Swift 6.2 or later to build this checkout
 
-The packaged engine contains these architectures:
+The packaged engine contains `arm64` slices by default:
 
 - iOS device: arm64
-- iOS Simulator: arm64 and x86_64
-- macOS: arm64 and x86_64
+- iOS Simulator: arm64 (Apple Silicon)
+- macOS: arm64 (Apple Silicon)
+
+Generic iOS Simulator CI builds should exclude `x86_64` on `iphonesimulator`
+(or pass `ARCHS=arm64`). If you need Intel `x86_64` macOS or iOS Simulator
+slices locally, rebuild with `Scripts/build-xcframework.sh --include-x86-64`.
 
 ## Installation
 
-The repository currently uses a checked-in local binary target. Add this
-package in Xcode using its repository URL, then add the `Turnip` product
-to your app target:
+Tagged releases distribute `DocumentKitCore.xcframework` as a GitHub Releases
+binary target (`url` + SHA-256 `checksum`) so SwiftPM caches the ~11 MB archive
+globally instead of committing new binary snapshots to Git history. Add this
+package in Xcode using its repository URL, then add the `Turnip` product to
+your app target:
 
 ```text
 https://github.com/swiftlysingh/Turnip.git
 ```
 
-Select version `0.3.0` or later in Xcode's package dependency settings.
-
-The clone is about 126 MB because the XCFramework is committed with its
-history, and SwiftPM clones all of it.
+Select version `0.4.0` or later in Xcode's package dependency settings (earlier
+`0.1.0` through `0.3.0` tags remain intact in Git history with their checked-in
+XCFramework).
 
 The binary target is an implementation detail. Client code imports only:
 
@@ -331,34 +338,51 @@ engine unless it is the exact clean `HEAD`. `Scripts/verify-artifact.sh` checks
 every packaged slice against the same pin. The pre-release pin uses the maintained
 `swiftlysingh/pdf-inspector` fork, which owns the reusable extraction behavior.
 
-To rebuild all five Rust slices and replace the local artifact:
+To rebuild the `arm64` Rust slices locally into the gitignored
+`Artifacts/DocumentKitCore.xcframework`:
 
 ```sh
 Scripts/build-xcframework.sh
 ```
 
-Rust 1.96.0 is pinned in `rust-toolchain.toml`. The build script creates and
-then verifies the XCFramework architecture and header layout.
+Pass `--include-x86-64` if you also need Intel macOS/iOS Simulator slices, or
+`--zip Build/DocumentKitCore.xcframework.zip` to produce a SwiftPM release zip
+and print its SHA-256 checksum. To test a locally built XCFramework when
+`Package.swift` points at a published GitHub Release, set
+`TURNIP_USE_LOCAL_XCFRAMEWORK=1` (or `TURNIP_LOCAL_XCFRAMEWORK_PATH=<package-relative/path/to/DocumentKitCore.xcframework>`):
+
+```sh
+TURNIP_USE_LOCAL_XCFRAMEWORK=1 swift test --parallel
+```
+
+Rust 1.96.0 is pinned in `rust-toolchain.toml`. The build script strips
+`__DWARF` and `__LLVM` sections, pre-links each slice into a single object
+exporting only the 9 `_documentkit_*` C functions, and runs
+`Scripts/verify-artifact.sh`.
 
 ## Release
 
-Run the Release workflow from `main` with a stable version such as `0.3.0`.
-Before creating the tag, it requires successful Codemagic `SDK` and `Rust`
-checks for that exact commit. The SDK check includes packaged-artifact
-verification. Missing, pending, skipped, or failed checks block publication;
-a newer rerun supersedes an older result. Finish the checks and rerun Release.
+Run the Release workflow from `main` with a stable version such as `0.4.0`.
+Before building or tagging, it requires successful Codemagic `SDK` and `Rust`
+checks for that exact commit. It then builds, verifies, and archives
+`DocumentKitCore-<version>.xcframework.zip` on Apple Silicon macOS, updates
+`Package.swift` with the release URL and SHA-256 checksum, tags `v<version>`,
+and publishes the GitHub Release with the zip attached. Missing, pending,
+skipped, or failed checks block publication; a newer rerun supersedes an older
+result. Finish the checks and rerun Release.
 
-Run `Scripts/test-release-checks.sh` to exercise the release guard locally.
+Run `Scripts/test-release-checks.sh` and `Scripts/test-artifact-tooling.sh` to
+exercise the release guard and artifact tooling locally.
 
 ## Project layout
 
 ```text
 Sources/Turnip/                Public Swift APIs and models, DocC, and private wire decoder
-Native/DocumentKitCore/        Rust static-library bridge and C header
-Artifacts/                     Prebuilt local XCFramework
+Native/DocumentKitCore/        Rust static-library bridge, exported-symbol list, and C header
+Artifacts/                     Build provenance (local XCFramework builds are gitignored)
 Examples/TurnipDemo/           Native PDF-versus-structured-JSON sample app
 Benchmarks/                    Corpus manifest, runner, and methodology
-Scripts/                       Reproducible engine, artifact, and DocC build checks
+Scripts/                       Reproducible engine, artifact, release, and DocC build checks
 Tests/                         Swift API and real-PDF bridge tests
 Documentation/                 Architecture and benchmark contracts
 ```
