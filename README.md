@@ -382,6 +382,6 @@ that extraction matches the visible PDF.
 
 ## License
 
-Turnip is MIT licensed. It includes compiled `pdf-inspector` code and
-Adobe CMap data under their respective terms. See
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Turnip is MIT licensed. It includes compiled Rust dependencies and Adobe CMap
+data under their respective terms. When redistributing the packaged engine,
+include [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
