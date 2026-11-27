@@ -102,6 +102,9 @@ prelink_thin_archive() {
 
     # Pre-link only reachable archive members into a single relocatable object
     # and localize every symbol outside Native/DocumentKitCore/exports.txt.
+    # Avoid `-x` on ld/strip: on Xcode 26.4, stripping local symbols from a
+    # relocatable object can drop synthesized `l<N>` symbols still referenced
+    # by internal relocations.
     set --
     while IFS= read -r symbol || [ -n "$symbol" ]; do
         case "$symbol" in
@@ -110,7 +113,7 @@ prelink_thin_archive() {
         set -- "$@" -u "$symbol"
     done < "$EXPORTS"
 
-    xcrun ld -r -S -x \
+    xcrun ld -r -S \
         -arch "$arch" \
         -platform_version "$ld_platform" "$min_os" "$sdk_version" \
         -exported_symbols_list "$EXPORTS" \
@@ -118,7 +121,7 @@ prelink_thin_archive() {
         "$raw_archive" \
         -o "$merged_object"
 
-    xcrun strip -S -x "$merged_object"
+    xcrun strip -S "$merged_object"
     xcrun libtool -static -D -o "$destination" "$merged_object"
     rm -f "$merged_object"
 }

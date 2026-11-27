@@ -132,10 +132,10 @@ C
     (cd "$FIXTURE/extracted" && ar x "$BAD_SYM_XCF/macos-arm64/libdocumentkit_core.a")
     SDK_VER=$(xcrun --sdk macosx --show-sdk-version)
     xcrun clang -arch arm64 -mmacosx-version-min=13.0 -c "$FIXTURE/extra.c" -o "$FIXTURE/extra_nodwarf.o"
-    xcrun ld -r -S -x -arch arm64 -platform_version macos 13.0 "$SDK_VER" \
+    xcrun ld -r -S -arch arm64 -platform_version macos 13.0 "$SDK_VER" \
         "$FIXTURE/extracted"/*.o "$FIXTURE/extra_nodwarf.o" \
         -o "$FIXTURE/merged_leaked.o"
-    xcrun strip -S -x "$FIXTURE/merged_leaked.o"
+    xcrun strip -S "$FIXTURE/merged_leaked.o"
     xcrun libtool -static -D -o "$BAD_SYM_XCF/macos-arm64/libdocumentkit_core.a" "$FIXTURE/merged_leaked.o"
     if "$ROOT/Scripts/verify-artifact.sh" --artifact "$BAD_SYM_XCF" >"$FIXTURE/sym.out" 2>&1; then
         echo "Expected verify-artifact.sh to reject leaked global symbols" >&2

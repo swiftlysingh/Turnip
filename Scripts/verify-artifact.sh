@@ -15,6 +15,7 @@ THIN_FILE=
 STRINGS_FILE=
 EXPECTED_EXPORTS_FILE=
 ACTUAL_EXPORTS_FILE=
+LINK_CHECK_DIR=
 
 usage() {
     cat <<'EOF' >&2
@@ -56,6 +57,9 @@ cleanup_temp_files() {
     fi
     if [ -n "$ACTUAL_EXPORTS_FILE" ]; then
         rm -f "$ACTUAL_EXPORTS_FILE"
+    fi
+    if [ -n "$LINK_CHECK_DIR" ]; then
+        rm -rf "$LINK_CHECK_DIR"
     fi
 }
 trap cleanup_temp_files 0
@@ -178,6 +182,15 @@ verify_thin_slice() {
         exit 1
     fi
 
+    # 3b. No dangling linker-local undefined symbols (e.g. stripped `l<N>` relocations).
+    bad_undefs=$( (xcrun nm -u "$thin_file" 2>/dev/null || true) |
+        awk 'NF == 1 && $1 !~ /:$/ && $1 !~ /^_/ { print $1 }' || true)
+    if [ -n "$bad_undefs" ]; then
+        echo "Found non-external undefined symbols in $label:" >&2
+        echo "$bad_undefs" | sort -u >&2
+        exit 1
+    fi
+
     # 4. Embedded engine identity (version and exact upstream revision).
     STRINGS_FILE=$(mktemp "${TMPDIR:-/tmp}/turnip-strings.XXXXXX")
     if ! strings "$thin_file" > "$STRINGS_FILE"; then
@@ -223,6 +236,37 @@ verify_slice() {
 verify_slice "$MACOS_SLICE"
 verify_slice "$IOS_SLICE"
 verify_slice "$IOS_SIM_SLICE"
+
+# 6. Smoke-link the macOS slice against all 9 exported C functions to catch
+#    broken relocations or linker incompatibilities immediately.
+LINK_CHECK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/documentkit-linkcheck.XXXXXX")
+cat > "$LINK_CHECK_DIR/main.c" <<'C'
+#include <stdio.h>
+#include <string.h>
+#include "DocumentKitCore.h"
+int main(void) {
+    const uint8_t sample[] = "not a pdf";
+    documentkit_buffer_free(documentkit_inspect(sample, sizeof(sample) - 1));
+    documentkit_buffer_free(documentkit_inspect_with_options(sample, sizeof(sample) - 1, NULL, 0, 0, NULL, 0, 0));
+    documentkit_buffer_free(documentkit_extract(sample, sizeof(sample) - 1));
+    documentkit_buffer_free(documentkit_extract_with_options(sample, sizeof(sample) - 1, NULL, 0, 0, NULL, 0, 0));
+    documentkit_buffer_free(documentkit_extract_document(sample, sizeof(sample) - 1));
+    documentkit_buffer_free(documentkit_extract_document_with_options(sample, sizeof(sample) - 1, NULL, 0, 0, NULL, 0, 0));
+    printf("%s@%s\n", documentkit_engine_version(), documentkit_engine_revision());
+    return 0;
+}
+C
+xcrun clang -arch arm64 -mmacosx-version-min=13.0 \
+    -I "$ROOT/Native/DocumentKitCore/include" \
+    "$LINK_CHECK_DIR/main.c" "$MACOS_SLICE" \
+    -Wl,-dead_strip -o "$LINK_CHECK_DIR/smoke"
+actual_identity=$("$LINK_CHECK_DIR/smoke")
+if [ "$actual_identity" != "pdf-inspector/$ENGINE_VERSION@$ENGINE_REVISION" ]; then
+    echo "Unexpected runtime engine identity: $actual_identity" >&2
+    exit 1
+fi
+rm -rf "$LINK_CHECK_DIR"
+LINK_CHECK_DIR=
 
 slice_count=0
 for headers in "$ARTIFACT"/*/Headers; do
