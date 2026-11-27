@@ -5,6 +5,12 @@ workflows:
     max_build_duration: 60
     environment:
       xcode: 26.4
+      vars:
+        TURNIP_USE_LOCAL_XCFRAMEWORK: "1"
+    cache:
+      cache_paths:
+        - $HOME/.cargo/registry
+        - $HOME/.cargo/git
     triggering:
       events:
         - push
@@ -18,8 +24,18 @@ workflows:
     when:
       condition: (not env.CM_TRIGGER_SOURCE == "webhook") or (not event.action == "labeled") or (event.label.name == "codemagic")
     scripts:
-      - name: Verify packaged engine
-        script: Scripts/verify-artifact.sh
+      - name: Install Rust toolchain
+        script: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
+            -y --profile minimal --default-toolchain none
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "PATH=$HOME/.cargo/bin:$PATH" >> "$CM_ENV"
+          rustup show active-toolchain
+      - name: Build and verify packaged engine
+        script: Scripts/build-xcframework.sh
+      - name: Test artifact and release tooling
+        script: Scripts/test-artifact-tooling.sh
       - name: Test Swift package
         script: swift test --parallel
       - name: Build DocC API documentation
