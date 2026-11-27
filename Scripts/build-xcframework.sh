@@ -102,9 +102,16 @@ prelink_thin_archive() {
 
     # Pre-link only reachable archive members into a single relocatable object
     # and localize every symbol outside Native/DocumentKitCore/exports.txt.
-    # Avoid `-x` on ld/strip: on Xcode 26.4, stripping local symbols from a
-    # relocatable object can drop synthesized `l<N>` symbols still referenced
-    # by internal relocations.
+    # Keep `_rust_eh_personality` external during `ld -r -S -x` so `__eh_frame`
+    # `PTRTGOT` relocations retain an external symbol on Xcode 26.4, then mark
+    # `_rust_eh_personality` private external with `nmedit -p` (matching Rust's
+    # original visibility) so only the 9 `_documentkit_*` symbols stay exported.
+    prelink_exports="$BUILD/prelink/$ld_platform-$arch.exports"
+    {
+        awk '!/^[[:space:]]*(#|$)/ { print $1 }' "$EXPORTS"
+        printf '_rust_eh_personality\n'
+    } > "$prelink_exports"
+
     set --
     while IFS= read -r symbol || [ -n "$symbol" ]; do
         case "$symbol" in
@@ -113,17 +120,17 @@ prelink_thin_archive() {
         set -- "$@" -u "$symbol"
     done < "$EXPORTS"
 
-    xcrun ld -r -S \
+    xcrun ld -r -S -x \
         -arch "$arch" \
         -platform_version "$ld_platform" "$min_os" "$sdk_version" \
-        -exported_symbols_list "$EXPORTS" \
+        -exported_symbols_list "$prelink_exports" \
         "$@" \
         "$raw_archive" \
         -o "$merged_object"
 
-    xcrun strip -S "$merged_object"
+    xcrun nmedit -s "$EXPORTS" -p "$merged_object"
     xcrun libtool -static -D -o "$destination" "$merged_object"
-    rm -f "$merged_object"
+    rm -f "$merged_object" "$prelink_exports"
 }
 
 build_target() {

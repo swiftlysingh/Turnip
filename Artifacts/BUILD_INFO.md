@@ -5,7 +5,7 @@
 - pdf-inspector upstream source revision: `ac05c0c9d28a66de7a4dcaf14435e3138a8c444c`
 - Rust toolchain: `1.96.0`
 - Default architectures: `arm64`-only (`aarch64-apple-darwin`, `aarch64-apple-ios`, `aarch64-apple-ios-sim`); `x86_64` slices are opt-in via `Scripts/build-xcframework.sh --include-x86-64`.
-- Binary packaging: pre-linked single-object static archives (`xcrun strip -S`, `xcrun ld -r -S -exported_symbols_list Native/DocumentKitCore/exports.txt`, `xcrun strip -S`, `xcrun libtool -static -D`) exporting only the 9 `_documentkit_*` C ABI functions with zero `__DWARF` and zero `__LLVM` sections.
+- Binary packaging: pre-linked single-object static archives (`xcrun strip -S`, `xcrun ld -r -S -x` with `Native/DocumentKitCore/exports.txt`, `xcrun nmedit -s Native/DocumentKitCore/exports.txt -p`, `xcrun libtool -static -D`) exporting only the 9 `_documentkit_*` C ABI functions (keeping `_rust_eh_personality` private external for `__eh_frame` unwind relocations) with zero `__DWARF` and zero `__LLVM` sections.
 - Release distribution: tagged GitHub Releases attach `DocumentKitCore-<version>.xcframework.zip` and update `Package.swift` to reference it via `.binaryTarget(name:url:checksum:)`. Local builds write to the gitignored `Artifacts/DocumentKitCore.xcframework`.
 
 The artifact includes indirect Form resource decoding, first-transaction-row

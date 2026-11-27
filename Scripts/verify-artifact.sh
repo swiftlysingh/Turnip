@@ -172,13 +172,23 @@ verify_thin_slice() {
         exit 1
     fi
 
-    # 3. Exact exported global symbol set (no missing symbols, zero leaked symbols).
-    (xcrun nm -gU "$thin_file" 2>/dev/null || true) |
-        awk 'NF >= 3 && $2 ~ /^[TDSBCAI]$/ { print $3 }' |
+    # 3. Exact exported symbol set (only the 9 `_documentkit_*` symbols are
+    #    publicly external; only `_rust_eh_personality` may remain private
+    #    external for Mach-O `__eh_frame` `PTRTGOT` unwind relocations).
+    nm_defined=$(xcrun nm -m -gU "$thin_file" 2>/dev/null || true)
+    printf '%s\n' "$nm_defined" |
+        awk '/\) external / { print $NF }' |
         LC_ALL=C sort -u > "$ACTUAL_EXPORTS_FILE"
     if ! cmp -s "$EXPECTED_EXPORTS_FILE" "$ACTUAL_EXPORTS_FILE"; then
         echo "Exported global symbols in $label do not match $EXPORTS:" >&2
         diff -u "$EXPECTED_EXPORTS_FILE" "$ACTUAL_EXPORTS_FILE" >&2 || true
+        exit 1
+    fi
+    bad_other=$(printf '%s\n' "$nm_defined" |
+        awk 'NF >= 3 && !/:$/ && !/\) external / && !(/\) private external / && $NF == "_rust_eh_personality") { print }' || true)
+    if [ -n "$bad_other" ]; then
+        echo "Unexpected non-exported external symbols in $label:" >&2
+        echo "$bad_other" >&2
         exit 1
     fi
 
