@@ -8,8 +8,8 @@ import PackageDescription
 // Local contributors rebuilding the Rust engine via `Scripts/build-xcframework.sh` can
 // override the remote release artifact with `TURNIP_USE_LOCAL_XCFRAMEWORK=1` or
 // `TURNIP_LOCAL_XCFRAMEWORK_PATH=<package-relative/path/to/DocumentKitCore.xcframework>`.
-let releaseArtifactURL: String? = nil
-let releaseArtifactChecksum: String? = nil
+let releaseArtifactURL: String? = "https://github.com/swiftlysingh/Turnip/releases/download/v0.4.0/DocumentKitCore-0.4.0.xcframework.zip"
+let releaseArtifactChecksum: String? = "7158bd036e9094d59ec339474661efff1e92aced09ccd4c50a94d349cdeced60"
 
 let documentKitCoreTarget: Target = {
     let environment = ProcessInfo.processInfo.environment
